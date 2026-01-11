@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  scrollbar-width: thin;
+  background-color: #0f172a;
+}
+
+html {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background: linear-gradient(to bottom right, #0f172a, #1e293b, #0f172a);
+  background-attachment: fixed;
+}
+
+/* Starry-night syntax highlighting styles (VS Code dark theme inspired) */
+.pl-c {
+  color: #6a9955; /* comments */
+}
+
+.pl-c1,
+.pl-s .pl-v {
+  color: #b5cea8; /* constants */
+}
+
+.pl-e,
+.pl-en {
+  color: #dcdcaa; /* entity/function names */
+}
+
+.pl-s .pl-s1,
+.pl-smi {
+  color: #9cdcfe; /* variables */
+}
+
+.pl-ent {
+  color: #4ec9b0; /* entity tags */
+}
+
+.pl-k {
+  color: #569cd6; /* keywords */
+}
+
+.pl-pds,
+.pl-s,
+.pl-s .pl-pse .pl-s1,
+.pl-sr,
+.pl-sr .pl-cce,
+.pl-sr .pl-sra,
+.pl-sr .pl-sre {
+  color: #ce9178; /* strings */
+}
+
+.pl-v,
+.pl-smw {
+  color: #9cdcfe; /* variables */
+}
+
+.pl-bu {
+  color: #f44747; /* invalid */
+}
+
+.pl-ii {
+  color: #f44747;
+  background-color: #f44747;
+}
+
+.pl-c2 {
+  color: #d7ba7d;
+  background-color: #b5cea8;
+}
+
+.pl-sr .pl-cce {
+  color: #4ec9b0;
+}
+
+.pl-ml {
+  color: #b5cea8;
+}
+
+.pl-mh,
+.pl-mh .pl-en,
+.pl-ms {
+  color: #569cd6;
+}
+
+.pl-mi {
+  color: #9cdcfe;
+}
+
+.pl-mb {
+  color: #ce9178;
+}
+
+.pl-md {
+  color: #f44747;
+  background-color: #5a1d1d;
+}
+
+.pl-mi1 {
+  color: #b5cea8;
+  background-color: #1a3a1a;
+}
+
+.pl-mc {
+  color: #b5cea8;
+  background-color: #1a3a1a;
+}
+
+.pl-mi2 {
+  color: #d4d4d4;
+  background-color: #1a3a3a;
+}
+
+.pl-mdr {
+  color: #dcdcaa;
+}
+
+.pl-ba {
+  color: #9cdcfe;
+}
+
+.pl-sg {
+  color: #808080;
+}
+
+.pl-corl {
+  text-decoration: underline;
+  color: #ce9178;
+}
+
+/* Flow chart styles */
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__node.selected {
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Animation for expanding sections */
+details[open] summary ~ * {
+  animation: slide-down 0.2s ease-out;
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Code block styles */
+pre {
+  @apply rounded-lg overflow-x-auto text-sm;
+}
+
+pre code {
+  @apply block p-4;
+}
+
+/* Status badge animations */
+.status-badge {
+  @apply transition-all duration-200;
+}
+
+.status-badge:hover {
+  @apply scale-105;
+}

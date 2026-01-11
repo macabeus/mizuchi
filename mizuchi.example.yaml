@@ -1,0 +1,48 @@
+# Mizuchi Configuration File
+# This is an example configuration
+# Copy this file to mizuchi.yaml and customize for your project
+
+# Global settings that apply to the entire pipeline
+global:
+  # Path to the context.h file used during compilation
+  contextPath: '/path/to/your/context.h'
+
+  # Maximum retry attempts per prompt (default: 25)
+  maxRetries: 25
+
+  # Output directory for generated files and reports (default: current directory)
+  outputDir: '.'
+
+  # Directory containing prompt folders
+  # Discovers and loads prompts from directory structure
+  # Each prompt lives in its own folder with:
+  #   - prompt.md: The prompt content
+  #   - settings.yaml: Metadata (functionName, targetObjectPath)
+  promptsDir: './prompts'
+
+# Plugin-specific configurations
+# Each plugin receives only its own section along with the global config
+plugins:
+  # Claude Runner Plugin
+  # Uses Claude Agent SDK to generate C code from assembly prompts
+  # Responses are automatically cached to avoid redundant API calls
+  claude-runner:
+    # Path to the Claude Agent read the project codebase from
+    projectPath: '/path/to/your/project'
+
+    # Timeout in milliseconds for Claude requests (default: 300000 = 5 minutes)
+    timeoutMs: 300000
+
+    # Path to cache file for Claude responses (default: claude-cache.json in output directory)
+    # cachePath: ./claude-cache.json
+
+    # Custom system prompt for Claude (optional)
+    # If not specified, uses the default decompilation system prompt
+    # systemPrompt: |
+    #   You are an automated decompilation system...
+
+  # Compiler Plugin
+  # Compiles generated C code using agbcc
+  compiler:
+    # Compiler flags to pass to agbcc (default: -mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm)
+    # flags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm'

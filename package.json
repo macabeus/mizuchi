@@ -1,0 +1,70 @@
+{
+  "name": "mizuchi",
+  "version": "0.1.0",
+  "description": "Matching Decompilation Pipeline Runner",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "mizuchi": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "build:report-ui": "cd src/report-generator/ui && npx vite build",
+    "dev:report-ui": "tsx src/report-generator/ui/dev-server.ts",
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "check-types": "tsc --noEmit && tsc --noEmit -p src/report-generator/ui/tsconfig.json",
+    "check-deps": "depcruise src --config .dependency-cruiser.cjs",
+    "test:watch": "vitest",
+    "lint": "eslint src",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.17",
+    "@wooorm/starry-night": "^3.9.0",
+    "ink": "^6.6.0",
+    "ink-spinner": "^5.0.0",
+    "objdiff-wasm": "^3.0.0",
+    "pastel": "^4.0.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@nivo/core": "^0.99.0",
+    "@nivo/line": "^0.99.0",
+    "@rollup/plugin-alias": "^6.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "dependency-cruiser": "^17.3.6",
+    "eslint": "^9.39.2",
+    "eslint-plugin-unused-imports": "^4.3.0",
+    "ink-testing-library": "^4.0.0",
+    "postcss": "^8.4.49",
+    "prettier": "^3.8.0",
+    "rollup": "^4.55.2",
+    "rollup-plugin-copy": "^3.5.0",
+    "tailwindcss": "^3.4.17",
+    "tsc-alias": "^1.8.16",
+    "tslib": "^2.8.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.5",
+    "vite-plugin-singlefile": "^2.0.3",
+    "vitest": "^4.0.17"
+  }
+}

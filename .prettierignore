@@ -1,0 +1,8 @@
+node_modules/
+dist/
+out/
+*.d.ts
+*.min.js
+CHANGELOG.md
+package-lock.json
+yarn.lock

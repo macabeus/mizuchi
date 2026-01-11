@@ -1,0 +1,11 @@
+.DS_Store
+node_modules
+dist
+
+*.o
+*.s
+base_*.c
+benchmark-report-*.html
+benchmark-results-*.json
+claude-cache.json
+mizuchi.yaml
