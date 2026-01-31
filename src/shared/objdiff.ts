@@ -1,7 +1,7 @@
 /**
- * Objdiff Service
+ * Objdiff Wrapper
  *
- * Shared service for working with objdiff-wasm.
+ * Shared class wrapping objdiff-wasm.
  * Provides functionality to parse object files and extract assembly.
  */
 import fs from 'fs/promises';
@@ -14,17 +14,15 @@ type ObjectDiff = ObjdiffWasm.diff.ObjectDiff;
 type DiffConfig = ObjdiffWasm.diff.DiffConfig;
 type DiffSide = ObjdiffWasm.diff.DiffSide;
 
-export type { ParsedObject, ObjectDiff, DiffConfig, DiffSide };
+/**
+ * Singleton instance of Objdiff
+ */
+let instance: Objdiff | null = null;
 
 /**
- * Singleton instance of ObjdiffService
+ * Wrapper class for objdiff-wasm
  */
-let instance: ObjdiffService | null = null;
-
-/**
- * Service for working with objdiff-wasm
- */
-export class ObjdiffService {
+export class Objdiff {
   #objdiff: Promise<ObjdiffModule>;
 
   constructor() {
@@ -32,11 +30,11 @@ export class ObjdiffService {
   }
 
   /**
-   * Get the singleton instance of ObjdiffService
+   * Get the singleton instance of Objdiff
    */
-  static getInstance(): ObjdiffService {
+  static getInstance(): Objdiff {
     if (!instance) {
-      instance = new ObjdiffService();
+      instance = new Objdiff();
     }
     return instance;
   }
@@ -66,7 +64,7 @@ export class ObjdiffService {
   /**
    * Get the diff configuration for ARMv4T
    */
-  async getDiffConfig(): Promise<DiffConfig> {
+  async #getDiffConfig(): Promise<DiffConfig> {
     const objdiff = await this.#objdiff;
     const diffConfig = new objdiff.diff.DiffConfig();
 
@@ -81,7 +79,7 @@ export class ObjdiffService {
    */
   async parseObjectFile(filePath: string, side: DiffSide = 'base'): Promise<ParsedObject> {
     const objdiff = await this.#objdiff;
-    const diffConfig = await this.getDiffConfig();
+    const diffConfig = await this.#getDiffConfig();
 
     const fileBuffer = await fs.readFile(filePath);
     const parsedObject = objdiff.diff.Object.parse(new Uint8Array(fileBuffer), diffConfig, side);
@@ -94,7 +92,7 @@ export class ObjdiffService {
    */
   async runDiff(left: ParsedObject, right?: ParsedObject): Promise<{ left?: ObjectDiff; right?: ObjectDiff }> {
     const objdiff = await this.#objdiff;
-    const diffConfig = await this.getDiffConfig();
+    const diffConfig = await this.#getDiffConfig();
 
     const mappingConfig = {
       mappings: [],
@@ -141,11 +139,11 @@ export class ObjdiffService {
    * Get assembly for a specific symbol from an object diff
    */
   async getAssemblyFromSymbol(objDiff: ObjectDiff, symbolName: string): Promise<string> {
-    const diffConfig = await this.getDiffConfig();
+    const diffConfig = await this.#getDiffConfig();
     const instructions: string[] = [];
 
     for await (const [instructionRow] of this.#iterateSymbolRows([objDiff], symbolName, diffConfig)) {
-      const lineText = this.instructionDiffRowToString(instructionRow);
+      const lineText = this.#instructionDiffRowToString(instructionRow);
       if (lineText.trim()) {
         instructions.push(lineText);
       }
@@ -166,7 +164,7 @@ export class ObjdiffService {
     matchingCount: number;
     differences: string[];
   }> {
-    const diffConfig = await this.getDiffConfig();
+    const diffConfig = await this.#getDiffConfig();
     let differenceCount = 0;
     let matchingCount = 0;
     const differences: string[] = [];
@@ -183,12 +181,12 @@ export class ObjdiffService {
 
       if (leftInstructionRow) {
         leftDiffKind = leftInstructionRow.diffKind;
-        leftInstruction = this.instructionDiffRowToString(leftInstructionRow);
+        leftInstruction = this.#instructionDiffRowToString(leftInstructionRow);
       }
 
       if (rightInstructionRow) {
         rightDiffKind = rightInstructionRow.diffKind;
-        rightInstruction = this.instructionDiffRowToString(rightInstructionRow);
+        rightInstruction = this.#instructionDiffRowToString(rightInstructionRow);
       }
 
       const hasRealDifference = (leftDiffKind !== 'none' || rightDiffKind !== 'none') && leftDiffKind !== rightDiffKind;
@@ -249,7 +247,7 @@ export class ObjdiffService {
   /**
    * Convert an instruction diff row to a string representation
    */
-  instructionDiffRowToString(instructionRow: ObjdiffWasm.display.InstructionDiffRow): string {
+  #instructionDiffRowToString(instructionRow: ObjdiffWasm.display.InstructionDiffRow): string {
     let lineText = '';
     let address = '';
 

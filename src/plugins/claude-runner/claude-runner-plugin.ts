@@ -14,7 +14,7 @@ import { z } from 'zod';
 
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 import { PipelineConfig } from '~/shared/config';
-import { ObjdiffService } from '~/shared/objdiff.js';
+import { Objdiff } from '~/shared/objdiff.js';
 import type {
   ChatMessage,
   ContentBlock,
@@ -413,7 +413,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           async (args) => {
             try {
               const compiler = new CCompiler();
-              const objdiffService = ObjdiffService.getInstance();
+              const objdiff = Objdiff.getInstance();
 
               // Compile the code
               const compileResult = await compiler.compile(args.function_name, args.code, contextPath, compilerFlags);
@@ -434,8 +434,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               }
 
               // Parse the object file and extract assembly
-              const parsedObject = await objdiffService.parseObjectFile(compileResult.objPath, 'base');
-              const diffResult = await objdiffService.runDiff(parsedObject);
+              const parsedObject = await objdiff.parseObjectFile(compileResult.objPath, 'base');
+              const diffResult = await objdiff.runDiff(parsedObject);
 
               if (!diffResult.left) {
                 // Clean up the object file
@@ -453,7 +453,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               // Check if the symbol exists
               const symbol = diffResult.left.findSymbol(args.function_name, undefined);
               if (!symbol) {
-                const availableSymbols = await objdiffService.getSymbolNames(parsedObject);
+                const availableSymbols = await objdiff.getSymbolNames(parsedObject);
                 // Clean up the object file
                 await fs.unlink(compileResult.objPath).catch(() => {});
                 return {
@@ -467,7 +467,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               }
 
               // Get the assembly
-              const assembly = await objdiffService.getAssemblyFromSymbol(diffResult.left, args.function_name);
+              const assembly = await objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
 
               // Clean up the object file
               await fs.unlink(compileResult.objPath).catch(() => {});

@@ -7,7 +7,7 @@
 import { z } from 'zod';
 
 import { PipelineConfig } from '~/shared/config';
-import { ObjdiffService } from '~/shared/objdiff.js';
+import { Objdiff } from '~/shared/objdiff.js';
 import type { PipelineContext, Plugin, PluginReportSection, PluginResult } from '~/shared/types.js';
 
 /**
@@ -45,10 +45,10 @@ export class ObjdiffPlugin implements Plugin<ObjdiffResult> {
   readonly name = 'Objdiff';
   readonly description = 'Compares the compiled code with target object file using objdiff';
 
-  #objdiffService: ObjdiffService;
+  #objdiff: Objdiff;
 
   constructor(_config?: ObjdiffConfig, _pipelineConfig?: PipelineConfig) {
-    this.#objdiffService = ObjdiffService.getInstance();
+    this.#objdiff = Objdiff.getInstance();
   }
 
   async execute(context: PipelineContext): Promise<{
@@ -98,11 +98,11 @@ export class ObjdiffPlugin implements Plugin<ObjdiffResult> {
 
     try {
       const [currentObject, targetObject] = await Promise.all([
-        this.#objdiffService.parseObjectFile(context.compiledObjectPath, 'base'),
-        this.#objdiffService.parseObjectFile(context.targetObjectPath, 'target'),
+        this.#objdiff.parseObjectFile(context.compiledObjectPath, 'base'),
+        this.#objdiff.parseObjectFile(context.targetObjectPath, 'target'),
       ]);
 
-      const diffResult = await this.#objdiffService.runDiff(currentObject, targetObject);
+      const diffResult = await this.#objdiff.runDiff(currentObject, targetObject);
 
       if (!diffResult.left) {
         return {
@@ -135,7 +135,7 @@ export class ObjdiffPlugin implements Plugin<ObjdiffResult> {
       const rightSymbol = diffResult.right.findSymbol(context.functionName, undefined);
 
       if (!leftSymbol || !rightSymbol) {
-        const currentSymbols = await this.#objdiffService.getSymbolNames(currentObject);
+        const currentSymbols = await this.#objdiff.getSymbolNames(currentObject);
 
         return {
           result: {
@@ -151,7 +151,7 @@ export class ObjdiffPlugin implements Plugin<ObjdiffResult> {
       }
 
       // Get detailed differences
-      const { matchingCount, differenceCount, differences } = await this.#objdiffService.getDifferences(
+      const { matchingCount, differenceCount, differences } = await this.#objdiff.getDifferences(
         diffResult.left,
         diffResult.right,
         context.functionName,
@@ -159,8 +159,8 @@ export class ObjdiffPlugin implements Plugin<ObjdiffResult> {
 
       // Get assembly for both sides
       const [currentAsm, targetAsm] = await Promise.all([
-        this.#objdiffService.getAssemblyFromSymbol(diffResult.left, context.functionName),
-        this.#objdiffService.getAssemblyFromSymbol(diffResult.right, context.functionName),
+        this.#objdiff.getAssemblyFromSymbol(diffResult.left, context.functionName),
+        this.#objdiff.getAssemblyFromSymbol(diffResult.right, context.functionName),
       ]);
 
       const isMatch = differenceCount === 0;
