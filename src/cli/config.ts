@@ -95,6 +95,7 @@ export function buildPipelineConfig(
     outputDir: cliOptions.output
       ? path.resolve(cliOptions.output)
       : (fileConfig.global?.outputDir ?? defaults.outputDir),
+    compilerFlags: fileConfig.global?.compilerFlags ?? defaults.compilerFlags,
     maxRetries: cliOptions.retries ?? fileConfig.global?.maxRetries ?? defaults.maxRetries,
     promptsDir: cliOptions.prompts ?? fileConfig.global?.promptsDir ?? defaults.promptsDir,
   };

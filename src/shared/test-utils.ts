@@ -12,6 +12,7 @@ import type { PipelineContext } from './types.js';
 export const defaultTestPipelineConfig: PipelineConfig = {
   contextPath: '/test/context.h',
   outputDir: '/test/output',
+  compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
   maxRetries: 3,
   promptsDir: '/test/prompts',
 };

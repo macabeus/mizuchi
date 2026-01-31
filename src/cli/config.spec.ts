@@ -101,6 +101,7 @@ plugins:
           contextPath: '',
           maxRetries: 10,
           outputDir: '/custom/output',
+          compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
           promptsDir: '/custom/prompts',
         },
         plugins: {
@@ -121,6 +122,7 @@ plugins:
           contextPath: '',
           maxRetries: 10,
           outputDir: '/custom/output',
+          compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
           promptsDir: '/custom/prompts',
         },
         plugins: {

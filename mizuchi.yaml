@@ -13,6 +13,9 @@ global:
   # Output directory for generated files and reports (default: current directory)
   outputDir: '.'
 
+  # Compiler flags to pass to agbcc
+  compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm'
+
   # Directory containing prompt folders
   # Discovers and loads prompts from directory structure
   # Each prompt lives in its own folder with:

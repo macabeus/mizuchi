@@ -1,20 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginManager } from './plugin-manager.js';
-import { PipelineConfig } from './shared/config.js';
 import {
   createFailurePlugin,
   createMockPlugin,
   createSuccessOnAttemptPlugin,
   createSuccessPlugin,
 } from './shared/mock-plugin.js';
-
-const baseConfig: PipelineConfig = {
-  contextPath: '',
-  promptsDir: '/test/prompts',
-  outputDir: '/test/output',
-  maxRetries: 3,
-};
+import { defaultTestPipelineConfig } from './shared/test-utils.js';
 
 describe('PluginManager', () => {
   beforeEach(() => {
@@ -23,7 +16,7 @@ describe('PluginManager', () => {
 
   describe('.register', () => {
     it('registers a plugin and returns the manager for chaining', () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
       const plugin = createSuccessPlugin('test', 'Test Plugin');
 
       const result = manager.register(plugin);
@@ -33,7 +26,7 @@ describe('PluginManager', () => {
     });
 
     it('registers multiple plugins in order', () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
       const plugin1 = createSuccessPlugin('plugin1', 'Plugin 1');
       const plugin2 = createSuccessPlugin('plugin2', 'Plugin 2');
       const plugin3 = createSuccessPlugin('plugin3', 'Plugin 3');
@@ -50,13 +43,13 @@ describe('PluginManager', () => {
 
   describe('.getPlugins', () => {
     it('returns empty array when no plugins registered', () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
 
       expect(manager.getPlugins()).toHaveLength(0);
     });
 
     it('returns readonly array of plugins', () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
       const plugin = createSuccessPlugin('test', 'Test Plugin');
       manager.register(plugin);
 
@@ -69,7 +62,7 @@ describe('PluginManager', () => {
 
   describe('.runPipeline', () => {
     it('runs all plugins in sequence when all succeed', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
       const executionOrder: string[] = [];
 
       const plugin1 = createMockPlugin({
@@ -106,7 +99,7 @@ describe('PluginManager', () => {
     });
 
     it('stops pipeline execution when a plugin fails', async () => {
-      const config = { ...baseConfig, maxRetries: 1 };
+      const config = { ...defaultTestPipelineConfig, maxRetries: 1 };
       const manager = new PluginManager(config);
       const executionOrder: string[] = [];
 
@@ -143,7 +136,7 @@ describe('PluginManager', () => {
     });
 
     it('marks skipped plugins correctly when a plugin fails', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
 
       manager
         .register(createFailurePlugin('plugin1', 'Plugin 1', 'Failed'))
@@ -157,7 +150,7 @@ describe('PluginManager', () => {
     });
 
     it('retries pipeline up to maxRetries times', async () => {
-      const config = { ...baseConfig, maxRetries: 3 };
+      const config = { ...defaultTestPipelineConfig, maxRetries: 3 };
       const manager = new PluginManager(config);
 
       manager.register(createFailurePlugin('plugin1', 'Plugin 1', 'Always fails'));
@@ -169,7 +162,7 @@ describe('PluginManager', () => {
     });
 
     it('succeeds on retry when plugin eventually succeeds', async () => {
-      const config = { ...baseConfig, maxRetries: 3 };
+      const config = { ...defaultTestPipelineConfig, maxRetries: 3 };
       const manager = new PluginManager(config);
 
       manager.register(createSuccessOnAttemptPlugin('plugin1', 'Plugin 1', 2));
@@ -183,7 +176,7 @@ describe('PluginManager', () => {
     });
 
     it('passes context between plugins', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
 
       const plugin1 = createMockPlugin({
         id: 'plugin1',
@@ -212,7 +205,7 @@ describe('PluginManager', () => {
     });
 
     it('sets correct attempt number in context', async () => {
-      const config = { ...baseConfig, maxRetries: 3 };
+      const config = { ...defaultTestPipelineConfig, maxRetries: 3 };
       const manager = new PluginManager(config);
 
       const attemptNumbers: number[] = [];
@@ -242,7 +235,7 @@ describe('PluginManager', () => {
     });
 
     it('calls prepareRetry before each retry', async () => {
-      const config = { ...baseConfig, maxRetries: 2 };
+      const config = { ...defaultTestPipelineConfig, maxRetries: 2 };
       const manager = new PluginManager(config);
 
       let prepareRetryCalled = 0;
@@ -264,7 +257,7 @@ describe('PluginManager', () => {
     });
 
     it('returns correct pipeline result structure', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
 
       const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
@@ -278,7 +271,7 @@ describe('PluginManager', () => {
     });
 
     it('handles plugin throwing an exception', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
 
       const plugin = createMockPlugin({
         id: 'plugin1',
@@ -300,7 +293,7 @@ describe('PluginManager', () => {
 
   describe('.runBenchmark', () => {
     it('runs pipeline for all prompts', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
 
       const prompts = [
@@ -316,7 +309,7 @@ describe('PluginManager', () => {
     });
 
     it('calculates summary correctly', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
 
       let callCount = 0;
       const plugin = createMockPlugin({
@@ -354,7 +347,7 @@ describe('PluginManager', () => {
     });
 
     it('uses per-prompt targetObjectPath', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
 
       const receivedTargets: string[] = [];
       const plugin = createMockPlugin({
@@ -380,7 +373,7 @@ describe('PluginManager', () => {
     });
 
     it('returns correct benchmark results structure', async () => {
-      const manager = new PluginManager(baseConfig);
+      const manager = new PluginManager(defaultTestPipelineConfig);
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
 
       const results = await manager.runBenchmark([

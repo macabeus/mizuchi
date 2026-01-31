@@ -12,16 +12,9 @@ import { PipelineConfig } from '~/shared/config';
 import type { PipelineContext, Plugin, PluginReportSection, PluginResult } from '~/shared/types.js';
 
 /**
- * Default compiler flags for agbcc
- */
-const DEFAULT_COMPILER_FLAGS = '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm';
-
-/**
  * Configuration schema for CompilerPlugin
  */
-export const compilerConfigSchema = z.object({
-  flags: z.string().optional().describe('Compiler flags to pass to agbcc').default(DEFAULT_COMPILER_FLAGS),
-});
+export const compilerConfigSchema = z.object({});
 
 export type CompilerConfig = z.infer<typeof compilerConfigSchema>;
 
@@ -47,9 +40,9 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
   #objectFilePath?: string = undefined;
   #flags: string;
 
-  constructor(config: CompilerConfig, _pipelineConfig?: PipelineConfig) {
+  constructor(_config: CompilerConfig, pipelineConfig: PipelineConfig) {
     this.#cCompiler = new CCompiler();
-    this.#flags = config.flags;
+    this.#flags = pipelineConfig.compilerFlags;
   }
 
   async execute(context: PipelineContext): Promise<{

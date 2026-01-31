@@ -16,9 +16,7 @@ describe('CompilerPlugin', () => {
 
   beforeEach(async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    plugin = new CompilerPlugin({
-      flags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
-    });
+    plugin = new CompilerPlugin({}, defaultTestPipelineConfig);
   });
 
   afterEach(async () => {

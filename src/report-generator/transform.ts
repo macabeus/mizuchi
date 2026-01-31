@@ -61,7 +61,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       promptsDir: results.config.promptsDir,
       maxRetries: results.config.maxRetries,
       claudeSystemPrompt: pluginConfigs.claudeRunner.systemPrompt,
-      compilerFlags: pluginConfigs.compiler.flags,
+      compilerFlags: results.config.compilerFlags,
     },
     results: reportResults,
     summary: results.summary,
