@@ -10,7 +10,5 @@ export default defineConfig({
     alias: {
       '~': path.resolve(__dirname, './src'),
     },
-    // Disable file parallelism to avoid race conditions with shared compiler output directory
-    fileParallelism: false,
   },
 });

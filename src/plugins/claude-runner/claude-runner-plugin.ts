@@ -119,7 +119,7 @@ const DEFAULT_SYSTEM_PROMPT = `You are an automated decompilation system that co
 - Functional equivalence is insufficient; the generated assembly must be identical
 
 **Available Tools**
-- \`compile_and_view_assembly\`: Use this tool to test compile your C code and see the resulting assembly BEFORE submitting your final answer. This allows you to iterate and refine your code to match the target assembly more precisely. This code is also concatenated with \`{{contextPath}}\` during compilation
+- \`compile_and_view_assembly\`: Use this tool for testing. It compiles your C code and see the resulting assembly BEFORE submitting your final answer. This allows you to iterate and refine your code to match the target assembly more precisely. The code is also concatenated with \`{{contextPath}}\` during compilation
 
 **Workflow**
 1. Analyze the provided assembly
@@ -393,7 +393,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   }
 
   /**
-   * Create the MCP server with the compile_and_view_assembly tool
+   * Create the MCP server for the Mizuchi tools
    */
   #createMcpServer(): McpServer {
     const contextPath = this.#contextPath;
@@ -411,12 +411,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             function_name: z.string().describe('The name of the function to extract assembly for'),
           },
           async (args) => {
+            let compileResult: Awaited<ReturnType<CCompiler['compile']>> | undefined;
             try {
               const compiler = new CCompiler();
               const objdiff = Objdiff.getInstance();
 
               // Compile the code
-              const compileResult = await compiler.compile(args.function_name, args.code, contextPath, compilerFlags);
+              compileResult = await compiler.compile(args.function_name, args.code, contextPath, compilerFlags);
 
               if (!compileResult.success) {
                 const errorOutput = compileResult.compilationErrors.length
@@ -469,9 +470,6 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               // Get the assembly
               const assembly = await objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
 
-              // Clean up the object file
-              await fs.unlink(compileResult.objPath).catch(() => {});
-
               return {
                 content: [
                   {
@@ -489,6 +487,11 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
                   },
                 ],
               };
+            } finally {
+              // Clean up the object file
+              if (compileResult?.success) {
+                await fs.unlink(compileResult.objPath).catch(() => {});
+              }
             }
           },
         ),
