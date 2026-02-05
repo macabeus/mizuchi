@@ -16,6 +16,7 @@ import { z } from 'zod';
 export const pipelineConfigSchema = z.object({
   maxRetries: z.number().positive().default(25),
   outputDir: z.string().default('.'),
+  compilerFlags: z.string().default(''),
   contextPath: z.string(),
   promptsDir: z.string(),
 });

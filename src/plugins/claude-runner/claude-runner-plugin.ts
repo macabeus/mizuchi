@@ -6,13 +6,15 @@
  *
  * Cache uses a conversation tree structure to track multi-turn interactions.
  */
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
 import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
 
+import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 import { PipelineConfig } from '~/shared/config';
+import { Objdiff } from '~/shared/objdiff.js';
 import type {
   ChatMessage,
   ContentBlock,
@@ -69,6 +71,11 @@ interface SDKMessage {
 }
 
 /**
+ * MCP Server type from the SDK
+ */
+type McpServer = ReturnType<typeof createSdkMcpServer>;
+
+/**
  * Query factory type for dependency injection (enables testing)
  */
 export type QueryFactory = (prompt: string, options: { model?: string; resume?: string }) => Query;
@@ -100,7 +107,7 @@ const DEFAULT_SYSTEM_PROMPT = `You are an automated decompilation system that co
 **Operating Context**
 - This is a fully automated pipeline with no human review
 - Do not request clarifications, confirmations, or permissions
-- You can the read-only tools to inspect the codebase, but you cannot write or modify files directly
+- You can use the read-only tools to inspect the codebase, but you cannot write or modify files directly
 - The last C code you provided with be concatenate with the \`{{contextPath}}\` during compilation. No other import statements or includes are supported
 
 **Output Requirements**
@@ -111,11 +118,18 @@ const DEFAULT_SYSTEM_PROMPT = `You are an automated decompilation system that co
 - The compiled output must produce assembly that matches the target exactly
 - Functional equivalence is insufficient; the generated assembly must be identical
 
+**Available Tools**
+- \`compile_and_view_assembly\`: Use this tool for testing. It compiles your C code and see the resulting assembly BEFORE submitting your final answer. This allows you to iterate and refine your code to match the target assembly more precisely. The code is also concatenated with \`{{contextPath}}\` during compilation
+
 **Workflow**
 1. Analyze the provided assembly
-2. Produce equivalent C code
-3. The system compiles your code and compares the resulting assembly against the target
-4. If mismatches occur, you will receive feedback for iteration`;
+2. Read the relevant structure and constants from the context file at \`{{contextPath}}\`
+3. Produce equivalent C code
+4. Use \`compile_and_view_assembly\` to test your code and see how it compiles
+5. Iterate on your code until the assembly looks correct
+6. Provide your final C code in a \`\`\`c block
+7. The system compiles your code and compares the resulting assembly against the target
+8. If mismatches occur, you will receive feedback for iteration`;
 
 /**
  * Configuration schema for ClaudeRunnerPlugin
@@ -341,9 +355,19 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #initialPromptHash: string | null = null;
   #currentCacheNode: ConversationNode | null = null;
 
-  constructor(config: ClaudeRunnerConfig, pipelineConfig?: PipelineConfig, queryFactory?: QueryFactory) {
+  // MCP tool dependencies
+  #contextPath: string;
+  #compilerFlags: string;
+  #mcpServer: McpServer;
+
+  constructor(config: ClaudeRunnerConfig, pipelineConfig: PipelineConfig, queryFactory?: QueryFactory) {
+    this.systemPrompt = config.systemPrompt.replaceAll('{{contextPath}}', pipelineConfig.contextPath);
+
     this.#config = config;
-    this.systemPrompt = config.systemPrompt.replaceAll('{{contextPath}}', pipelineConfig?.contextPath || '');
+    this.#contextPath = pipelineConfig.contextPath;
+    this.#compilerFlags = pipelineConfig.compilerFlags;
+
+    this.#mcpServer = this.#createMcpServer();
 
     this.#queryFactory =
       queryFactory ||
@@ -354,14 +378,125 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           options: {
             systemPrompt: this.systemPrompt,
             model: options.model || DEFAULT_MODEL,
-            allowedTools: ['Read', 'Glob', 'Grep'],
+            allowedTools: ['Read', 'Glob', 'Grep', 'mcp__mizuchi__compile_and_view_assembly'],
             permissionMode: 'dontAsk',
             cwd: config.projectPath,
+            mcpServers: {
+              mizuchi: this.#mcpServer,
+            },
           },
         }) as unknown as Query);
+
     // Resolve cache path relative to output directory or current directory
     const baseDir = pipelineConfig?.outputDir || process.cwd();
     this.#cachePath = path.resolve(baseDir, config.cachePath || DEFAULT_CACHE_PATH);
+  }
+
+  /**
+   * Create the MCP server for the Mizuchi tools
+   */
+  #createMcpServer(): McpServer {
+    const contextPath = this.#contextPath;
+    const compilerFlags = this.#compilerFlags;
+
+    return createSdkMcpServer({
+      name: 'mizuchi',
+      version: '1.0.0',
+      tools: [
+        tool(
+          'compile_and_view_assembly',
+          "Compile C code and view the resulting assembly. Use this to test how your C code compiles before submitting the final result. This helps to learn the compiler's behavior and iterate on the code to match the target assembly.",
+          {
+            code: z.string().describe('The C code to compile'),
+            function_name: z.string().describe('The name of the function to extract assembly for'),
+          },
+          async (args) => {
+            let compileResult: Awaited<ReturnType<CCompiler['compile']>> | undefined;
+            try {
+              const compiler = new CCompiler();
+              const objdiff = Objdiff.getInstance();
+
+              // Compile the code
+              compileResult = await compiler.compile(args.function_name, args.code, contextPath, compilerFlags);
+
+              if (!compileResult.success) {
+                const errorOutput = compileResult.compilationErrors.length
+                  ? compileResult.compilationErrors.map((err) => `Line ${err.line}: ${err.message}`).join('\n')
+                  : compileResult.errorMessage;
+
+                return {
+                  content: [
+                    {
+                      type: 'text' as const,
+                      text: `Compilation failed:\n\n${errorOutput}`,
+                    },
+                  ],
+                };
+              }
+
+              // Parse the object file and extract assembly
+              const parsedObject = await objdiff.parseObjectFile(compileResult.objPath, 'base');
+              const diffResult = await objdiff.runDiff(parsedObject);
+
+              if (!diffResult.left) {
+                // Clean up the object file
+                await fs.unlink(compileResult.objPath).catch(() => {});
+                return {
+                  content: [
+                    {
+                      type: 'text' as const,
+                      text: 'Failed to parse compiled object file',
+                    },
+                  ],
+                };
+              }
+
+              // Check if the symbol exists
+              const symbol = diffResult.left.findSymbol(args.function_name, undefined);
+              if (!symbol) {
+                const availableSymbols = await objdiff.getSymbolNames(parsedObject);
+                // Clean up the object file
+                await fs.unlink(compileResult.objPath).catch(() => {});
+                return {
+                  content: [
+                    {
+                      type: 'text' as const,
+                      text: `Symbol '${args.function_name}' not found in compiled object.\n\nAvailable symbols: ${availableSymbols.join(', ')}\n\nMake sure your function is named exactly '${args.function_name}'.`,
+                    },
+                  ],
+                };
+              }
+
+              // Get the assembly
+              const assembly = await objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
+
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `Compilation successful!\n\nAssembly for '${args.function_name}':\n\`\`\`asm\n${assembly}\n\`\`\``,
+                  },
+                ],
+              };
+            } catch (error) {
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                  },
+                ],
+              };
+            } finally {
+              // Clean up the object file
+              if (compileResult?.success) {
+                await fs.unlink(compileResult.objPath).catch(() => {});
+              }
+            }
+          },
+        ),
+      ],
+    });
   }
 
   /**
