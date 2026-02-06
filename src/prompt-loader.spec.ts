@@ -192,7 +192,7 @@ void ${functionName}(void) {
     });
 
     it('skips directories when function is not found in object file', async () => {
-      const objPath = await compileFunction('ActualFunc');
+      const objPath = await compileFunction('PromptLoaderActualFunc');
       await createPromptDir('wrong-function', 'Some content', {
         functionName: 'WrongFunc',
         targetObjectPath: objPath,
