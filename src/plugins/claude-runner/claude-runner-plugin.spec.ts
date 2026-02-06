@@ -2,8 +2,14 @@ import { type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
+import type { PipelineContext, PluginResult, PluginResultMap } from '~/shared/types.js';
 
-import { type ClaudeRunnerConfig, ClaudeRunnerPlugin, type QueryFactory } from './claude-runner-plugin.js';
+import {
+  type ClaudeRunnerConfig,
+  ClaudeRunnerPlugin,
+  type ClaudeRunnerResult,
+  type QueryFactory,
+} from './claude-runner-plugin.js';
 
 const TEST_SESSION_ID = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -104,6 +110,7 @@ function createMockQueryFactory(options: MockQueryFactoryOptions | string[]): Qu
 const defaultPluginConfig: ClaudeRunnerConfig = {
   timeoutMs: 300000,
   systemPrompt: '',
+  stallThreshold: 3,
 };
 
 describe('ClaudeRunnerPlugin', () => {
@@ -298,7 +305,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2;', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 2;', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -331,7 +338,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -396,7 +403,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -420,7 +427,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -490,7 +497,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -514,7 +521,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -561,7 +568,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 99', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 99', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -630,7 +637,7 @@ void movePoint(Point* p) {
             status: 'failure' as const,
             durationMs: 100,
             error: 'Could not extract C code from response',
-            data: { generatedCode: undefined, fromCache: false },
+            data: { generatedCode: undefined, fromCache: false, stallDetected: false },
           },
         },
       ];
@@ -670,6 +677,293 @@ void movePoint(Point* p) {
         }
       }
     });
+
+    describe('stall detection', () => {
+      function createAttemptWithDiffCount(differenceCount: number): Partial<PluginResultMap> {
+        return {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success' as const,
+            durationMs: 100,
+            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'success' as const,
+            durationMs: 50,
+          },
+          objdiff: {
+            pluginId: 'objdiff',
+            pluginName: 'ObjDiff',
+            status: 'failure' as const,
+            durationMs: 30,
+            output: 'Assembly mismatch: diff output',
+            data: { differenceCount },
+          },
+        } as Partial<PluginResultMap>;
+      }
+
+      function createAttemptWithCompilationError(): Partial<PluginResultMap> {
+        return {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success' as const,
+            durationMs: 100,
+            data: { generatedCode: 'int foo(void) { return', fromCache: false, stallDetected: false },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'failure' as const,
+            durationMs: 50,
+            error: "error: expected '}' at end of input",
+            output: "error: expected '}' at end of input",
+          },
+        };
+      }
+
+      function getFollowUpContent(
+        plugin: ClaudeRunnerPlugin,
+        result: PluginResult<ClaudeRunnerResult>,
+        context: PipelineContext,
+      ): string {
+        const sections = plugin.getReportSections!(result, context);
+        const chatSection = sections.find((s) => s.type === 'chat');
+        expect(chatSection).toBeDefined();
+        expect(chatSection!.type).toBe('chat');
+
+        const messages = (chatSection as Extract<typeof chatSection, { type: 'chat' }>)!.messages;
+        const followUpMessage = messages[2];
+        expect(followUpMessage.role).toBe('user');
+        expect(typeof followUpMessage.content).toBe('string');
+
+        return followUpMessage.content as string;
+      }
+
+      it('appends stall recovery message when no improvement for stallThreshold attempts', async () => {
+        const response1 = '```c\nint foo(void) { return 1; }\n```';
+        const response2 = '```c\nint foo(void) { return 42; }\n```';
+        const mockFactory = createMockQueryFactory([response1, response2]);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 3 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        const previousAttempts = [
+          createAttemptWithDiffCount(10),
+          createAttemptWithDiffCount(10),
+          createAttemptWithDiffCount(10),
+        ];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result } = await plugin.execute(context);
+
+        const content = getFollowUpContent(plugin, result, context);
+        expect(content).toContain('stuck in a loop');
+        expect(content).toContain('fundamentally different strategy');
+      });
+
+      it('appends stall recovery message when differenceCount increases over window', async () => {
+        const response1 = '```c\nint foo(void) { return 1; }\n```';
+        const response2 = '```c\nint foo(void) { return 42; }\n```';
+        const mockFactory = createMockQueryFactory([response1, response2]);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 3 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        // differenceCount: 5 → 8 → 10, newest (10) >= oldest (5) = stalled
+        const previousAttempts = [
+          createAttemptWithDiffCount(5),
+          createAttemptWithDiffCount(8),
+          createAttemptWithDiffCount(10),
+        ];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result } = await plugin.execute(context);
+
+        const content = getFollowUpContent(plugin, result, context);
+        expect(content).toContain('stuck in a loop');
+      });
+
+      it('does not append stall message when differenceCount improves within window', async () => {
+        const response1 = '```c\nint foo(void) { return 1; }\n```';
+        const response2 = '```c\nint foo(void) { return 42; }\n```';
+        const mockFactory = createMockQueryFactory([response1, response2]);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 3 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        // differenceCount: 10 → 8 → 5, newest (5) < oldest (10) = improving
+        const previousAttempts = [
+          createAttemptWithDiffCount(10),
+          createAttemptWithDiffCount(8),
+          createAttemptWithDiffCount(5),
+        ];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result } = await plugin.execute(context);
+
+        const content = getFollowUpContent(plugin, result, context);
+        expect(content).not.toContain('stuck in a loop');
+      });
+
+      it('skips compilation failures when computing stall window', async () => {
+        const response1 = '```c\nint foo(void) { return 1; }\n```';
+        const response2 = '```c\nint foo(void) { return 42; }\n```';
+        const mockFactory = createMockQueryFactory([response1, response2]);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 3 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        // Only 2 measured attempts (compilation error skipped), threshold=3 → no stall
+        const previousAttempts = [
+          createAttemptWithDiffCount(10),
+          createAttemptWithCompilationError(),
+          createAttemptWithDiffCount(10),
+        ];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result } = await plugin.execute(context);
+
+        const content = getFollowUpContent(plugin, result, context);
+        expect(content).not.toContain('stuck in a loop');
+      });
+
+      it('does not trigger stall detection with fewer attempts than threshold', async () => {
+        const response1 = '```c\nint foo(void) { return 1; }\n```';
+        const response2 = '```c\nint foo(void) { return 42; }\n```';
+        const mockFactory = createMockQueryFactory([response1, response2]);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 3 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        // Only 2 attempts, threshold=3 → no stall
+        const previousAttempts = [createAttemptWithDiffCount(10), createAttemptWithDiffCount(10)];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result } = await plugin.execute(context);
+
+        const content = getFollowUpContent(plugin, result, context);
+        expect(content).not.toContain('stuck in a loop');
+      });
+
+      it('uses custom stallThreshold from config', async () => {
+        const response1 = '```c\nint foo(void) { return 1; }\n```';
+        const response2 = '```c\nint foo(void) { return 42; }\n```';
+        const mockFactory = createMockQueryFactory([response1, response2]);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 2 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        // stallThreshold=2, 2 stalled attempts → triggers
+        const previousAttempts = [createAttemptWithDiffCount(10), createAttemptWithDiffCount(10)];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result } = await plugin.execute(context);
+
+        const content = getFollowUpContent(plugin, result, context);
+        expect(content).toContain('Your last 2 attempts');
+        expect(content).toContain('stuck in a loop');
+      });
+
+      it('does not trigger stall when improvement occurs within window', async () => {
+        const response1 = '```c\nint foo(void) { return 1; }\n```';
+        const response2 = '```c\nint foo(void) { return 42; }\n```';
+        const mockFactory = createMockQueryFactory([response1, response2]);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 3 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        // Window is last 3 measured: [5, 4, 3], newest (3) < oldest (5) → not stalled
+        const previousAttempts = [
+          createAttemptWithDiffCount(10),
+          createAttemptWithDiffCount(10),
+          createAttemptWithDiffCount(5),
+          createAttemptWithDiffCount(4),
+          createAttemptWithDiffCount(3),
+        ];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result } = await plugin.execute(context);
+
+        const content = getFollowUpContent(plugin, result, context);
+        expect(content).not.toContain('stuck in a loop');
+      });
+
+      it('does not repeat stall message on the attempt immediately after a stall', async () => {
+        const responses = [
+          '```c\nint foo(void) { return 1; }\n```',
+          '```c\nint foo(void) { return 2; }\n```',
+          '```c\nint foo(void) { return 3; }\n```',
+        ];
+        const mockFactory = createMockQueryFactory(responses);
+        const plugin = new ClaudeRunnerPlugin(
+          { ...defaultPluginConfig, stallThreshold: 3 },
+          defaultTestPipelineConfig,
+          mockFactory,
+        );
+        const context = createTestContext();
+
+        await plugin.execute(context);
+
+        // First 3 attempts stall: 10, 10, 10
+        const previousAttempts = [
+          createAttemptWithDiffCount(10),
+          createAttemptWithDiffCount(10),
+          createAttemptWithDiffCount(10),
+        ];
+
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result: result1 } = await plugin.execute(context);
+        const content1 = getFollowUpContent(plugin, result1, context);
+        expect(content1).toContain('stuck in a loop');
+
+        // 4th attempt also stalls at 10, but should NOT repeat the stall message
+        // since only 1 new attempt has been added since the last stall
+        previousAttempts.push(createAttemptWithDiffCount(10));
+        plugin.prepareRetry!(context, previousAttempts);
+        const { result: result2 } = await plugin.execute(context);
+
+        expect(result2.data!.stallDetected).toBe(false);
+      });
+    });
   });
 
   describe('session continuity', () => {
@@ -702,7 +996,7 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false },
+            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
           },
           compiler: {
             pluginId: 'compiler',
