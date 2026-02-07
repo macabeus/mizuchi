@@ -11,6 +11,7 @@ import type { BenchmarkReport, ReportAttempt, ReportPluginResult, ReportPromptRe
 export interface ReportPluginConfigs {
   claudeRunner: {
     systemPrompt: string;
+    stallThreshold: number;
   };
   compiler: {
     flags: string;
@@ -60,6 +61,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
     config: {
       promptsDir: results.config.promptsDir,
       maxRetries: results.config.maxRetries,
+      stallThreshold: pluginConfigs.claudeRunner.stallThreshold,
       claudeSystemPrompt: pluginConfigs.claudeRunner.systemPrompt,
       compilerFlags: results.config.compilerFlags,
     },

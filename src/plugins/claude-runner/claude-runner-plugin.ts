@@ -140,6 +140,12 @@ export const claudeRunnerConfigSchema = z.object({
   cachePath: z.string().optional().describe('Path to JSON cache file for response caching'),
   model: z.string().optional().describe('Claude model to use'),
   systemPrompt: z.string().optional().describe('System prompt for Claude').default(DEFAULT_SYSTEM_PROMPT),
+  stallThreshold: z
+    .number()
+    .int()
+    .positive()
+    .default(3)
+    .describe('Number of consecutive attempts without improvement before triggering stall recovery guidance'),
 });
 
 export type ClaudeRunnerConfig = z.infer<typeof claudeRunnerConfigSchema>;
@@ -267,6 +273,41 @@ ${reminderPreviousAttempt.code}
 }
 
 /**
+ * Detect if the pipeline is stalled (no improvement in differenceCount
+ * over the last `stallThreshold` consecutive attempts with objdiff results).
+ *
+ * Returns the stall recovery message to append, or undefined if not stalled.
+ */
+function detectStall(previousAttempts: Array<Partial<PluginResultMap>>, stallThreshold: number): string | undefined {
+  const differenceCounts: number[] = [];
+  for (const attempt of previousAttempts) {
+    if (attempt.objdiff?.data?.differenceCount !== undefined) {
+      differenceCounts.push(attempt.objdiff.data.differenceCount);
+    }
+  }
+
+  if (differenceCounts.length < stallThreshold) {
+    return undefined;
+  }
+
+  const window = differenceCounts.slice(-stallThreshold);
+  const oldest = window[0];
+  const newest = window[window.length - 1];
+
+  if (newest >= oldest) {
+    return (
+      `\n\nYour last ${stallThreshold} attempts have not improved the match rate. ` +
+      `You appear to be stuck in a loop, repeating similar approaches that aren't working. ` +
+      `Step back and try a fundamentally different strategy. Consider: restructuring the logic, ` +
+      `changing variable types or control flow, reordering operations, or rewriting the function ` +
+      `from scratch using an alternative approach.`
+    );
+  }
+
+  return undefined;
+}
+
+/**
  * Extract C code from LLM response
  */
 function extractCCode(response: string): string | undefined {
@@ -325,6 +366,7 @@ export interface ClaudeRunnerResult {
   promptSent?: string;
   codeLength?: number;
   fromCache: boolean;
+  stallDetected: boolean;
 }
 
 /**
@@ -341,6 +383,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
   #config: ClaudeRunnerConfig;
   #feedbackPrompt?: string;
+  #stallDetected = false;
+  #lastStallAttemptIndex = -1;
   #queryFactory: QueryFactory;
   #cache: ConversationCache | null = null;
   #cacheLoaded: boolean = false;
@@ -764,6 +808,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     this.#conversationHistory = [];
     this.#initialPromptHash = null;
     this.#currentCacheNode = null;
+    this.#lastStallAttemptIndex = -1;
   }
 
   async execute(context: PipelineContext): Promise<{
@@ -821,7 +866,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             durationMs: Date.now() - startTime,
             error: 'Could not extract C code from response',
             output: `Raw response (first 500 chars):\n${response.substring(0, 500)}...`,
-            data: { rawResponse: response, promptSent: promptUsed, fromCache, generatedCode: '' },
+            data: {
+              rawResponse: response,
+              promptSent: promptUsed,
+              fromCache,
+              generatedCode: '',
+              stallDetected: this.#stallDetected,
+            },
           },
           context,
         };
@@ -838,7 +889,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             durationMs: Date.now() - startTime,
             error: `Invalid code structure: ${validation.error}`,
             output: `Generated code:\n${code}`,
-            data: { generatedCode: code, rawResponse: response, promptSent: promptUsed, fromCache },
+            data: {
+              generatedCode: code,
+              rawResponse: response,
+              promptSent: promptUsed,
+              fromCache,
+              stallDetected: this.#stallDetected,
+            },
           },
           context: { ...context, generatedCode: code },
         };
@@ -859,6 +916,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             promptSent: promptUsed,
             codeLength: code.length,
             fromCache,
+            stallDetected: this.#stallDetected,
           },
         },
         context: { ...context, generatedCode: code },
@@ -871,7 +929,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           status: 'failure',
           durationMs: Date.now() - startTime,
           error: error instanceof Error ? error.message : String(error),
-          data: { fromCache: false, generatedCode: '' },
+          data: { fromCache: false, generatedCode: '', stallDetected: this.#stallDetected },
         },
         context,
       };
@@ -955,6 +1013,15 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       context.functionName,
       reminderPreviousAttempt,
     );
+
+    // Detect stall and append recovery guidance if needed.
+    const attemptsSinceLastStall = previousAttempts.slice(this.#lastStallAttemptIndex + 1);
+    const stallMessage = detectStall(attemptsSinceLastStall, this.#config.stallThreshold);
+    this.#stallDetected = stallMessage !== undefined;
+    if (stallMessage) {
+      this.#feedbackPrompt += stallMessage;
+      this.#lastStallAttemptIndex = previousAttempts.length - 1;
+    }
 
     return context;
   }

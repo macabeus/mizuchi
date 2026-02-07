@@ -93,7 +93,7 @@ export function Summary({ summary, config }: SummaryProps) {
         </h3>
         <div className="space-y-4 text-sm">
           {/* Basic config row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="flex items-center gap-2">
               <span className="text-slate-400">Prompts Directory:</span>
               <code className="bg-slate-700/50 px-2 py-1 rounded-md text-cyan-400 font-mono text-xs">
@@ -103,6 +103,10 @@ export function Summary({ summary, config }: SummaryProps) {
             <div className="flex items-center gap-2">
               <span className="text-slate-400">Max Retries:</span>
               <span className="text-white font-semibold">{config.maxRetries}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Stall Threshold:</span>
+              <span className="text-white font-semibold">{config.stallThreshold}</span>
             </div>
 
             <div className="flex items-center gap-2">

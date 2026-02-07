@@ -552,6 +552,7 @@ async function runPipeline(
     const pluginConfigs: ReportPluginConfigs = {
       claudeRunner: {
         systemPrompt: claudePlugin.systemPrompt,
+        stallThreshold: claudeRunnerConfig.stallThreshold,
       },
       compiler: {
         flags: compilerConfig.flags,

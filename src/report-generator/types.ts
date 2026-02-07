@@ -120,6 +120,7 @@ export interface ReportSummary {
 export interface ReportConfig {
   promptsDir: string;
   maxRetries: number;
+  stallThreshold: number;
   claudeSystemPrompt: string;
   compilerFlags: string;
 }
