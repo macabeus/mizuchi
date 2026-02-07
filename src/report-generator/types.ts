@@ -101,6 +101,8 @@ export interface ReportPromptResult {
   success: boolean;
   attempts: ReportAttempt[];
   totalDurationMs: number;
+  /** Result from programmatic-flow phase (e.g., m2c), if one was configured */
+  programmaticFlow?: ReportAttempt;
 }
 
 /**
@@ -123,6 +125,7 @@ export interface ReportConfig {
   stallThreshold: number;
   claudeSystemPrompt: string;
   compilerFlags: string;
+  target: string;
 }
 
 /**

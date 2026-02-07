@@ -9,6 +9,28 @@ import YAML from 'yaml';
 import { z } from 'zod';
 
 /**
+ * Supported platform targets
+ */
+export const platformTargets = [
+  'gba',
+  'nds',
+  'n3ds',
+  'n64',
+  'gc',
+  'wii',
+  'ps1',
+  'ps2',
+  'psp',
+  'win32',
+  'switch',
+  'android_x86',
+  'irix',
+  'saturn',
+  'dreamcast',
+] as const;
+export type PlatformTarget = (typeof platformTargets)[number];
+
+/**
  * Global pipeline configuration schema
  *
  * These are the top-level settings that apply to the entire pipeline run.
@@ -19,6 +41,7 @@ export const pipelineConfigSchema = z.object({
   compilerFlags: z.string().default(''),
   contextPath: z.string(),
   promptsDir: z.string(),
+  target: z.enum(platformTargets).default('gba'),
 });
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;

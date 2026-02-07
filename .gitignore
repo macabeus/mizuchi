@@ -4,8 +4,10 @@ dist
 
 *.o
 *.s
+*.m2c
 base_*.c
 benchmark-report-*.html
 benchmark-results-*.json
 claude-cache.json
 mizuchi.yaml
+vendor/m2c/.venv

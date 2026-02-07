@@ -46,12 +46,22 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       pluginResults: attempt.pluginResults.map(transformPluginResult),
     }));
 
+    const programmaticFlow = promptResult.programmaticFlow
+      ? {
+          attemptNumber: promptResult.programmaticFlow.attemptNumber,
+          success: promptResult.programmaticFlow.success,
+          durationMs: promptResult.programmaticFlow.durationMs,
+          pluginResults: promptResult.programmaticFlow.pluginResults.map(transformPluginResult),
+        }
+      : undefined;
+
     return {
       promptPath: promptResult.promptPath,
       functionName: promptResult.functionName,
       success: promptResult.success,
       attempts,
       totalDurationMs: promptResult.totalDurationMs,
+      programmaticFlow,
     };
   });
 
@@ -64,6 +74,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       stallThreshold: pluginConfigs.claudeRunner.stallThreshold,
       claudeSystemPrompt: pluginConfigs.claudeRunner.systemPrompt,
       compilerFlags: results.config.compilerFlags,
+      target: results.config.target,
     },
     results: reportResults,
     summary: results.summary,

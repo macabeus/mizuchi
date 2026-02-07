@@ -6,6 +6,7 @@ import { BestResultCode } from './BestResultCode';
 import { Icon } from './Icon';
 import { PluginDetails } from './PluginDetails';
 import { PluginFlow } from './PluginFlow';
+import { SideMenu } from './SideMenu';
 import { Tabs } from './Tabs';
 
 interface PromptResultProps {
@@ -22,6 +23,7 @@ function formatDuration(ms: number): string {
 
 export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps) {
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
+  const [prePipelinePluginId, setPrePipelinePluginId] = useState<string | null>(null);
 
   const promptName = result.promptPath.split('/').pop() || result.promptPath;
 
@@ -72,70 +74,125 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
       {/* Expanded Content */}
       {isExpanded && (
         <div className="border-t border-slate-700">
-          {/* Attempt Summary Tabs */}
-          <Tabs
-            items={
-              [
-                {
-                  id: 'bestResult',
-                  name: 'Best Result',
-                  icon: 'code',
-                },
-                {
-                  id: 'attemptsChart',
-                  name: 'Attempts Chart',
-                  icon: 'lineChart',
-                },
-              ] as const
-            }
+          <SideMenu
+            items={[
+              {
+                id: 'finalCode',
+                type: 'button',
+                label: 'Final Code',
+                icon: 'code' as const,
+              },
+              {
+                id: 'flows',
+                type: 'divider',
+              },
+              {
+                id: 'programmaticFlow',
+                type: 'button',
+                label: 'Programmatic Flow',
+                icon: 'settings' as const,
+                disabled: !result.programmaticFlow,
+                tooltip: 'Programmatic-flow is not enabled.',
+              },
+              {
+                id: 'aiPoweredFlow',
+                type: 'button',
+                label: 'AI-Powered Flow',
+                icon: 'sparkles' as const,
+                disabled: result.attempts.length === 0,
+                tooltip: 'No AI-powered attempts available for this prompt.',
+              },
+            ]}
+            defaultActiveId="finalCode"
             content={(tab) => {
               switch (tab.id) {
-                case 'bestResult':
+                case 'finalCode':
                   return <BestResultCode result={result} />;
-                case 'attemptsChart':
-                  return <AttemptsChart result={result} />;
+                case 'programmaticFlow':
+                  return (
+                    <AttemptContent
+                      attempt={result.programmaticFlow!}
+                      selectedPluginId={prePipelinePluginId}
+                      onSelectPlugin={setPrePipelinePluginId}
+                    />
+                  );
+                case 'aiPoweredFlow':
+                  return (
+                    <AIPoweredFlowContent
+                      result={result}
+                      selectedPluginId={selectedPluginId}
+                      onSelectPlugin={setSelectedPluginId}
+                    />
+                  );
                 default:
-                  const _exhaustiveCheck: never = tab;
-                  console.warn('Unhandled tab in PromptResult:', _exhaustiveCheck);
                   return null;
               }
             }}
           />
-
-          {/* Attempt Detail Tabs */}
-          <Tabs
-            className="border-t border-slate-700"
-            items={result.attempts.toReversed().map((attempt) => ({
-              id: `attempt-${attempt.attemptNumber}`,
-              name: (
-                <>
-                  Attempt {attempt.attemptNumber}
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      attempt.success
-                        ? 'bg-emerald-400 shadow-lg shadow-emerald-500/50'
-                        : 'bg-red-400 shadow-lg shadow-red-500/50'
-                    }`}
-                  />
-                </>
-              ),
-            }))}
-            content={(_tab, index) => {
-              const attemptIndex = result.attempts.length - 1 - index;
-              const attempt = result.attempts[attemptIndex];
-              return (
-                <AttemptContent
-                  attempt={attempt}
-                  selectedPluginId={selectedPluginId}
-                  onSelectPlugin={setSelectedPluginId}
-                />
-              );
-            }}
-            onTabChange={() => setSelectedPluginId(null)}
-          />
         </div>
       )}
     </div>
+  );
+}
+
+interface AIPoweredFlowContentProps {
+  result: ReportPromptResult;
+  selectedPluginId: string | null;
+  onSelectPlugin: (id: string | null) => void;
+}
+
+function AIPoweredFlowContent({ result, selectedPluginId, onSelectPlugin }: AIPoweredFlowContentProps) {
+  return (
+    <Tabs
+      items={
+        [
+          { id: 'pluginFlow', name: 'Plugin Flow', icon: 'bolt' },
+          { id: 'attemptsChart', name: 'Attempts Chart', icon: 'lineChart' },
+        ] as const
+      }
+      content={(tab) => {
+        switch (tab.id) {
+          case 'pluginFlow':
+            return (
+              <Tabs
+                items={result.attempts.toReversed().map((attempt) => ({
+                  id: `attempt-${attempt.attemptNumber}`,
+                  name: (
+                    <>
+                      Attempt {attempt.attemptNumber}
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          attempt.success
+                            ? 'bg-emerald-400 shadow-lg shadow-emerald-500/50'
+                            : 'bg-red-400 shadow-lg shadow-red-500/50'
+                        }`}
+                      />
+                    </>
+                  ),
+                }))}
+                content={(_tab, index) => {
+                  const attemptIndex = result.attempts.length - 1 - index;
+                  const attempt = result.attempts[attemptIndex];
+                  return (
+                    <AttemptContent
+                      attempt={attempt}
+                      selectedPluginId={selectedPluginId}
+                      onSelectPlugin={onSelectPlugin}
+                    />
+                  );
+                }}
+                onTabChange={() => onSelectPlugin(null)}
+              />
+            );
+          case 'attemptsChart':
+            return <AttemptsChart result={result} />;
+          default:
+            const _exhaustiveCheck: never = tab;
+            console.warn('Unhandled tab in AIPoweredFlowContent:', _exhaustiveCheck);
+            return null;
+        }
+      }}
+    />
   );
 }
 

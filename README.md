@@ -4,10 +4,12 @@
 
 > A plugin-based pipeline runner for matching decompilation projects.
 
-Mizuchi automates the cycle of writing C code, compiling, and comparing against a target binary in matching decompilation projects. It orchestrates a plugin-based pipeline that can leverage LLMs to generate code, then automatically retries with rich error context when compilation or matching fails.
+Mizuchi automates the cycle of writing C code, compiling, and comparing against a target binary.
+
+It orchestrates a plugin-based pipeline that can leverage programmatic and AI-powered tools to automatically decompile assembly functions to C source code that produces byte-for-byte identical machine code when compiled.
 
 - ✨ Automatic retries with detailed context on compilation or match failures
-- 🐍 Integration with [objdiff](https://github.com/encounter/objdiff/)
+- 🐍 Integration with [m2c](https://github.com/matt-kempster/m2c) and [objdiff](https://github.com/encounter/objdiff/)
 - 📊 Beautiful report UI
 
 <img width="1143" height="1057" alt="image" src="https://github.com/user-attachments/assets/025e6a00-7a6a-4425-9c11-8b86619cd546" />
@@ -48,6 +50,15 @@ Mizuchi automates the cycle of writing C code, compiling, and comparing against 
 ```bash
 npm install
 npm run build && npm run build:report-ui
+```
+
+### m2c Setup (Optional)
+
+To enable the m2c programmatic-flow phase:
+
+```bash
+git submodule update --init
+./scripts/setup-m2c.sh
 ```
 
 ### Requirements
@@ -112,21 +123,31 @@ Mizuchi executes a sequential pipeline of plugins:
 
 ```mermaid
 flowchart TD
-   A[Prompt Loader] --> |Load prompts from directory| B
+  A[Prompt Loader] --> |Load prompts from directory| M
 
-   B[Claude Runner]
-   C[Compiler]
-   D[Objdiff]
-   B --> |Generate C| C
-   C --> |Compilation Error → Retry| B
-   C --> |Compile to object file| D
-   D --> |Mismatch → Retry| B
+  subgraph Programmatic Flow
+    M[m2c] --> |Generate C| MC[Compiler]
+    MC --> |Compile to object file| MD[Objdiff]
+  end
 
-   D --> |Match found| E[Success]
-   D --> |Max retries exceeded| F[Fail]
+  MD --> |Match found| E[Success]
+  MD --> |No match| B
+
+  subgraph AI-Powered Flow
+    B[Claude Runner]
+    C[Compiler]
+    D[Objdiff]
+    B --> |Generate C| C
+    C --> |Compilation Error → Retry| B
+    C --> |Compile to object file| D
+    D --> |Mismatch → Retry| B
+  end
+
+  D --> |Match found| E
+  D --> |Max retries exceeded| F[Fail]
 ```
 
-> 📌 **Roadmap**: Future plans include support for [decomp-permuter](https://github.com/simonlindholm/decomp-permuter), [m2c](https://github.com/matt-kempster/m2c), and automatic code insertion into the codebase. See the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
+> 📌 **Roadmap**: Future plans include support for [decomp-permuter](https://github.com/simonlindholm/decomp-permuter) and automatic code insertion into the codebase. See the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
 
 ## Output
 
@@ -142,6 +163,7 @@ Mizuchi generates three output files:
 
 | Plugin            | Description                                                                                          |
 | ----------------- | ---------------------------------------------------------------------------------------------------- |
+| **m2c**           | Optional: generates an initial C decompilation using [m2c](https://github.com/matt-kempster/m2c)     |
 | **Claude Runner** | Sends prompts to Claude and processes responses                                                      |
 | **Compiler**      | Compiles generated C code using agbcc (currently ARMv4T only)                                        |
 | **Objdiff**       | Compares compiled object files against targets using [objdiff](https://github.com/encounter/objdiff) |

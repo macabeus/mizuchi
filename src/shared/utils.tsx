@@ -1,5 +1,6 @@
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
+import type { M2cPluginResult } from '~/plugins/m2c/m2c-plugin.js';
 import type { ObjdiffResult } from '~/plugins/objdiff/objdiff-plugin.js';
 
 import { AttemptResult, PluginResult } from './types';
@@ -11,6 +12,7 @@ import { AttemptResult, PluginResult } from './types';
 type PluginResultDataMap = {
   'claude-runner': ClaudeRunnerResult;
   compiler: CompilerResult;
+  m2c: M2cPluginResult;
   objdiff: ObjdiffResult;
 };
 

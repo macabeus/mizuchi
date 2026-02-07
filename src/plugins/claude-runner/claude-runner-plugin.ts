@@ -308,6 +308,39 @@ function detectStall(previousAttempts: Array<Partial<PluginResultMap>>, stallThr
 }
 
 /**
+ * Build a section injecting m2c decompilation context into the initial prompt
+ */
+function buildM2cContextSection(m2cContext: NonNullable<PipelineContext['m2cContext']>): string {
+  let section = `
+
+## Initial Decompilation
+Here is an initial decompilation attempt. Use it as a starting point and improve upon it.
+
+\`\`\`c
+${m2cContext.generatedCode}
+\`\`\`
+`;
+
+  if (m2cContext.compilationError) {
+    section += `
+## Matching Result
+The initial decompilation failed to compile with this error:
+
+\`\`\`
+${m2cContext.compilationError}
+\`\`\`
+`;
+  } else if (m2cContext.objdiffOutput) {
+    section += `
+## Matching Result
+${m2cContext.objdiffOutput}
+`;
+  }
+
+  return section;
+}
+
+/**
  * Extract C code from LLM response
  */
 function extractCCode(response: string): string | undefined {
@@ -817,7 +850,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   }> {
     const startTime = Date.now();
 
-    if (!context.promptContent) {
+    let { promptContent } = context;
+    if (!promptContent) {
       return {
         result: {
           pluginId: this.id,
@@ -848,8 +882,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       } else {
         // Initial attempt: run new query
         this.#resetState();
-        promptUsed = wrapPromptWithCodeInstructions(context.promptContent);
-        const result = await this.#runInitialQuery(context.promptContent);
+
+        // Enhance prompt with context from programmatic-flow if available
+        if (context.m2cContext) {
+          promptContent += buildM2cContextSection(context.m2cContext);
+        }
+
+        promptUsed = wrapPromptWithCodeInstructions(promptContent);
+        const result = await this.#runInitialQuery(promptContent);
         response = result.response;
         fromCache = result.fromCache;
       }

@@ -48,20 +48,32 @@ interface AttemptsChartProps {
 }
 
 export function AttemptsChart({ result }: AttemptsChartProps) {
-  const data = result.attempts
-    .map((attempt): ChartDatum | undefined => {
-      const objdiffPluginResult = getPluginResult(attempt, 'objdiff');
+  const data: ChartDatum[] = [];
 
-      if (objdiffPluginResult?.data?.differenceCount !== undefined) {
-        const claudeRunnerResult = getPluginResult(attempt, 'claude-runner');
-        return {
-          x: `Attempt ${attempt.attemptNumber}`,
-          y: objdiffPluginResult.data.differenceCount as number,
-          stalled: (claudeRunnerResult?.data?.stallDetected as boolean) ?? false,
-        };
-      }
-    })
-    .filter((point): point is ChartDatum => point !== undefined);
+  // Include programmatic-flow data point if available
+  if (result.programmaticFlow) {
+    const objdiffPluginResult = getPluginResult(result.programmaticFlow, 'objdiff');
+    if (objdiffPluginResult?.data?.differenceCount !== undefined) {
+      data.push({
+        x: 'm2c',
+        y: objdiffPluginResult.data.differenceCount as number,
+        stalled: false,
+      });
+    }
+  }
+
+  // Include regular attempts
+  for (const attempt of result.attempts) {
+    const objdiffPluginResult = getPluginResult(attempt, 'objdiff');
+    if (objdiffPluginResult?.data?.differenceCount !== undefined) {
+      const claudeRunnerResult = getPluginResult(attempt, 'claude-runner');
+      data.push({
+        x: `Attempt ${attempt.attemptNumber}`,
+        y: objdiffPluginResult.data.differenceCount as number,
+        stalled: (claudeRunnerResult?.data?.stallDetected as boolean) ?? false,
+      });
+    }
+  }
 
   if (data.length === 0) {
     return (

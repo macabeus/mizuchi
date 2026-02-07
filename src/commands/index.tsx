@@ -19,6 +19,7 @@ import {
   claudeRunnerConfigSchema,
 } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import { CompilerConfig, CompilerPlugin, compilerConfigSchema } from '~/plugins/compiler/compiler-plugin.js';
+import { M2cConfig, M2cPlugin, m2cConfigSchema } from '~/plugins/m2c/m2c-plugin.js';
 import { ObjdiffPlugin } from '~/plugins/objdiff/objdiff-plugin.js';
 import { loadPrompts } from '~/prompt-loader.js';
 import {
@@ -70,6 +71,7 @@ interface PluginStatus {
  */
 interface ProgressState {
   phase: 'loading' | 'initializing' | 'running' | 'complete' | 'error';
+  currentFlow: 'loading' | 'programmatic-flow' | 'ai-powered-flow';
   config?: PipelineConfig;
   plugins: PluginInfo[];
   // Current prompt info
@@ -104,6 +106,7 @@ interface ProgressState {
 export default function Index({ options: opts }: Props) {
   const [state, setState] = useState<ProgressState>({
     phase: 'loading',
+    currentFlow: 'loading',
     plugins: [],
     pluginStatuses: [],
     completedPrompts: [],
@@ -143,9 +146,17 @@ export default function Index({ options: opts }: Props) {
             })),
           };
 
+        case 'programmatic-flow-start':
+          return {
+            ...prev,
+            currentFlow: 'programmatic-flow',
+            pluginStatuses: [],
+          };
+
         case 'attempt-start':
           return {
             ...prev,
+            currentFlow: 'ai-powered-flow',
             currentAttempt: {
               number: event.attemptNumber,
               maxRetries: event.maxRetries,
@@ -158,13 +169,25 @@ export default function Index({ options: opts }: Props) {
             })),
           };
 
-        case 'plugin-execution-start':
+        case 'plugin-execution-start': {
+          const exists = prev.pluginStatuses.some((p) => p.id === event.pluginId);
+          if (exists) {
+            return {
+              ...prev,
+              pluginStatuses: prev.pluginStatuses.map((p) =>
+                p.id === event.pluginId ? { ...p, status: 'running' as const } : p,
+              ),
+            };
+          }
+          // During programmatic-flow phase, add plugin status dynamically
           return {
             ...prev,
-            pluginStatuses: prev.pluginStatuses.map((p) =>
-              p.id === event.pluginId ? { ...p, status: 'running' as const } : p,
-            ),
+            pluginStatuses: [
+              ...prev.pluginStatuses,
+              { id: event.pluginId, name: event.pluginName, status: 'running' as const },
+            ],
           };
+        }
 
         case 'plugin-execution-complete':
           return {
@@ -269,8 +292,14 @@ export default function Index({ options: opts }: Props) {
             </Box>
           )}
 
+          <Box marginBottom={1}>
+            <Text color="yellow">
+              <Spinner type="dots" /> {state.currentFlow}
+            </Text>
+          </Box>
+
           {/* Current attempt */}
-          {state.currentAttempt && (
+          {state.currentFlow === 'ai-powered-flow' && state.currentAttempt && (
             <Box marginBottom={1}>
               <Text>
                 Attempt {state.currentAttempt.number}/{state.currentAttempt.maxRetries}
@@ -531,12 +560,22 @@ async function runPipeline(
       compilerConfigSchema,
     );
 
-    // Create plugins with their configurations
+    // Create plugins
     const claudePlugin = new ClaudeRunnerPlugin(claudeRunnerConfig, pipelineConfig);
     const compilerPlugin = new CompilerPlugin(compilerConfig, pipelineConfig);
+    const objdiffPlugin = new ObjdiffPlugin();
 
-    manager.register(claudePlugin).register(compilerPlugin).register(new ObjdiffPlugin());
+    // Register plugins for the programmatic-flow
+    const m2cConfig: M2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
+    if (m2cConfig.enable) {
+      const m2cPlugin = new M2cPlugin(m2cConfig);
+      manager.registerProgrammaticFlow(m2cPlugin, compilerPlugin, objdiffPlugin);
+    }
 
+    // Register plugins for the ai-powered-flow
+    manager.register(claudePlugin).register(compilerPlugin).register(objdiffPlugin);
+
+    // Run the pipeline
     const results = await manager.runBenchmark(prompts);
 
     // Save cache after benchmark completes

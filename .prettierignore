@@ -6,3 +6,4 @@ out/
 CHANGELOG.md
 package-lock.json
 yarn.lock
+vendor/

@@ -9,7 +9,10 @@ interface BestResultProps {
 }
 
 export function BestResultCode({ result }: BestResultProps) {
-  const bestAttempt = result.attempts.reduce<ReportAttempt | null>((best, attempt) => {
+  // Consider both programmatic and AI-powered flows
+  const allAttempts = [...(result.programmaticFlow ? [result.programmaticFlow] : []), ...result.attempts];
+
+  const bestAttempt = allAttempts.reduce<ReportAttempt | null>((best, attempt) => {
     if (
       getPluginResult(attempt, 'compiler')?.status !== 'success' ||
       getPluginResult(attempt, 'objdiff')?.data?.differenceCount === undefined
@@ -34,7 +37,11 @@ export function BestResultCode({ result }: BestResultProps) {
     return best;
   }, null);
 
-  const bestAttemptCode = bestAttempt && getPluginResult(bestAttempt, 'claude-runner')?.data?.generatedCode;
+  // Try claude-runner first, then m2c for programmatic-flow attempts
+  const bestAttemptCode =
+    bestAttempt &&
+    (getPluginResult(bestAttempt, 'claude-runner')?.data?.generatedCode ||
+      getPluginResult(bestAttempt, 'm2c')?.data?.generatedCode);
 
   if (!bestAttemptCode) {
     return (

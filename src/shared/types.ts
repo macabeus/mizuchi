@@ -5,6 +5,7 @@
  */
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
+import type { M2cPluginResult } from '~/plugins/m2c/m2c-plugin.js';
 import type { ObjdiffResult } from '~/plugins/objdiff/objdiff-plugin.js';
 
 import type { PipelineConfig } from './config.js';
@@ -15,6 +16,7 @@ import type { PipelineConfig } from './config.js';
 export type PluginResultMap = {
   'claude-runner': PluginResult<ClaudeRunnerResult>;
   compiler: PluginResult<CompilerResult>;
+  m2c: PluginResult<M2cPluginResult>;
   objdiff: PluginResult<ObjdiffResult>;
 };
 
@@ -69,6 +71,12 @@ export interface PipelineContext {
   previousAttempts?: Array<Partial<PluginResultMap>>;
   /** Configuration options */
   config: PipelineConfig;
+  /** Context from m2c programmatic-flow phase, available to Claude Runner on first attempt */
+  m2cContext?: {
+    generatedCode: string;
+    compilationError?: string;
+    objdiffOutput?: string;
+  };
 }
 
 /**
@@ -178,8 +186,11 @@ export interface PipelineRunResult {
   promptPath: string;
   functionName: string;
   success: boolean;
-  attempts: AttemptResult[];
   totalDurationMs: number;
+  /** Result from programmatic-flow (e.g., m2c), if one was configured */
+  programmaticFlow?: AttemptResult;
+  /** Results for every attempt from the AI-powered flow */
+  attempts: AttemptResult[];
 }
 
 /**
