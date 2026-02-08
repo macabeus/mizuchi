@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { ARM_ASSEMBLER, DEFAULT_ARM_FLAGS, getAgbccCompilerPath } from './c-compiler/__fixtures__/index.js';
 import { CCompiler } from './c-compiler/c-compiler.js';
 import { M2c } from './m2c.js';
 
@@ -192,7 +193,7 @@ glabel func
 
     beforeAll(async () => {
       m2c = new M2c();
-      compiler = new CCompiler();
+      compiler = new CCompiler(getAgbccCompilerPath(), ARM_ASSEMBLER);
 
       // Create a minimal context file with type definitions and extern declarations
       contextPath = path.join(__dirname, 'test-reloc-context.h');
@@ -230,12 +231,7 @@ u32 TestRelocFunc(void) {
     return a + b;
 }
 `;
-      const compileResult = await compiler.compile(
-        'TestRelocFunc',
-        cCode,
-        contextPath,
-        '-mthumb-interwork -O2 -fhex-asm',
-      );
+      const compileResult = await compiler.compile('TestRelocFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {
@@ -262,12 +258,7 @@ u32 NoRelocFunc(u32 x) {
     return x + 1;
 }
 `;
-      const compileResult = await compiler.compile(
-        'NoRelocFunc',
-        cCode,
-        contextPath,
-        '-mthumb-interwork -O2 -fhex-asm',
-      );
+      const compileResult = await compiler.compile('NoRelocFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {
@@ -289,12 +280,7 @@ void ExistingFunc(void) {
     volatile int x = 1;
 }
 `;
-      const compileResult = await compiler.compile(
-        'ExistingFunc',
-        cCode,
-        contextPath,
-        '-mthumb-interwork -O2 -fhex-asm',
-      );
+      const compileResult = await compiler.compile('ExistingFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {
@@ -327,7 +313,7 @@ u32 SecondFunc(void) {
     return gGlobalVar3;
 }
 `;
-      const compileResult = await compiler.compile('TwoFuncs', cCode, contextPath, '-mthumb-interwork -O2 -fhex-asm');
+      const compileResult = await compiler.compile('TwoFuncs', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {

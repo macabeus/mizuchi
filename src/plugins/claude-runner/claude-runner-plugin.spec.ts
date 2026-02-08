@@ -1,6 +1,8 @@
 import { type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ARM_DIFF_SETTINGS, getAgbccCompilerPath } from '~/shared/c-compiler/__fixtures__/index.js';
+import { Objdiff } from '~/shared/objdiff.js';
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
 import type { PipelineContext, PluginReportSection, PluginResult, PluginResultMap } from '~/shared/types.js';
 
@@ -113,11 +115,20 @@ const defaultPluginConfig: ClaudeRunnerConfig = {
   stallThreshold: 3,
 };
 
+const testCompilerConfig = { compilerPath: getAgbccCompilerPath(), assemblerPath: 'arm-none-eabi-as' };
+const testObjdiff = new Objdiff(ARM_DIFF_SETTINGS);
+
 describe('ClaudeRunnerPlugin', () => {
   describe('constructor', () => {
     it('creates plugin with default options', () => {
       const mockFactory = createMockQueryFactory(['test']);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
 
       expect(plugin.id).toBe('claude-runner');
       expect(plugin.name).toBe('Claude Runner');
@@ -129,6 +140,8 @@ describe('ClaudeRunnerPlugin', () => {
       const plugin = new ClaudeRunnerPlugin(
         { ...defaultPluginConfig, timeoutMs: 60000 },
         defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
         mockFactory,
       );
 
@@ -142,7 +155,13 @@ describe('ClaudeRunnerPlugin', () => {
       const response = `Here is the code:\n\n\`\`\`c\n${cCode}\n\`\`\``;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const m2cGeneratedCode = 'int testFunc(void) {\n  return 42;\n';
       const m2cCompilationError = "error: expected '}' at end of input";
       const context: PipelineContext = {
@@ -178,7 +197,13 @@ describe('ClaudeRunnerPlugin', () => {
       const response = `Here is the code:\n\n\`\`\`c\n${cCode}\n\`\`\``;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result, context: newContext } = await plugin.execute(context);
@@ -193,7 +218,13 @@ describe('ClaudeRunnerPlugin', () => {
       const response = `\`\`\`C\n${cCode}\n\`\`\``;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result, context: newContext } = await plugin.execute(context);
@@ -204,7 +235,13 @@ describe('ClaudeRunnerPlugin', () => {
 
     it('fails when no prompt content is provided', async () => {
       const mockFactory = createMockQueryFactory(['test']);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext({ promptContent: undefined });
 
       const { result } = await plugin.execute(context);
@@ -217,7 +254,13 @@ describe('ClaudeRunnerPlugin', () => {
       const response = 'I cannot help with that request.';
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -230,7 +273,13 @@ describe('ClaudeRunnerPlugin', () => {
       const response = '```c\nint foo(void) {\n  return 1;\n```';
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -243,7 +292,13 @@ describe('ClaudeRunnerPlugin', () => {
       const response = '```c\ntypedef struct { int x; } Foo;\n```';
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -258,7 +313,13 @@ describe('ClaudeRunnerPlugin', () => {
         shouldError: true,
         errorType: 'error_during_execution',
       });
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -273,7 +334,13 @@ describe('ClaudeRunnerPlugin', () => {
         shouldError: true,
         errorType: 'error_max_turns',
       });
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -302,7 +369,13 @@ void movePoint(Point* p) {
 `;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result, context: newContext } = await plugin.execute(context);
@@ -316,7 +389,13 @@ void movePoint(Point* p) {
       const response = '```c\nint foo(void) { return 1; }\n```';
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -331,7 +410,13 @@ void movePoint(Point* p) {
       const response = `\`\`\`c\n${cCode}\n\`\`\``;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext({ attemptNumber: 2 });
 
       const previousAttempts = [
@@ -364,7 +449,13 @@ void movePoint(Point* p) {
       const response = `\`\`\`c\n${cCode}\n\`\`\``;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext({ attemptNumber: 2 });
 
       const previousAttempts = [
@@ -399,7 +490,13 @@ void movePoint(Point* p) {
 
     it('returns context unchanged when no previous attempts', () => {
       const mockFactory = createMockQueryFactory(['test']);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const newContext = plugin.prepareRetry!(context, []);
@@ -409,7 +506,13 @@ void movePoint(Point* p) {
 
     it('returns context unchanged when no claude result in previous attempt', () => {
       const mockFactory = createMockQueryFactory(['test']);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       // No 'claude-runner' key in the attempt object
@@ -424,7 +527,13 @@ void movePoint(Point* p) {
       const response1 = '```c\nint foo(void) { return 1; }\n```';
       const response2 = '```c\nint foo(void) { return 3; }\n```';
       const mockFactory = createMockQueryFactory([response1, response2]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       // First execution to establish the session
@@ -516,7 +625,13 @@ void movePoint(Point* p) {
 
     it('does not trigger reminder logic when last attempt is better', () => {
       const mockFactory = createMockQueryFactory(['test']);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const previousAttempts = [
@@ -583,7 +698,13 @@ void movePoint(Point* p) {
       const response1 = '```c\nint foo(void) { return 1; }\n```';
       const response2 = '```c\nint foo(void) { return 42; }\n```';
       const mockFactory = createMockQueryFactory([response1, response2]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       // First execution to establish the session
@@ -645,7 +766,13 @@ void movePoint(Point* p) {
       const response1 = '```c\nint foo(void) { return 1; }\n```';
       const response2 = '```c\nint foo(void) { return 42; }\n```';
       const mockFactory = createMockQueryFactory([response1, response2]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       // First execution to establish the session
@@ -767,6 +894,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 3 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -794,6 +923,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 3 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -821,6 +952,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 3 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -848,6 +981,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 3 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -875,6 +1010,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 3 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -898,6 +1035,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 2 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -922,6 +1061,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 3 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -954,6 +1095,8 @@ void movePoint(Point* p) {
         const plugin = new ClaudeRunnerPlugin(
           { ...defaultPluginConfig, stallThreshold: 3 },
           defaultTestPipelineConfig,
+          testCompilerConfig,
+          testObjdiff,
           mockFactory,
         );
         const context = createTestContext();
@@ -987,7 +1130,13 @@ void movePoint(Point* p) {
     it('creates new session for initial attempt', async () => {
       const response = '```c\nint foo(void) { return 1; }\n```';
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       await plugin.execute(context);
@@ -999,7 +1148,13 @@ void movePoint(Point* p) {
       const response1 = '```c\nint foo(void) { return 1; }\n```';
       const response2 = '```c\nint foo(void) { return 2; }\n```';
       const mockFactory = createMockQueryFactory([response1, response2]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       // Initial attempt
@@ -1043,7 +1198,13 @@ void movePoint(Point* p) {
         responses: [response1, response2],
         requireResumeForFollowUp: false,
       });
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
 
       // First pipeline run
       const context1 = createTestContext({ functionName: 'foo' });
@@ -1063,7 +1224,13 @@ void movePoint(Point* p) {
       const response = '```c\nvoid func(void) { u32 x = 0; }\n```';
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result, context: newContext } = await plugin.execute(context);
@@ -1087,7 +1254,13 @@ int foo(void) { return 2; }
 `;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result, context: newContext } = await plugin.execute(context);
@@ -1112,7 +1285,13 @@ void processTask(struct Task* t) {
 `;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result, context: newContext } = await plugin.execute(context);
@@ -1139,7 +1318,13 @@ mov eax, 0
 `;
 
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result, context: newContext } = await plugin.execute(context);
@@ -1162,7 +1347,13 @@ mov eax, 0
     it('returns chat section with conversation history', async () => {
       const response = '```c\nint foo(void) { return 1; }\n```';
       const mockFactory = createMockQueryFactory([response]);
-      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const plugin = new ClaudeRunnerPlugin(
+        defaultPluginConfig,
+        defaultTestPipelineConfig,
+        testCompilerConfig,
+        testObjdiff,
+        mockFactory,
+      );
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);

@@ -3,13 +3,14 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { ARM_ASSEMBLER, DEFAULT_ARM_FLAGS, getAgbccCompilerPath } from '~/shared/c-compiler/__fixtures__/index.js';
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 
 import { loadPrompts } from './prompt-loader.js';
 
 describe('PromptLoaderPlugin', () => {
   let tempDir: string;
-  const compiler = new CCompiler();
+  const compiler = new CCompiler(getAgbccCompilerPath(), ARM_ASSEMBLER);
   const emptyContextPath = '';
   const compiledObjects: string[] = [];
 
@@ -48,8 +49,7 @@ void ${functionName}(void) {
     x = x + 1;
 }
 `;
-    const defaultFlags = '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm';
-    const result = await compiler.compile(functionName, cCode, emptyContextPath, defaultFlags);
+    const result = await compiler.compile(functionName, cCode, emptyContextPath, DEFAULT_ARM_FLAGS);
     if (!result.success) {
       throw new Error(`Failed to compile ${functionName}`);
     }

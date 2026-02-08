@@ -36,6 +36,7 @@ const targetMapping: Partial<Record<PlatformTarget, M2cArchitecture>> = {
  */
 export const m2cConfigSchema = z.object({
   enable: z.boolean().default(true),
+  readelfPath: z.string().optional().describe('Path to readelf binary'),
 });
 
 export type M2cConfig = z.infer<typeof m2cConfigSchema>;
@@ -56,9 +57,13 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
   readonly description = 'Generates initial C decompilation using m2c';
 
   #m2c: M2c;
+  #objdiff: Objdiff;
+  #readelfPath?: string;
 
-  constructor(_config: M2cConfig) {
+  constructor(config: M2cConfig, objdiff: Objdiff) {
     this.#m2c = new M2c();
+    this.#objdiff = objdiff;
+    this.#readelfPath = config.readelfPath;
   }
 
   async execute(context: PipelineContext): Promise<{
@@ -82,9 +87,8 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
 
     try {
       // 1. Extract assembly from target .o file using objdiff
-      const objdiff = Objdiff.getInstance();
-      const parsedTarget = await objdiff.parseObjectFile(context.targetObjectPath, 'base');
-      const diffResult = await objdiff.runDiff(parsedTarget);
+      const parsedTarget = await this.#objdiff.parseObjectFile(context.targetObjectPath, 'base');
+      const diffResult = await this.#objdiff.runDiff(parsedTarget);
 
       if (!diffResult.left) {
         return {
@@ -99,18 +103,9 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
         };
       }
 
-      const assembly = await objdiff.getAssemblyFromSymbol(diffResult.left, context.functionName);
+      const assembly = await this.#objdiff.getAssemblyFromSymbol(diffResult.left, context.functionName);
 
-      // 2. Read ELF relocations for literal pool entries not visible in the objdiff display
-      const literalPoolOverrides = await this.#m2c.getRelocationsForFunction(
-        context.targetObjectPath,
-        context.functionName,
-      );
-
-      // 3. Convert to GAS-compatible format
-      const gasAssembly = M2c.convertObjdiffAsmToGas(assembly, context.functionName, literalPoolOverrides);
-
-      // 4. Run m2c
+      // 2. Derive arch family from target platform
       const m2cTarget = targetMapping[context.config.target];
       if (!m2cTarget) {
         return {
@@ -124,7 +119,18 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
           context,
         };
       }
+      const archFamily: 'arm' | 'mips' = m2cTarget === 'arm' ? 'arm' : 'mips';
 
+      // 3. Read ELF relocations for literal pool entries not visible in the objdiff display
+      const relocArgs: [string, string, 'arm' | 'mips'] = [context.targetObjectPath, context.functionName, archFamily];
+      const literalPoolOverrides = this.#readelfPath
+        ? await this.#m2c.getRelocationsForFunction(...relocArgs, this.#readelfPath)
+        : await this.#m2c.getRelocationsForFunction(...relocArgs);
+
+      // 4. Convert to GAS-compatible format
+      const gasAssembly = M2c.convertObjdiffAsmToGas(assembly, context.functionName, literalPoolOverrides, archFamily);
+
+      // 5. Run m2c
       const m2cResult = await this.#m2c.decompile({
         asmContent: gasAssembly,
         functionName: context.functionName,
@@ -147,7 +153,7 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
 
       const generatedCode = m2cResult.code!;
 
-      // 5. Set context for downstream plugins (Compiler) and for Claude Runner (if programmatic-flow fails)
+      // 6. Set context for downstream plugins (Compiler) and for Claude Runner (if programmatic-flow fails)
       const updatedContext: PipelineContext = {
         ...context,
         generatedCode,

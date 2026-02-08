@@ -435,14 +435,24 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   // MCP tool dependencies
   #contextPath: string;
   #compilerFlags: string;
+  #compilerConfig: { compilerPath: string; assemblerPath?: string };
+  #objdiff: Objdiff;
   #mcpServer: McpServer;
 
-  constructor(config: ClaudeRunnerConfig, pipelineConfig: PipelineConfig, queryFactory?: QueryFactory) {
+  constructor(
+    config: ClaudeRunnerConfig,
+    pipelineConfig: PipelineConfig,
+    compilerConfig: { compilerPath: string; assemblerPath?: string },
+    objdiff: Objdiff,
+    queryFactory?: QueryFactory,
+  ) {
     this.systemPrompt = config.systemPrompt.replaceAll('{{contextPath}}', pipelineConfig.contextPath);
 
     this.#config = config;
     this.#contextPath = pipelineConfig.contextPath;
     this.#compilerFlags = pipelineConfig.compilerFlags;
+    this.#compilerConfig = compilerConfig;
+    this.#objdiff = objdiff;
 
     this.#mcpServer = this.#createMcpServer();
 
@@ -475,6 +485,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #createMcpServer(): McpServer {
     const contextPath = this.#contextPath;
     const compilerFlags = this.#compilerFlags;
+    const compilerConfig = this.#compilerConfig;
+    const objdiff = this.#objdiff;
 
     return createSdkMcpServer({
       name: 'mizuchi',
@@ -490,8 +502,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           async (args) => {
             let compileResult: Awaited<ReturnType<CCompiler['compile']>> | undefined;
             try {
-              const compiler = new CCompiler();
-              const objdiff = Objdiff.getInstance();
+              const compiler = new CCompiler(compilerConfig.compilerPath, compilerConfig.assemblerPath);
 
               // Compile the code
               compileResult = await compiler.compile(args.function_name, args.code, contextPath, compilerFlags);
