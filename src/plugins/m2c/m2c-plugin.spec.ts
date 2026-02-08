@@ -3,7 +3,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import {
+  ARM_ASSEMBLER,
+  ARM_DIFF_SETTINGS,
+  DEFAULT_ARM_FLAGS,
+  getAgbccCompilerPath,
+} from '~/shared/c-compiler/__fixtures__/index.js';
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
+import { Objdiff } from '~/shared/objdiff.js';
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
 
 import { M2cPlugin } from './m2c-plugin.js';
@@ -14,7 +21,7 @@ const __dirname = path.dirname(__filename);
 describe('M2cPlugin', () => {
   describe('metadata', () => {
     it('has correct plugin id and name', () => {
-      const plugin = new M2cPlugin({ enable: true });
+      const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
 
       expect(plugin.id).toBe('m2c');
       expect(plugin.name).toBe('m2c');
@@ -23,7 +30,7 @@ describe('M2cPlugin', () => {
 
   describe('.execute', () => {
     it('returns failure when no target object path is provided', async () => {
-      const plugin = new M2cPlugin({ enable: true });
+      const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
       const context = createTestContext({ targetObjectPath: undefined });
 
       const { result } = await plugin.execute(context);
@@ -38,7 +45,7 @@ describe('M2cPlugin', () => {
       let compiledObjPath: string | null = null;
 
       beforeAll(async () => {
-        compiler = new CCompiler();
+        compiler = new CCompiler(getAgbccCompilerPath(), ARM_ASSEMBLER);
 
         // Create a minimal context file
         contextPath = path.join(__dirname, 'test-m2c-plugin-context.h');
@@ -72,7 +79,7 @@ u32 SimpleFunc(u32 a, u32 b) {
           'SimpleFunc',
           cCode,
           contextPath,
-          '-mthumb-interwork -O2 -fhex-asm',
+          DEFAULT_ARM_FLAGS,
         );
 
         expect(compileResult.success).toBe(true);
@@ -82,7 +89,7 @@ u32 SimpleFunc(u32 a, u32 b) {
         compiledObjPath = compileResult.objPath;
 
         // Run the m2c plugin
-        const plugin = new M2cPlugin({ enable: true });
+        const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
         const context = createTestContext({
           functionName: 'SimpleFunc',
           targetObjectPath: compiledObjPath,
@@ -108,7 +115,7 @@ u32 ReadPtr(u32 *ptr) {
     return *ptr;
 }
 `;
-        const compileResult = await compiler.compile('ReadPtr', cCode, contextPath, '-mthumb-interwork -O2 -fhex-asm');
+        const compileResult = await compiler.compile('ReadPtr', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
         expect(compileResult.success).toBe(true);
         if (!compileResult.success) {
@@ -116,7 +123,7 @@ u32 ReadPtr(u32 *ptr) {
         }
         compiledObjPath = compileResult.objPath;
 
-        const plugin = new M2cPlugin({ enable: true });
+        const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
         const context = createTestContext({
           functionName: 'ReadPtr',
           targetObjectPath: compiledObjPath,
@@ -140,7 +147,7 @@ u32 Sum4(u32 a, u32 b, u32 c, u32 d) {
     return a + b + c + d;
 }
 `;
-        const compileResult = await compiler.compile('Sum4', cCode, contextPath, '-mthumb-interwork -O2 -fhex-asm');
+        const compileResult = await compiler.compile('Sum4', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
         expect(compileResult.success).toBe(true);
         if (!compileResult.success) {
@@ -148,7 +155,7 @@ u32 Sum4(u32 a, u32 b, u32 c, u32 d) {
         }
         compiledObjPath = compileResult.objPath;
 
-        const plugin = new M2cPlugin({ enable: true });
+        const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
         const context = createTestContext({
           functionName: 'Sum4',
           targetObjectPath: compiledObjPath,
@@ -170,7 +177,7 @@ u32 Sum4(u32 a, u32 b, u32 c, u32 d) {
         const cCode = `
 void TestFunc(void) {}
 `;
-        const compileResult = await compiler.compile('TestFunc', cCode, contextPath, '-mthumb-interwork -O2 -fhex-asm');
+        const compileResult = await compiler.compile('TestFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
         expect(compileResult.success).toBe(true);
         if (!compileResult.success) {
@@ -178,7 +185,7 @@ void TestFunc(void) {}
         }
         compiledObjPath = compileResult.objPath;
 
-        const plugin = new M2cPlugin({ enable: true });
+        const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
         const context = createTestContext({
           functionName: 'TestFunc',
           targetObjectPath: compiledObjPath,
@@ -205,7 +212,7 @@ void ExistingFunc(void) {
           'ExistingFunc',
           cCode,
           contextPath,
-          '-mthumb-interwork -O2 -fhex-asm',
+          DEFAULT_ARM_FLAGS,
         );
 
         expect(compileResult.success).toBe(true);
@@ -214,7 +221,7 @@ void ExistingFunc(void) {
         }
         compiledObjPath = compileResult.objPath;
 
-        const plugin = new M2cPlugin({ enable: true });
+        const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
         const context = createTestContext({
           functionName: 'NonExistentFunc',
           targetObjectPath: compiledObjPath,
@@ -233,7 +240,7 @@ void ExistingFunc(void) {
 
   describe('.getReportSections', () => {
     it('returns code section when generatedCode is present', () => {
-      const plugin = new M2cPlugin({ enable: true });
+      const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
       const result = {
         pluginId: 'm2c',
         pluginName: 'm2c',
@@ -250,7 +257,7 @@ void ExistingFunc(void) {
     });
 
     it('returns error section when there is an error', () => {
-      const plugin = new M2cPlugin({ enable: true });
+      const plugin = new M2cPlugin({ enable: true }, new Objdiff(ARM_DIFF_SETTINGS));
       const result = {
         pluginId: 'm2c',
         pluginName: 'm2c',

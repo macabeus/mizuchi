@@ -20,7 +20,7 @@ import {
 } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import { CompilerConfig, CompilerPlugin, compilerConfigSchema } from '~/plugins/compiler/compiler-plugin.js';
 import { M2cConfig, M2cPlugin, m2cConfigSchema } from '~/plugins/m2c/m2c-plugin.js';
-import { ObjdiffPlugin } from '~/plugins/objdiff/objdiff-plugin.js';
+import { ObjdiffConfig, ObjdiffPlugin, objdiffConfigSchema } from '~/plugins/objdiff/objdiff-plugin.js';
 import { loadPrompts } from '~/prompt-loader.js';
 import {
   type ReportPluginConfigs,
@@ -29,6 +29,7 @@ import {
   transformToReport,
 } from '~/report-generator/index.js';
 import { PipelineConfig } from '~/shared/config';
+import { Objdiff } from '~/shared/objdiff.js';
 import type { PipelineEvent, PluginInfo } from '~/shared/pipeline-events.js';
 import type { PipelineResults } from '~/shared/types.js';
 
@@ -560,15 +561,24 @@ async function runPipeline(
       compilerConfigSchema,
     );
 
+    const objdiffConfig: ObjdiffConfig = getPluginConfigFromFile<ObjdiffConfig>(
+      fileConfig,
+      'objdiff',
+      objdiffConfigSchema,
+    );
+
+    // Create shared Objdiff instance
+    const objdiff = new Objdiff(objdiffConfig.diffSettings);
+
     // Create plugins
-    const claudePlugin = new ClaudeRunnerPlugin(claudeRunnerConfig, pipelineConfig);
+    const claudePlugin = new ClaudeRunnerPlugin(claudeRunnerConfig, pipelineConfig, compilerConfig, objdiff);
     const compilerPlugin = new CompilerPlugin(compilerConfig, pipelineConfig);
-    const objdiffPlugin = new ObjdiffPlugin();
+    const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
 
     // Register plugins for the programmatic-flow
     const m2cConfig: M2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
     if (m2cConfig.enable) {
-      const m2cPlugin = new M2cPlugin(m2cConfig);
+      const m2cPlugin = new M2cPlugin(m2cConfig, objdiff);
       manager.registerProgrammaticFlow(m2cPlugin, compilerPlugin, objdiffPlugin);
     }
 
@@ -594,7 +604,7 @@ async function runPipeline(
         stallThreshold: claudeRunnerConfig.stallThreshold,
       },
       compiler: {
-        flags: compilerConfig.flags,
+        flags: pipelineConfig.compilerFlags,
       },
     };
     const report = transformToReport(results, pluginConfigs);

@@ -13,7 +13,7 @@ global:
   # Output directory for generated files and reports (default: current directory)
   outputDir: '.'
 
-  # Compiler flags to pass to agbcc
+  # Compiler flags
   compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm'
 
   # Directory containing prompt folders
@@ -30,6 +30,22 @@ global:
 # Plugin-specific configurations
 # Each plugin receives only its own section along with the global config
 plugins:
+  # Compiler Plugin
+  # Compiles C code using the configured compiler toolchain
+  compiler:
+    # Path to the compiler binary (required)
+    compilerPath: '/path/to/agbcc'
+    # Path to assembler binary (for compilers that output .s like agbcc)
+    assemblerPath: 'arm-none-eabi-as'
+
+  # Objdiff Plugin
+  # Compares compiled object files with target using objdiff-wasm
+  objdiff:
+    # Architecture-specific diff settings passed to objdiff-wasm
+    diffSettings:
+      arm.archVersion: 'v4t'
+      functionRelocDiffs: 'none'
+
   # Claude Runner Plugin
   # Uses Claude Agent SDK to generate C code from assembly prompts
   # Responses are automatically cached to avoid redundant API calls
@@ -56,3 +72,24 @@ plugins:
   m2c:
     # Enable or disable m2c programmatic-flow (default: true)
     enable: true
+    # Path to readelf binary (optional, defaults to arm-none-eabi-readelf)
+    # readelfPath: 'arm-none-eabi-readelf'
+
+# ---- MIPS Example (N64) ----
+# To configure for a MIPS target like N64, use settings like:
+#
+# global:
+#   contextPath: '/path/to/context.h'
+#   compilerFlags: '-O2 -G0 -mips2'
+#   target: n64
+#
+# plugins:
+#   compiler:
+#     compilerPath: '/path/to/mips-gcc'
+#     # No assemblerPath needed for gcc (compiles directly to .o)
+#   objdiff:
+#     diffSettings:
+#       mips.instrCategory: 'cpu'
+#   m2c:
+#     enable: true
+#     readelfPath: 'mips-linux-gnu-readelf'

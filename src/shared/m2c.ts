@@ -120,6 +120,57 @@ export class M2c {
     assembly: string,
     functionName: string,
     literalPoolOverrides: Map<number, string> = new Map(),
+    target: 'arm' | 'mips' = 'arm',
+  ): string {
+    if (target === 'mips') {
+      return M2c.#convertObjdiffAsmToGasMips(assembly, functionName);
+    }
+
+    return M2c.#convertObjdiffAsmToGasArm(assembly, functionName, literalPoolOverrides);
+  }
+
+  /**
+   * MIPS-specific conversion: strip addresses, keep labels, add .text + glabel header
+   */
+  static #convertObjdiffAsmToGasMips(assembly: string, functionName: string): string {
+    const lines = assembly.split('\n');
+    const gasLines: string[] = ['.text', `glabel ${functionName}`];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      // Labels - keep as-is
+      if (/^\.\w+:/.test(trimmed)) {
+        gasLines.push(trimmed);
+        continue;
+      }
+
+      // Strip address prefix (e.g., "0:", "4:", "1c:")
+      const stripped = trimmed.replace(/^[0-9a-fA-F]+:\s*/, '');
+
+      // Skip data directives
+      if (/^\.(word|hword|short)\s/.test(stripped)) {
+        continue;
+      }
+
+      if (stripped) {
+        gasLines.push(`    ${stripped}`);
+      }
+    }
+
+    return gasLines.join('\n') + '\n';
+  }
+
+  /**
+   * ARM-specific conversion with PC-relative ldr, bl/blx addends, literal pool resolution
+   */
+  static #convertObjdiffAsmToGasArm(
+    assembly: string,
+    functionName: string,
+    literalPoolOverrides: Map<number, string> = new Map(),
   ): string {
     const lines = assembly.split('\n');
     const gasLines: string[] = ['.text', `glabel ${functionName}`];
@@ -214,12 +265,22 @@ export class M2c {
   /**
    * Read ELF relocations for a function's literal pool entries.
    * Returns a map of function-relative addresses to symbol names.
+   *
+   * @param objectFilePath - Path to the ELF object file
+   * @param functionName - Name of the function to get relocations for
+   * @param target - Architecture family ('arm' or 'mips')
+   * @param readelfPath - Path to the readelf binary (defaults to 'arm-none-eabi-readelf')
    */
-  async getRelocationsForFunction(objectFilePath: string, functionName: string): Promise<Map<number, string>> {
+  async getRelocationsForFunction(
+    objectFilePath: string,
+    functionName: string,
+    target: 'arm' | 'mips' = 'arm',
+    readelfPath: string = 'arm-none-eabi-readelf',
+  ): Promise<Map<number, string>> {
     const result = new Map<number, string>();
 
     // Get the function's address in the .text section
-    const symResult = await this.#exec('arm-none-eabi-readelf', ['-s', '-W', objectFilePath]);
+    const symResult = await this.#exec(readelfPath, ['-s', '-W', objectFilePath]);
     if (symResult.exitCode !== 0) {
       return result;
     }
@@ -230,8 +291,12 @@ export class M2c {
       if (line.includes(functionName) && /FUNC/.test(line)) {
         const match = line.match(/:\s*([0-9a-fA-F]+)\s/);
         if (match) {
-          // Clear Thumb bit (bit 0) to get actual address
-          funcAddr = parseInt(match[1], 16) & ~1;
+          if (target === 'arm') {
+            // Clear Thumb bit (bit 0) to get actual address
+            funcAddr = parseInt(match[1], 16) & ~1;
+          } else {
+            funcAddr = parseInt(match[1], 16);
+          }
           break;
         }
       }
@@ -241,19 +306,24 @@ export class M2c {
     }
 
     // Get relocations
-    const relResult = await this.#exec('arm-none-eabi-readelf', ['-r', '-W', objectFilePath]);
+    const relResult = await this.#exec(readelfPath, ['-r', '-W', objectFilePath]);
     if (relResult.exitCode !== 0) {
       return result;
     }
 
-    // Parse R_ARM_ABS32 relocations near the function's literal pool
+    // Choose relocation type based on target
+    const relocType = target === 'arm' ? 'R_ARM_ABS32' : 'R_MIPS_32';
+
+    // Parse relocations near the function's literal pool
     for (const line of relResult.stdout.split('\n')) {
-      const match = line.match(/^([0-9a-fA-F]+)\s+[0-9a-fA-F]+\s+R_ARM_ABS32\s+[0-9a-fA-F]+\s+(\S+)/);
+      const match = line.match(
+        new RegExp(`^([0-9a-fA-F]+)\\s+[0-9a-fA-F]+\\s+${relocType}\\s+[0-9a-fA-F]+\\s+(\\S+)`),
+      );
       if (match) {
         const absAddr = parseInt(match[1], 16);
         const symbolName = match[2];
         // Check if this relocation is within the function's likely literal pool range
-        // (within 256 bytes after the function start)
+        // (within 512 bytes after the function start)
         const relativeAddr = absAddr - funcAddr;
         if (relativeAddr > 0 && relativeAddr < 0x200) {
           result.set(relativeAddr, symbolName);

@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ARM_ASSEMBLER, DEFAULT_ARM_FLAGS, getAgbccCompilerPath } from '~/shared/c-compiler/__fixtures__/index.js';
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
 import type { PipelineContext } from '~/shared/types.js';
 
@@ -16,7 +17,10 @@ describe('CompilerPlugin', () => {
 
   beforeEach(async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    plugin = new CompilerPlugin({}, defaultTestPipelineConfig);
+    plugin = new CompilerPlugin(
+      { compilerPath: getAgbccCompilerPath(), assemblerPath: ARM_ASSEMBLER },
+      { ...defaultTestPipelineConfig, compilerFlags: DEFAULT_ARM_FLAGS },
+    );
   });
 
   afterEach(async () => {

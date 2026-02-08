@@ -14,7 +14,10 @@ import type { PipelineContext, Plugin, PluginReportSection, PluginResult } from 
 /**
  * Configuration schema for CompilerPlugin
  */
-export const compilerConfigSchema = z.object({});
+export const compilerConfigSchema = z.object({
+  compilerPath: z.string().describe('Path to the compiler binary'),
+  assemblerPath: z.string().optional().describe('Path to assembler binary (for compilers that output .s)'),
+});
 
 export type CompilerConfig = z.infer<typeof compilerConfigSchema>;
 
@@ -40,8 +43,8 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
   #objectFilePath?: string = undefined;
   #flags: string;
 
-  constructor(_config: CompilerConfig, pipelineConfig: PipelineConfig) {
-    this.#cCompiler = new CCompiler();
+  constructor(config: CompilerConfig, pipelineConfig: PipelineConfig) {
+    this.#cCompiler = new CCompiler(config.compilerPath, config.assemblerPath);
     this.#flags = pipelineConfig.compilerFlags;
   }
 
