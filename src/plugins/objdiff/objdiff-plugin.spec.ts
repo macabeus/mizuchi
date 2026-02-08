@@ -119,12 +119,7 @@ describe('ObjdiffPlugin', () => {
   `;
         // Compile same code twice - should match
         const compiledResult = await compiler.compile('TestMatchFunc', cCode, emptyContextPath, DEFAULT_ARM_FLAGS);
-        const targetResult = await compiler.compile(
-          'TestMatchFunc_target',
-          cCode,
-          emptyContextPath,
-          DEFAULT_ARM_FLAGS,
-        );
+        const targetResult = await compiler.compile('TestMatchFunc_target', cCode, emptyContextPath, DEFAULT_ARM_FLAGS);
 
         if (!compiledResult.success || !targetResult.success) {
           throw new Error('Compilation failed');
@@ -180,12 +175,7 @@ describe('ObjdiffPlugin', () => {
       x = x + 1;
   }
   `;
-        const compiledResult = await compiler.compile(
-          'TestDiffFunc',
-          currentCode,
-          emptyContextPath,
-          DEFAULT_ARM_FLAGS,
-        );
+        const compiledResult = await compiler.compile('TestDiffFunc', currentCode, emptyContextPath, DEFAULT_ARM_FLAGS);
         const targetResult = await compiler.compile(
           'TestDiffFunc_target',
           targetCode,

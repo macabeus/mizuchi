@@ -231,12 +231,7 @@ u32 TestRelocFunc(void) {
     return a + b;
 }
 `;
-      const compileResult = await compiler.compile(
-        'TestRelocFunc',
-        cCode,
-        contextPath,
-        DEFAULT_ARM_FLAGS,
-      );
+      const compileResult = await compiler.compile('TestRelocFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {
@@ -263,12 +258,7 @@ u32 NoRelocFunc(u32 x) {
     return x + 1;
 }
 `;
-      const compileResult = await compiler.compile(
-        'NoRelocFunc',
-        cCode,
-        contextPath,
-        DEFAULT_ARM_FLAGS,
-      );
+      const compileResult = await compiler.compile('NoRelocFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {
@@ -290,12 +280,7 @@ void ExistingFunc(void) {
     volatile int x = 1;
 }
 `;
-      const compileResult = await compiler.compile(
-        'ExistingFunc',
-        cCode,
-        contextPath,
-        DEFAULT_ARM_FLAGS,
-      );
+      const compileResult = await compiler.compile('ExistingFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {

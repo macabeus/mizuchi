@@ -75,12 +75,7 @@ u32 SimpleFunc(u32 a, u32 b) {
     return a + b;
 }
 `;
-        const compileResult = await compiler.compile(
-          'SimpleFunc',
-          cCode,
-          contextPath,
-          DEFAULT_ARM_FLAGS,
-        );
+        const compileResult = await compiler.compile('SimpleFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
         expect(compileResult.success).toBe(true);
         if (!compileResult.success) {
@@ -208,12 +203,7 @@ void ExistingFunc(void) {
     volatile int x = 1;
 }
 `;
-        const compileResult = await compiler.compile(
-          'ExistingFunc',
-          cCode,
-          contextPath,
-          DEFAULT_ARM_FLAGS,
-        );
+        const compileResult = await compiler.compile('ExistingFunc', cCode, contextPath, DEFAULT_ARM_FLAGS);
 
         expect(compileResult.success).toBe(true);
         if (!compileResult.success) {

@@ -316,9 +316,7 @@ export class M2c {
 
     // Parse relocations near the function's literal pool
     for (const line of relResult.stdout.split('\n')) {
-      const match = line.match(
-        new RegExp(`^([0-9a-fA-F]+)\\s+[0-9a-fA-F]+\\s+${relocType}\\s+[0-9a-fA-F]+\\s+(\\S+)`),
-      );
+      const match = line.match(new RegExp(`^([0-9a-fA-F]+)\\s+[0-9a-fA-F]+\\s+${relocType}\\s+[0-9a-fA-F]+\\s+(\\S+)`));
       if (match) {
         const absAddr = parseInt(match[1], 16);
         const symbolName = match[2];

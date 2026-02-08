@@ -115,7 +115,6 @@ export default {
         'node_modules/**/*',
       ],
     }),
-
   ],
   // Suppress warnings about circular dependencies in React
   onwarn(warning, warn) {
