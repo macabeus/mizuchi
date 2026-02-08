@@ -2,7 +2,7 @@ import { type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
-import type { PipelineContext, PluginResult, PluginResultMap } from '~/shared/types.js';
+import type { PipelineContext, PluginReportSection, PluginResult, PluginResultMap } from '~/shared/types.js';
 
 import {
   type ClaudeRunnerConfig,
@@ -137,6 +137,42 @@ describe('ClaudeRunnerPlugin', () => {
   });
 
   describe('.execute', () => {
+    it('includes the m2c context in the prompt when available', async () => {
+      const cCode = 'int testFunc(void) {\n  return 42;\n}';
+      const response = `Here is the code:\n\n\`\`\`c\n${cCode}\n\`\`\``;
+
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin(defaultPluginConfig, defaultTestPipelineConfig, mockFactory);
+      const m2cGeneratedCode = 'int testFunc(void) {\n  return 42;\n';
+      const m2cCompilationError = "error: expected '}' at end of input";
+      const context: PipelineContext = {
+        ...createTestContext(),
+        m2cContext: {
+          generatedCode: m2cGeneratedCode,
+          compilationError: m2cCompilationError,
+        },
+      };
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+
+      const sections = plugin.getReportSections!(result, context);
+      const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
+      expect(chatSection).toBeDefined();
+
+      // First message should be the user prompt
+      const userMessage = chatSection.messages[0];
+      expect(userMessage.role).toBe('user');
+      expect(typeof userMessage.content).toBe('string');
+
+      // Verify the m2c context section is included
+      expect(userMessage.content).toContain('Initial Decompilation');
+      expect(userMessage.content).toContain(m2cGeneratedCode);
+      expect(userMessage.content).toContain('Matching Result');
+      expect(userMessage.content).toContain(m2cCompilationError);
+    });
+
     it('extracts C code from response with code block', async () => {
       const cCode = 'int testFunc(void) {\n  return 42;\n}';
       const response = `Here is the code:\n\n\`\`\`c\n${cCode}\n\`\`\``;
@@ -461,27 +497,21 @@ void movePoint(Point* p) {
 
       // Check the conversation history via report sections
       const sections = plugin.getReportSections!(result, context);
-      const chatSection = sections.find((s) => s.type === 'chat');
-
+      const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
-      expect(chatSection?.type).toBe('chat');
 
-      if (chatSection?.type === 'chat') {
-        // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
-        expect(chatSection.messages.length).toBe(4);
+      // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
+      expect(chatSection.messages.length).toBe(4);
 
-        // The third message should be the follow-up user message with reminder
-        const followUpMessage = chatSection.messages[2];
-        expect(followUpMessage.role).toBe('user');
-        expect(typeof followUpMessage.content).toBe('string');
+      // The third message should be the follow-up user message with reminder
+      const followUpMessage = chatSection.messages[2];
+      expect(followUpMessage.role).toBe('user');
+      expect(typeof followUpMessage.content).toBe('string');
 
-        if (typeof followUpMessage.content === 'string') {
-          // Verify the reminder is included in the follow-up
-          expect(followUpMessage.content).toContain('Reminder');
-          expect(followUpMessage.content).toContain('int foo(void) { return 1; }');
-          expect(followUpMessage.content).toContain('5 mismatches');
-        }
-      }
+      // Verify the reminder is included in the follow-up
+      expect(followUpMessage.content).toContain('Reminder');
+      expect(followUpMessage.content).toContain('int foo(void) { return 1; }');
+      expect(followUpMessage.content).toContain('5 mismatches');
     });
 
     it('does not trigger reminder logic when last attempt is better', () => {
@@ -595,26 +625,20 @@ void movePoint(Point* p) {
 
       // Check the conversation history via report sections
       const sections = plugin.getReportSections!(result, context);
-      const chatSection = sections.find((s) => s.type === 'chat');
-
+      const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
-      expect(chatSection?.type).toBe('chat');
 
-      if (chatSection?.type === 'chat') {
-        // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
-        expect(chatSection.messages.length).toBe(4);
+      // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
+      expect(chatSection.messages.length).toBe(4);
 
-        // The third message should be the follow-up user message with compilation error
-        const followUpMessage = chatSection.messages[2];
-        expect(followUpMessage.role).toBe('user');
-        expect(typeof followUpMessage.content).toBe('string');
+      // The third message should be the follow-up user message with compilation error
+      const followUpMessage = chatSection.messages[2];
+      expect(followUpMessage.role).toBe('user');
+      expect(typeof followUpMessage.content).toBe('string');
 
-        if (typeof followUpMessage.content === 'string') {
-          // Verify the compilation error is mentioned
-          expect(followUpMessage.content).toContain("expected '}'");
-          expect(followUpMessage.content).toContain('failed to compile');
-        }
-      }
+      // Verify the compilation error is mentioned
+      expect(followUpMessage.content).toContain("expected '}'");
+      expect(followUpMessage.content).toContain('failed to compile');
     });
 
     it('asks for C code when previous response had no code', async () => {
@@ -657,25 +681,19 @@ void movePoint(Point* p) {
 
       // Check the conversation history via report sections
       const sections = plugin.getReportSections!(result, context);
-      const chatSection = sections.find((s) => s.type === 'chat');
-
+      const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
-      expect(chatSection?.type).toBe('chat');
 
-      if (chatSection?.type === 'chat') {
-        // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
-        expect(chatSection.messages.length).toBe(4);
+      // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
+      expect(chatSection.messages.length).toBe(4);
 
-        // The third message should be the follow-up user message asking for C code
-        const followUpMessage = chatSection.messages[2];
-        expect(followUpMessage.role).toBe('user');
-        expect(typeof followUpMessage.content).toBe('string');
+      // The third message should be the follow-up user message asking for C code
+      const followUpMessage = chatSection.messages[2];
+      expect(followUpMessage.role).toBe('user');
+      expect(typeof followUpMessage.content).toBe('string');
 
-        if (typeof followUpMessage.content === 'string') {
-          // Verify it asks for C code
-          expect(followUpMessage.content).toContain('Please provide only the C code');
-        }
-      }
+      // Verify it asks for C code
+      expect(followUpMessage.content).toContain('Please provide only the C code');
     });
 
     describe('stall detection', () => {
@@ -731,11 +749,10 @@ void movePoint(Point* p) {
         context: PipelineContext,
       ): string {
         const sections = plugin.getReportSections!(result, context);
-        const chatSection = sections.find((s) => s.type === 'chat');
+        const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
         expect(chatSection).toBeDefined();
-        expect(chatSection!.type).toBe('chat');
 
-        const messages = (chatSection as Extract<typeof chatSection, { type: 'chat' }>)!.messages;
+        const messages = chatSection.messages;
         const followUpMessage = messages[2];
         expect(followUpMessage.role).toBe('user');
         expect(typeof followUpMessage.content).toBe('string');
@@ -1141,7 +1158,7 @@ mov eax, 0
     });
   });
 
-  describe('getReportSections', () => {
+  describe('.getReportSections', () => {
     it('returns chat section with conversation history', async () => {
       const response = '```c\nint foo(void) { return 1; }\n```';
       const mockFactory = createMockQueryFactory([response]);
@@ -1152,14 +1169,11 @@ mov eax, 0
       const sections = plugin.getReportSections!(result, context);
 
       // Should have chat section
-      const chatSection = sections.find((s) => s.type === 'chat');
+      const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
-      expect(chatSection?.type).toBe('chat');
-      if (chatSection?.type === 'chat') {
-        expect(chatSection.messages.length).toBeGreaterThan(0);
-        expect(chatSection.messages[0].role).toBe('user');
-        expect(chatSection.messages[1].role).toBe('assistant');
-      }
+      expect(chatSection.messages.length).toBeGreaterThan(0);
+      expect(chatSection.messages[0].role).toBe('user');
+      expect(chatSection.messages[1].role).toBe('assistant');
 
       // Should also have code section
       const codeSection = sections.find((s) => s.type === 'code');

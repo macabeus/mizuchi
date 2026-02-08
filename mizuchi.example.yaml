@@ -23,6 +23,10 @@ global:
   #   - settings.yaml: Metadata (functionName, targetObjectPath)
   promptsDir: './prompts'
 
+  # Target platform for decompilation (default: gba)
+  # Supported values: gba, nds, n3ds, n64, gc, wii, ps1, ps2, psp, win32, switch, android_x86, irix, saturn, dreamcast
+  target: gba
+
 # Plugin-specific configurations
 # Each plugin receives only its own section along with the global config
 plugins:
@@ -43,3 +47,12 @@ plugins:
     # If not specified, uses the default decompilation system prompt
     # systemPrompt: |
     #   You are an automated decompilation system...
+
+  # m2c Plugin (optional)
+  # Runs m2c in the programmatic-flow phase before the AI-powered flow.
+  # If m2c produces a match, the pipeline succeeds immediately.
+  # Otherwise, the m2c output feeds into Claude Runner as additional context.
+  # Requires: scripts/setup-m2c.sh to be run first
+  m2c:
+    # Enable or disable m2c programmatic-flow (default: true)
+    enable: true

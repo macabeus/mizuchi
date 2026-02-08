@@ -103,6 +103,7 @@ plugins:
           outputDir: '/custom/output',
           compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
           promptsDir: '/custom/prompts',
+          target: 'gba',
         },
         plugins: {
           'claude-runner': { projectPath: '/decomp/myproject' },
@@ -124,6 +125,7 @@ plugins:
           outputDir: '/custom/output',
           compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
           promptsDir: '/custom/prompts',
+          target: 'gba',
         },
         plugins: {
           'claude-runner': { projectPath: '/decomp/myproject' },

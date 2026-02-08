@@ -98,6 +98,7 @@ export function buildPipelineConfig(
     compilerFlags: fileConfig.global?.compilerFlags ?? defaults.compilerFlags,
     maxRetries: cliOptions.retries ?? fileConfig.global?.maxRetries ?? defaults.maxRetries,
     promptsDir: cliOptions.prompts ?? fileConfig.global?.promptsDir ?? defaults.promptsDir,
+    target: fileConfig.global?.target ?? defaults.target,
   };
 
   return pipelineConfig;

@@ -15,6 +15,7 @@ export const defaultTestPipelineConfig: PipelineConfig = {
   compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
   maxRetries: 3,
   promptsDir: '/test/prompts',
+  target: 'gba',
 };
 
 /**

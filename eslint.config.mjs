@@ -4,6 +4,9 @@ import unusedImports from 'eslint-plugin-unused-imports';
 
 export default [
   {
+    ignores: ['vendor/**'],
+  },
+  {
     files: ['**/*.ts'],
   },
   {

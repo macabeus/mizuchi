@@ -1,0 +1,3 @@
+[submodule "vendor/m2c"]
+	path = vendor/m2c
+	url = git@github.com:matt-kempster/m2c.git

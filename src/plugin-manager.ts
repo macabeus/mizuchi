@@ -17,6 +17,7 @@ import type {
 } from './shared/types.js';
 
 export class PluginManager {
+  #programmaticFlowPlugins: Plugin<any>[] = [];
   #plugins: Plugin<any>[] = [];
   #config: PipelineConfig;
   #eventHandler?: PipelineEventHandler;
@@ -51,10 +52,37 @@ export class PluginManager {
   }
 
   /**
+   * Register plugins for the programmatic-flow phase.
+   * These plugins run once before the retry loop. If they succeed, the pipeline
+   * short-circuits without running the main retry loop.
+   */
+  registerProgrammaticFlow(...plugins: Plugin<any>[]): this {
+    this.#programmaticFlowPlugins = plugins;
+    for (const plugin of plugins) {
+      this.#emit({
+        type: 'plugin-registered',
+        plugin: {
+          id: plugin.id,
+          name: plugin.name,
+          description: plugin.description,
+        },
+      });
+    }
+    return this;
+  }
+
+  /**
    * Get all registered plugins
    */
   getPlugins(): readonly Plugin<any>[] {
     return this.#plugins;
+  }
+
+  /**
+   * Get all registered programmatic-flow plugins
+   */
+  getProgrammaticFlowPlugins(): readonly Plugin<any>[] {
+    return this.#programmaticFlowPlugins;
   }
 
   /**
@@ -82,6 +110,48 @@ export class PluginManager {
       config: this.#config,
     };
 
+    // Programmatic-flow phase
+    let programmaticFlow: AttemptResult | undefined;
+    if (this.#programmaticFlowPlugins.length > 0) {
+      this.#emit({ type: 'programmatic-flow-start' });
+
+      const { finalContext: preContext, ...preAttemptResult } = await this.#runAttempt(
+        context,
+        this.#programmaticFlowPlugins,
+      );
+
+      programmaticFlow = preAttemptResult;
+
+      if (preAttemptResult.success) {
+        return {
+          promptPath,
+          functionName,
+          success: true,
+          attempts: [],
+          totalDurationMs: Date.now() - startTime,
+          programmaticFlow,
+        };
+      }
+
+      // Carry forward m2cContext from the programmatic-flow
+      context.m2cContext = preContext.m2cContext;
+
+      // Enrich m2cContext with compiler/objdiff results from the programmatic-flow
+      if (context.m2cContext) {
+        const compilerResult = preAttemptResult.pluginResults.find((r) => r.pluginId === 'compiler');
+        const objdiffResult = preAttemptResult.pluginResults.find((r) => r.pluginId === 'objdiff');
+
+        if (compilerResult?.status === 'failure') {
+          context.m2cContext.compilationError = compilerResult.output || compilerResult.error;
+        } else if (objdiffResult) {
+          context.m2cContext.objdiffOutput = objdiffResult.output || objdiffResult.error;
+        }
+      }
+
+      // Reset generatedCode so Claude Runner generates fresh code
+      context.generatedCode = undefined;
+    }
+
     for (let attempt = 1; attempt <= this.#config.maxRetries; attempt++) {
       context.attemptNumber = attempt;
 
@@ -91,7 +161,7 @@ export class PluginManager {
         maxRetries: this.#config.maxRetries,
       });
 
-      const attemptResult = await this.#runAttempt(context);
+      const { finalContext: _, ...attemptResult } = await this.#runAttempt(context);
       attempts.push(attemptResult);
 
       const willRetry = !attemptResult.success && attempt < this.#config.maxRetries;
@@ -126,20 +196,24 @@ export class PluginManager {
       success,
       attempts,
       totalDurationMs: Date.now() - startTime,
+      programmaticFlow,
     };
   }
 
   /**
    * Run a single attempt through all plugins
    */
-  async #runAttempt(context: PipelineContext): Promise<AttemptResult> {
+  async #runAttempt(
+    context: PipelineContext,
+    plugins?: Plugin<any>[],
+  ): Promise<AttemptResult & { finalContext: PipelineContext }> {
     const startTime = Date.now();
     const pluginResults: PluginResult<any>[] = [];
     let currentContext = { ...context };
     let success = true;
     let shouldStop = false;
 
-    for (const plugin of this.#plugins) {
+    for (const plugin of plugins || this.#plugins) {
       if (shouldStop) {
         // Skip remaining plugins
         pluginResults.push({
@@ -223,6 +297,7 @@ export class PluginManager {
       pluginResults,
       success,
       durationMs: Date.now() - startTime,
+      finalContext: currentContext,
     };
   }
 
