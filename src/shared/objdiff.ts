@@ -15,31 +15,23 @@ type DiffConfig = ObjdiffWasm.diff.DiffConfig;
 type DiffSide = ObjdiffWasm.diff.DiffSide;
 
 /**
- * Singleton instance of Objdiff
- */
-let instance: Objdiff | null = null;
-
-/**
  * Wrapper class for objdiff-wasm
  */
 export class Objdiff {
-  #objdiff: Promise<ObjdiffModule>;
+  static #wasmModule: Promise<ObjdiffModule> | null = null;
 
-  constructor() {
-    this.#objdiff = this.#initializeObjdiff();
-  }
+  #diffSettings: Record<string, string>;
 
-  /**
-   * Get the singleton instance of Objdiff
-   */
-  static getInstance(): Objdiff {
-    if (!instance) {
-      instance = new Objdiff();
+  constructor(diffSettings: Record<string, string> = {}) {
+    this.#diffSettings = diffSettings;
+
+    // Ensure WASM module is initialized (shared across all instances)
+    if (!Objdiff.#wasmModule) {
+      Objdiff.#wasmModule = Objdiff.#initializeObjdiff();
     }
-    return instance;
   }
 
-  async #initializeObjdiff(): Promise<ObjdiffModule> {
+  static async #initializeObjdiff(): Promise<ObjdiffModule> {
     // Node.js fetch doesn't support file:// URLs, so we patch it temporarily
     // to load local files when objdiff-wasm requests them during initialization
     const originalFetch = global.fetch;
@@ -62,14 +54,15 @@ export class Objdiff {
   }
 
   /**
-   * Get the diff configuration for ARMv4T
+   * Get the diff configuration using the instance's diff settings
    */
   async #getDiffConfig(): Promise<DiffConfig> {
-    const objdiff = await this.#objdiff;
+    const objdiff = await Objdiff.#wasmModule!;
     const diffConfig = new objdiff.diff.DiffConfig();
 
-    diffConfig.setProperty('functionRelocDiffs', 'none');
-    diffConfig.setProperty('arm.archVersion', 'v4t');
+    for (const [key, value] of Object.entries(this.#diffSettings)) {
+      diffConfig.setProperty(key, value);
+    }
 
     return diffConfig;
   }
@@ -78,7 +71,7 @@ export class Objdiff {
    * Parse an object file
    */
   async parseObjectFile(filePath: string, side: DiffSide = 'base'): Promise<ParsedObject> {
-    const objdiff = await this.#objdiff;
+    const objdiff = await Objdiff.#wasmModule!;
     const diffConfig = await this.#getDiffConfig();
 
     const fileBuffer = await fs.readFile(filePath);
@@ -91,7 +84,7 @@ export class Objdiff {
    * Run diff between two object files
    */
   async runDiff(left: ParsedObject, right?: ParsedObject): Promise<{ left?: ObjectDiff; right?: ObjectDiff }> {
-    const objdiff = await this.#objdiff;
+    const objdiff = await Objdiff.#wasmModule!;
     const diffConfig = await this.#getDiffConfig();
 
     const mappingConfig = {
@@ -107,7 +100,7 @@ export class Objdiff {
    * Get all symbol names from a parsed object
    */
   async getSymbolNames(obj: ParsedObject): Promise<string[]> {
-    const objdiff = await this.#objdiff;
+    const objdiff = await Objdiff.#wasmModule!;
     const diffResult = await this.runDiff(obj);
 
     if (!diffResult.left) {
@@ -226,7 +219,7 @@ export class Objdiff {
   }
 
   async *#iterateSymbolRows(objDiffs: ObjectDiff[], symbolName: string, diffConfig: DiffConfig) {
-    const objdiff = await this.#objdiff;
+    const objdiff = await Objdiff.#wasmModule!;
 
     const symbols = objDiffs.map((objDiff) => objDiff.findSymbol(symbolName, undefined)!);
     const displaySymbols = objDiffs.map((objDiff, index) => objdiff.display.displaySymbol(objDiff, symbols[index].id));

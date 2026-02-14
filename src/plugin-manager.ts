@@ -93,6 +93,7 @@ export class PluginManager {
     promptContent: string,
     functionName: string,
     targetObjectPath: string,
+    asm: string,
   ): Promise<PipelineRunResult> {
     const startTime = Date.now();
     const attempts: AttemptResult[] = [];
@@ -103,6 +104,7 @@ export class PluginManager {
       promptPath,
       promptContent,
       functionName,
+      asm,
       targetObjectPath,
       attemptNumber: 1,
       maxRetries: this.#config.maxRetries,
@@ -336,7 +338,7 @@ export class PluginManager {
    * Run the full benchmark for all prompts
    */
   async runBenchmark(
-    prompts: Array<{ path: string; content: string; functionName: string; targetObjectPath: string }>,
+    prompts: Array<{ path: string; content: string; functionName: string; targetObjectPath: string; asm: string }>,
   ): Promise<PipelineResults> {
     // Emit benchmark start event
     this.#emit({
@@ -364,7 +366,13 @@ export class PluginManager {
         totalPrompts: prompts.length,
       });
 
-      const result = await this.runPipeline(prompt.path, prompt.content, prompt.functionName, prompt.targetObjectPath);
+      const result = await this.runPipeline(
+        prompt.path,
+        prompt.content,
+        prompt.functionName,
+        prompt.targetObjectPath,
+        prompt.asm,
+      );
 
       this.#emit({
         type: 'prompt-complete',

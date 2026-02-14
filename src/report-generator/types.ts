@@ -124,7 +124,7 @@ export interface ReportConfig {
   maxRetries: number;
   stallThreshold: number;
   claudeSystemPrompt: string;
-  compilerFlags: string;
+  compilerScript: string;
   target: string;
 }
 

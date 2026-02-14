@@ -38,7 +38,7 @@ export type PlatformTarget = (typeof platformTargets)[number];
 export const pipelineConfigSchema = z.object({
   maxRetries: z.number().positive().default(25),
   outputDir: z.string().default('.'),
-  compilerFlags: z.string().default(''),
+  compilerScript: z.string(),
   contextPath: z.string(),
   promptsDir: z.string(),
   target: z.enum(platformTargets).default('gba'),

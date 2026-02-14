@@ -44,6 +44,8 @@ export function CodeBlock({ code, language, maxHeight = '400px' }: CodeBlockProp
         return 'source.json';
       case 'diff':
         return 'source.diff';
+      case 'shell':
+        return 'source.shell';
       case 'markdown':
         return 'text.md';
       default:

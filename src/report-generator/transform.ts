@@ -14,7 +14,7 @@ export interface ReportPluginConfigs {
     stallThreshold: number;
   };
   compiler: {
-    flags: string;
+    compilerScript: string;
   };
 }
 
@@ -73,7 +73,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       maxRetries: results.config.maxRetries,
       stallThreshold: pluginConfigs.claudeRunner.stallThreshold,
       claudeSystemPrompt: pluginConfigs.claudeRunner.systemPrompt,
-      compilerFlags: results.config.compilerFlags,
+      compilerScript: pluginConfigs.compiler.compilerScript,
       target: results.config.target,
     },
     results: reportResults,

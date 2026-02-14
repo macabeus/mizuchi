@@ -114,15 +114,17 @@ export function Summary({ summary, config }: SummaryProps) {
               <span className="text-slate-400">Stall Threshold:</span>
               <span className="text-white font-semibold">{config.stallThreshold}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400">Compiler Flags:</span>
-              <code
-                className="bg-slate-700/50 px-2 py-1 rounded-md text-amber-400 font-mono text-xs truncate max-w-xs"
-                title={config.compilerFlags}
-              >
-                {config.compilerFlags}
-              </code>
-            </div>
+          </div>
+
+          {/* Compiler Script */}
+          <div className="border-t border-slate-700 pt-4">
+            <details className="group">
+              <summary className="cursor-pointer text-slate-400 hover:text-slate-300 flex items-center gap-2">
+                <span className="group-open:rotate-90 transition-transform">▶</span>
+                Compiler Script
+              </summary>
+              <CodeBlock language="shell" code={config.compilerScript} />
+            </details>
           </div>
 
           {/* System prompt */}

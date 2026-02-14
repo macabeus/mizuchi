@@ -1,2 +1,61 @@
 functionName: sub_8071864
 targetObjectPath: /Users/decomp/sa3/build/gba/sa3/asm/code.o
+asm: |
+  .text
+  glabel sub_8071864
+      push {r4, r5, r6, r7, lr}
+      sub sp, #4
+      ldr r0, =gCurTask
+      ldr r2, [r0]
+      ldrh r1, [r2, #6]
+      movs r0, #0xc0
+      lsls r0, r0, #0x12
+      adds r6, r1, r0
+      ldr r4, [r6]
+      movs r0, #0x82
+      lsls r0, r0, #1
+      adds r7, r4, r0
+      ldrh r0, [r6, #4]
+      cmp r0, #0
+      beq _08071888
+      ldrb r0, [r4, #0x1c]
+      cmp r0, #0
+      bne _08071894
+  _08071888:
+      adds r0, r2, #0
+      bl TaskDestroy
+      b _080718D4
+  _08071894:
+      adds r0, r6, #0
+      adds r1, r4, #0
+      bl sub_80707A0
+      adds r5, r4, #0
+      adds r5, #0xa8
+      ldr r1, [r5]
+      asrs r1, r1, #8
+      adds r4, #0xac
+      ldr r2, [r4]
+      asrs r2, r2, #8
+      ldr r0, [r6]
+      ldr r0, [r0, #0x40]
+      str r0, [sp]
+      adds r0, r7, #0
+      movs r3, #0
+      bl sub_8020CE0
+      ldr r1, [r5]
+      asrs r1, r1, #8
+      ldr r2, [r4]
+      asrs r2, r2, #8
+      ldr r0, [r6]
+      ldr r0, [r0, #0x44]
+      str r0, [sp]
+      adds r0, r7, #0
+      movs r3, #0
+      bl sub_8020CE0
+      ldr r0, [r6]
+      bl sub_080711C8
+  _080718D4:
+      add sp, #4
+      pop {r4, r5, r6, r7}
+      pop {r0}
+      bx r0

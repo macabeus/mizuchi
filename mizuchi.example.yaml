@@ -13,8 +13,16 @@ global:
   # Output directory for generated files and reports (default: current directory)
   outputDir: '.'
 
-  # Compiler flags to pass to agbcc
-  compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm'
+  # Shell script template for compilation.
+  # Template variables: {{cFilePath}}, {{objFilePath}}, {{functionName}}
+  #
+  # ARM example (two-step: agbcc outputs .s, then arm-none-eabi-as assembles to .o):
+  compilerScript: |
+    "/path/to/agbcc" "{{cFilePath}}" \
+      -o asm.s \
+      -mthumb-interwork -Wimplicit \
+      -Wparentheses -Werror -O2 -fhex-asm
+    arm-none-eabi-as asm.s -o "{{objFilePath}}"
 
   # Directory containing prompt folders
   # Discovers and loads prompts from directory structure
@@ -30,6 +38,14 @@ global:
 # Plugin-specific configurations
 # Each plugin receives only its own section along with the global config
 plugins:
+  # Objdiff Plugin
+  # Compares compiled object files with target using objdiff-wasm
+  objdiff:
+    # Architecture-specific diff settings passed to objdiff-wasm
+    diffSettings:
+      arm.archVersion: 'v4t'
+      functionRelocDiffs: 'none'
+
   # Claude Runner Plugin
   # Uses Claude Agent SDK to generate C code from assembly prompts
   # Responses are automatically cached to avoid redundant API calls
@@ -56,3 +72,22 @@ plugins:
   m2c:
     # Enable or disable m2c programmatic-flow (default: true)
     enable: true
+
+# ---- MIPS Example (N64) ----
+# To configure for a MIPS target like N64, use settings like:
+#
+# global:
+#   contextPath: '/path/to/context.h'
+#   compilerScript: |
+#     COMPILER_PATH='/path/to/compiler/dir' \
+#       '/path/to/mips-gcc' \
+#       -O2 -G0 -mips2 \
+#       -c "{{cFilePath}}" -o "{{objFilePath}}"
+#   target: n64
+#
+# plugins:
+#   objdiff:
+#     diffSettings:
+#       mips.instrCategory: 'cpu'
+#   m2c:
+#     enable: true

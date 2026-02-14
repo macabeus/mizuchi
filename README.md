@@ -37,7 +37,7 @@ It orchestrates a plugin-based pipeline that can leverage programmatic and AI-po
 
 > :warning: **Work in Progress**
 >
-> Mizuchi is currently focused on benchmarking LLM prompt effectiveness for ARMv4T decompilation, with plans to become a general-purpose decompilation automation tool. Check the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
+> Mizuchi is currently focused on benchmarking LLM prompt effectiveness, with plans to become a general-purpose decompilation automation tool. Check the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
 
 ---
 
@@ -115,6 +115,11 @@ Metadata for the prompt:
 ```yaml
 functionName: my_function
 targetObjectPath: /path/to/build/code.o
+asm: |
+  .text
+  glabel my_function
+      push {lr}
+      bx lr
 ```
 
 ## Pipeline Overview
@@ -165,7 +170,7 @@ Mizuchi generates three output files:
 | ----------------- | ---------------------------------------------------------------------------------------------------- |
 | **m2c**           | Optional: generates an initial C decompilation using [m2c](https://github.com/matt-kempster/m2c)     |
 | **Claude Runner** | Sends prompts to Claude and processes responses                                                      |
-| **Compiler**      | Compiles generated C code using agbcc (currently ARMv4T only)                                        |
+| **Compiler**      | Compiles generated C code using a configurable shell script template                                 |
 | **Objdiff**       | Compares compiled object files against targets using [objdiff](https://github.com/encounter/objdiff) |
 
 ## Development

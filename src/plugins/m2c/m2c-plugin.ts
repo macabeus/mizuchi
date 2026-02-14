@@ -8,7 +8,6 @@ import { z } from 'zod';
 
 import { type PlatformTarget } from '~/shared/config.js';
 import { M2c } from '~/shared/m2c.js';
-import { Objdiff } from '~/shared/objdiff.js';
 import type { PipelineContext, Plugin, PluginReportSection, PluginResult } from '~/shared/types.js';
 
 /**
@@ -67,50 +66,8 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
   }> {
     const startTime = Date.now();
 
-    if (!context.targetObjectPath) {
-      return {
-        result: {
-          pluginId: this.id,
-          pluginName: this.name,
-          status: 'failure',
-          durationMs: Date.now() - startTime,
-          error: 'No target object path provided',
-        },
-        context,
-      };
-    }
-
     try {
-      // 1. Extract assembly from target .o file using objdiff
-      const objdiff = Objdiff.getInstance();
-      const parsedTarget = await objdiff.parseObjectFile(context.targetObjectPath, 'base');
-      const diffResult = await objdiff.runDiff(parsedTarget);
-
-      if (!diffResult.left) {
-        return {
-          result: {
-            pluginId: this.id,
-            pluginName: this.name,
-            status: 'failure',
-            durationMs: Date.now() - startTime,
-            error: 'Failed to parse target object file',
-          },
-          context,
-        };
-      }
-
-      const assembly = await objdiff.getAssemblyFromSymbol(diffResult.left, context.functionName);
-
-      // 2. Read ELF relocations for literal pool entries not visible in the objdiff display
-      const literalPoolOverrides = await this.#m2c.getRelocationsForFunction(
-        context.targetObjectPath,
-        context.functionName,
-      );
-
-      // 3. Convert to GAS-compatible format
-      const gasAssembly = M2c.convertObjdiffAsmToGas(assembly, context.functionName, literalPoolOverrides);
-
-      // 4. Run m2c
+      // Derive arch family from target platform
       const m2cTarget = targetMapping[context.config.target];
       if (!m2cTarget) {
         return {
@@ -125,8 +82,9 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
         };
       }
 
+      // Run m2c with the GAS assembly from the context
       const m2cResult = await this.#m2c.decompile({
-        asmContent: gasAssembly,
+        asmContent: context.asm,
         functionName: context.functionName,
         target: m2cTarget,
         contextPath: context.config.contextPath,
@@ -147,7 +105,7 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
 
       const generatedCode = m2cResult.code!;
 
-      // 5. Set context for downstream plugins (Compiler) and for Claude Runner (if programmatic-flow fails)
+      // Set context for downstream plugins (Compiler) and for Claude Runner (if programmatic-flow fails)
       const updatedContext: PipelineContext = {
         ...context,
         generatedCode,

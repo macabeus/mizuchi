@@ -91,7 +91,13 @@ describe('PluginManager', () => {
 
       manager.register(plugin1).register(plugin2);
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(executionOrder).toEqual(['plugin1', 'plugin2']);
       expect(result.success).toBe(true);
@@ -129,7 +135,13 @@ describe('PluginManager', () => {
 
       manager.register(plugin1).register(plugin2);
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(executionOrder).toEqual(['plugin1']);
       expect(result.success).toBe(false);
@@ -142,7 +154,13 @@ describe('PluginManager', () => {
         .register(createFailurePlugin('plugin1', 'Plugin 1', 'Failed'))
         .register(createSuccessPlugin('plugin2', 'Plugin 2'));
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       const lastAttempt = result.attempts[result.attempts.length - 1];
       expect(lastAttempt.pluginResults[0].status).toBe('failure');
@@ -155,7 +173,13 @@ describe('PluginManager', () => {
 
       manager.register(createFailurePlugin('plugin1', 'Plugin 1', 'Always fails'));
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(result.success).toBe(false);
       expect(result.attempts).toHaveLength(3);
@@ -167,7 +191,13 @@ describe('PluginManager', () => {
 
       manager.register(createSuccessOnAttemptPlugin('plugin1', 'Plugin 1', 2));
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(result.success).toBe(true);
       expect(result.attempts).toHaveLength(2);
@@ -199,7 +229,7 @@ describe('PluginManager', () => {
 
       manager.register(plugin1).register(plugin2);
 
-      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
 
       expect(receivedCode).toBe('int foo() { return 1; }');
     });
@@ -229,7 +259,7 @@ describe('PluginManager', () => {
 
       manager.register(plugin);
 
-      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
 
       expect(attemptNumbers).toEqual([1, 2, 3]);
     });
@@ -251,7 +281,7 @@ describe('PluginManager', () => {
 
       manager.register(plugin);
 
-      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
 
       expect(prepareRetryCalled).toBe(1);
     });
@@ -260,7 +290,13 @@ describe('PluginManager', () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(result).toHaveProperty('promptPath', 'test.md');
       expect(result).toHaveProperty('functionName', 'testFunc');
@@ -283,7 +319,13 @@ describe('PluginManager', () => {
 
       manager.register(plugin);
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(result.success).toBe(false);
       expect(result.attempts[0].pluginResults[0].status).toBe('failure');
@@ -323,7 +365,13 @@ describe('PluginManager', () => {
         }),
       );
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(result.success).toBe(true);
       expect(result.programmaticFlow).toBeDefined();
@@ -338,7 +386,13 @@ describe('PluginManager', () => {
       manager.registerProgrammaticFlow(createFailurePlugin('pre1', 'Pre Plugin', 'Pre failed'));
       manager.register(createSuccessPlugin('main1', 'Main Plugin'));
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(result.success).toBe(true);
       expect(result.programmaticFlow).toBeDefined();
@@ -351,7 +405,13 @@ describe('PluginManager', () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
       manager.register(createSuccessPlugin('main1', 'Main Plugin'));
 
-      const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
 
       expect(result.success).toBe(true);
       expect(result.programmaticFlow).toBeUndefined();
@@ -400,7 +460,7 @@ describe('PluginManager', () => {
       manager.registerProgrammaticFlow(prePlugin, preCompiler);
       manager.register(mainPlugin);
 
-      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
 
       expect(receivedM2cContext).toBeDefined();
       expect(receivedM2cContext.generatedCode).toBe('int f() {}');
@@ -436,7 +496,7 @@ describe('PluginManager', () => {
       manager.registerProgrammaticFlow(prePlugin, preCompiler);
       manager.register(mainPlugin);
 
-      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o');
+      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
 
       expect(receivedGeneratedCode).toBeUndefined();
     });
@@ -448,8 +508,20 @@ describe('PluginManager', () => {
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
 
       const prompts = [
-        { path: 'prompt1.md', content: 'content1', functionName: 'func1', targetObjectPath: '/target1.o' },
-        { path: 'prompt2.md', content: 'content2', functionName: 'func2', targetObjectPath: '/target2.o' },
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/target1.o',
+          asm: '.text\n',
+        },
+        {
+          path: 'prompt2.md',
+          content: 'content2',
+          functionName: 'func2',
+          targetObjectPath: '/target2.o',
+          asm: '.text\n',
+        },
       ];
 
       const results = await manager.runBenchmark(prompts);
@@ -485,9 +557,27 @@ describe('PluginManager', () => {
       manager.register(plugin);
 
       const prompts = [
-        { path: 'prompt1.md', content: 'content1', functionName: 'func1', targetObjectPath: '/target1.o' },
-        { path: 'prompt2.md', content: 'content2', functionName: 'func2', targetObjectPath: '/target2.o' },
-        { path: 'prompt3.md', content: 'content3', functionName: 'func3', targetObjectPath: '/target3.o' },
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/target1.o',
+          asm: '.text\n',
+        },
+        {
+          path: 'prompt2.md',
+          content: 'content2',
+          functionName: 'func2',
+          targetObjectPath: '/target2.o',
+          asm: '.text\n',
+        },
+        {
+          path: 'prompt3.md',
+          content: 'content3',
+          functionName: 'func3',
+          targetObjectPath: '/target3.o',
+          asm: '.text\n',
+        },
       ];
 
       const results = await manager.runBenchmark(prompts);
@@ -516,8 +606,20 @@ describe('PluginManager', () => {
       manager.register(plugin);
 
       await manager.runBenchmark([
-        { path: 'prompt1.md', content: 'content1', functionName: 'func1', targetObjectPath: '/custom/target1.o' },
-        { path: 'prompt2.md', content: 'content2', functionName: 'func2', targetObjectPath: '/custom/target2.o' },
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/custom/target1.o',
+          asm: '.text\n',
+        },
+        {
+          path: 'prompt2.md',
+          content: 'content2',
+          functionName: 'func2',
+          targetObjectPath: '/custom/target2.o',
+          asm: '.text\n',
+        },
       ]);
 
       expect(receivedTargets).toEqual(['/custom/target1.o', '/custom/target2.o']);
@@ -528,7 +630,13 @@ describe('PluginManager', () => {
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
 
       const results = await manager.runBenchmark([
-        { path: 'prompt1.md', content: 'content1', functionName: 'func1', targetObjectPath: '/target.o' },
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/target.o',
+          asm: '.text\n',
+        },
       ]);
 
       expect(results).toHaveProperty('timestamp');
