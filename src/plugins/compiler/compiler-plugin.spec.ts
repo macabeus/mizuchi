@@ -3,6 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
+import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
 import type { PipelineContext } from '~/shared/types.js';
 
@@ -16,7 +18,7 @@ describe('CompilerPlugin', () => {
 
   beforeEach(async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    plugin = new CompilerPlugin({}, defaultTestPipelineConfig);
+    plugin = new CompilerPlugin(new CCompiler(getArmCompilerScript()));
   });
 
   afterEach(async () => {

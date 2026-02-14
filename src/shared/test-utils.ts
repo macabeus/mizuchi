@@ -3,6 +3,7 @@
  *
  * Shared test helpers and default configurations for unit tests.
  */
+import { getArmCompilerScript } from './c-compiler/__fixtures__/index.js';
 import { PipelineConfig } from './config.js';
 import type { PipelineContext } from './types.js';
 
@@ -12,7 +13,7 @@ import type { PipelineContext } from './types.js';
 export const defaultTestPipelineConfig: PipelineConfig = {
   contextPath: '/test/context.h',
   outputDir: '/test/output',
-  compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
+  compilerScript: getArmCompilerScript(),
   maxRetries: 3,
   promptsDir: '/test/prompts',
   target: 'gba',
@@ -31,6 +32,7 @@ export function createTestContext(overrides: Partial<PipelineContext> = {}): Pip
     promptPath: 'test.md',
     promptContent: 'Test prompt content',
     functionName: 'testFunc',
+    asm: '.text\nglabel testFunc\n    bx lr\n',
     attemptNumber: 1,
     maxRetries: 3,
     config: defaultTestPipelineConfig,

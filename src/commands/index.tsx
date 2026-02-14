@@ -18,9 +18,9 @@ import {
   ClaudeRunnerPlugin,
   claudeRunnerConfigSchema,
 } from '~/plugins/claude-runner/claude-runner-plugin.js';
-import { CompilerConfig, CompilerPlugin, compilerConfigSchema } from '~/plugins/compiler/compiler-plugin.js';
+import { CompilerPlugin } from '~/plugins/compiler/compiler-plugin.js';
 import { M2cConfig, M2cPlugin, m2cConfigSchema } from '~/plugins/m2c/m2c-plugin.js';
-import { ObjdiffPlugin } from '~/plugins/objdiff/objdiff-plugin.js';
+import { ObjdiffConfig, ObjdiffPlugin, objdiffConfigSchema } from '~/plugins/objdiff/objdiff-plugin.js';
 import { loadPrompts } from '~/prompt-loader.js';
 import {
   type ReportPluginConfigs,
@@ -28,7 +28,9 @@ import {
   saveJsonReport,
   transformToReport,
 } from '~/report-generator/index.js';
+import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 import { PipelineConfig } from '~/shared/config';
+import { Objdiff } from '~/shared/objdiff.js';
 import type { PipelineEvent, PluginInfo } from '~/shared/pipeline-events.js';
 import type { PipelineResults } from '~/shared/types.js';
 
@@ -554,16 +556,20 @@ async function runPipeline(
       claudeRunnerConfigSchema,
     );
 
-    const compilerConfig: CompilerConfig = getPluginConfigFromFile<CompilerConfig>(
+    const objdiffConfig: ObjdiffConfig = getPluginConfigFromFile<ObjdiffConfig>(
       fileConfig,
-      'compiler',
-      compilerConfigSchema,
+      'objdiff',
+      objdiffConfigSchema,
     );
 
+    // Create shared CCompiler and Objdiff instances
+    const cCompiler = new CCompiler(pipelineConfig.compilerScript);
+    const objdiff = new Objdiff(objdiffConfig.diffSettings);
+
     // Create plugins
-    const claudePlugin = new ClaudeRunnerPlugin(claudeRunnerConfig, pipelineConfig);
-    const compilerPlugin = new CompilerPlugin(compilerConfig, pipelineConfig);
-    const objdiffPlugin = new ObjdiffPlugin();
+    const claudePlugin = new ClaudeRunnerPlugin(claudeRunnerConfig, pipelineConfig, cCompiler, objdiff);
+    const compilerPlugin = new CompilerPlugin(cCompiler);
+    const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
 
     // Register plugins for the programmatic-flow
     const m2cConfig: M2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
@@ -594,7 +600,7 @@ async function runPipeline(
         stallThreshold: claudeRunnerConfig.stallThreshold,
       },
       compiler: {
-        flags: compilerConfig.flags,
+        compilerScript: pipelineConfig.compilerScript,
       },
     };
     const report = transformToReport(results, pluginConfigs);

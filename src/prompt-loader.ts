@@ -21,6 +21,7 @@ const execAsync = promisify(exec);
 const promptSettingsSchema = z.object({
   functionName: z.string().describe('Name of the function to decompile'),
   targetObjectPath: z.string().describe('Path to the target object file for this prompt'),
+  asm: z.string().describe('GAS-formatted assembly for the function'),
 });
 
 /**
@@ -35,6 +36,8 @@ export interface PromptInfo {
   functionName: string;
   /** Target object path from settings.yaml */
   targetObjectPath: string;
+  /** GAS-formatted assembly for the function */
+  asm: string;
 }
 
 /**
@@ -128,6 +131,7 @@ async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<P
     content,
     functionName: settings.functionName,
     targetObjectPath: settings.targetObjectPath,
+    asm: settings.asm,
   };
 }
 

@@ -3,7 +3,6 @@ import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 import fs from 'fs';
 import path from 'path';
-import copy from 'rollup-plugin-copy';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -115,17 +114,6 @@ export default {
         'src/report-generator/ui/**/*',
         'node_modules/**/*',
       ],
-    }),
-
-    // Copy ARM compiler files to dist (copy the entire arm directory)
-    copy({
-      targets: [
-        {
-          src: 'src/shared/c-compiler/arm',
-          dest: 'dist/shared/c-compiler',
-        },
-      ],
-      hook: 'writeBundle',
     }),
   ],
   // Suppress warnings about circular dependencies in React

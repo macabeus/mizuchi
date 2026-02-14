@@ -3,13 +3,14 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 
 import { loadPrompts } from './prompt-loader.js';
 
 describe('PromptLoaderPlugin', () => {
   let tempDir: string;
-  const compiler = new CCompiler();
+  const compiler = new CCompiler(getArmCompilerScript());
   const emptyContextPath = '';
   const compiledObjects: string[] = [];
 
@@ -29,14 +30,18 @@ describe('PromptLoaderPlugin', () => {
   async function createPromptDir(
     dirName: string,
     promptContent: string,
-    settings: { functionName: string; targetObjectPath: string },
+    settings: { functionName: string; targetObjectPath: string; asm?: string },
   ): Promise<string> {
     const promptDir = path.join(tempDir, dirName);
     await fs.mkdir(promptDir);
     await fs.writeFile(path.join(promptDir, 'prompt.md'), promptContent);
+    const asm = settings.asm ?? `.text\nglabel ${settings.functionName}\n    bx lr\n`;
     await fs.writeFile(
       path.join(promptDir, 'settings.yaml'),
-      `functionName: "${settings.functionName}"\ntargetObjectPath: "${settings.targetObjectPath}"`,
+      `functionName: "${settings.functionName}"\ntargetObjectPath: "${settings.targetObjectPath}"\nasm: |\n${asm
+        .split('\n')
+        .map((l) => `  ${l}`)
+        .join('\n')}`,
     );
     return promptDir;
   }
@@ -48,8 +53,7 @@ void ${functionName}(void) {
     x = x + 1;
 }
 `;
-    const defaultFlags = '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm';
-    const result = await compiler.compile(functionName, cCode, emptyContextPath, defaultFlags);
+    const result = await compiler.compile(functionName, cCode, emptyContextPath);
     if (!result.success) {
       throw new Error(`Failed to compile ${functionName}`);
     }
@@ -73,6 +77,7 @@ void ${functionName}(void) {
       expect(result.prompts[0].content).toBe('Decompile this function.');
       expect(result.prompts[0].functionName).toBe('TestFunction');
       expect(result.prompts[0].targetObjectPath).toBe(objPath);
+      expect(result.prompts[0].asm).toContain('glabel TestFunction');
     });
 
     it('loads multiple prompt directories', async () => {

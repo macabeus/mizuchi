@@ -1,2 +1,13 @@
 functionName: TaskDestructor_CharacterSelect
 targetObjectPath: /Users/decomp/sa3/build/gba/sa3/asm/character_select.o
+asm: |
+  .text
+  glabel TaskDestructor_CharacterSelect
+      push {lr}
+      ldrh r0, [r0, #6]
+      ldr r1, =0x030000C4
+      adds r0, r0, r1
+      ldr r0, [r0]
+      bl VramFree
+      pop {r0}
+      bx r0

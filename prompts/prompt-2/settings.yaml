@@ -1,2 +1,48 @@
 functionName: sub_8056430
 targetObjectPath: /Users/decomp/sa3/build/gba/sa3/asm/code_1.o
+asm: |
+  .text
+  glabel sub_8056430
+      push {r4, r5, r6, lr}
+      sub sp, #8
+      ldr r0, =gCurTask
+      ldr r0, [r0]
+      ldrh r1, [r0, #6]
+      movs r0, #0xc0
+      lsls r0, r0, #0x12
+      adds r6, r1, r0
+      ldr r1, =gUnknown_080D1D50
+      mov r0, sp
+      movs r2, #7
+      bl memcpy
+      movs r0, #0
+  _0805644C:
+      lsls r5, r0, #0x10
+      asrs r5, r5, #0x10
+      lsls r4, r5, #2
+      adds r4, r4, r5
+      lsls r4, r4, #3
+      movs r0, #0x86
+      lsls r0, r0, #1
+      adds r4, r4, r0
+      adds r4, r6, r4
+      ldrb r1, [r6, #0x18]
+      mov r2, sp
+      adds r0, r2, r5
+      ldrb r0, [r0]
+      adds r1, r1, r0
+      strh r1, [r4, #0x10]
+      adds r0, r4, #0
+      bl UpdateSpriteAnimation
+      adds r0, r4, #0
+      bl DisplaySprite
+      adds r5, #1
+      lsls r5, r5, #0x10
+      lsrs r0, r5, #0x10
+      asrs r5, r5, #0x10
+      cmp r5, #6
+      ble _0805644C
+      add sp, #8
+      pop {r4, r5, r6}
+      pop {r0}
+      bx r0

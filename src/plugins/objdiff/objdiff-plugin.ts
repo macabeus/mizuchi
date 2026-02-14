@@ -12,11 +12,10 @@ import type { PipelineContext, Plugin, PluginReportSection, PluginResult } from 
 
 /**
  * Configuration schema for ObjdiffPlugin
- *
- * Note: Target object paths are now specified per-prompt in settings.yaml,
- * so this plugin requires no configuration.
  */
-export const objdiffConfigSchema = z.object({});
+export const objdiffConfigSchema = z.object({
+  diffSettings: z.record(z.string(), z.string()).default({}),
+});
 
 export type ObjdiffConfig = z.infer<typeof objdiffConfigSchema>;
 
@@ -47,8 +46,8 @@ export class ObjdiffPlugin implements Plugin<ObjdiffResult> {
 
   #objdiff: Objdiff;
 
-  constructor(_config?: ObjdiffConfig, _pipelineConfig?: PipelineConfig) {
-    this.#objdiff = Objdiff.getInstance();
+  constructor(config: ObjdiffConfig, _pipelineConfig?: PipelineConfig) {
+    this.#objdiff = new Objdiff(config.diffSettings);
   }
 
   async execute(context: PipelineContext): Promise<{

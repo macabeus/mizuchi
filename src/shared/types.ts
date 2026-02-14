@@ -57,6 +57,8 @@ export interface PipelineContext {
   promptContent?: string;
   /** Name of the function being decompiled */
   functionName: string;
+  /** GAS-formatted assembly for the function */
+  asm: string;
   /** Generated C code from Claude */
   generatedCode?: string;
   /** Path to the compiled object file */

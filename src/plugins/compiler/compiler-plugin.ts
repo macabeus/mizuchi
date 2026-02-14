@@ -1,22 +1,13 @@
 /**
  * Compiler Plugin
  *
- * Compiles generated C code using the agbcc compiler via compile.sh.
+ * Compiles generated C code using a CCompiler instance.
  * Handles file writing, compilation, and cleanup.
  */
 import fs from 'fs/promises';
-import { z } from 'zod';
 
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
-import { PipelineConfig } from '~/shared/config';
 import type { PipelineContext, Plugin, PluginReportSection, PluginResult } from '~/shared/types.js';
-
-/**
- * Configuration schema for CompilerPlugin
- */
-export const compilerConfigSchema = z.object({});
-
-export type CompilerConfig = z.infer<typeof compilerConfigSchema>;
 
 /**
  * Compiler Plugin result data
@@ -30,7 +21,6 @@ export interface CompilerResult {
  */
 export class CompilerPlugin implements Plugin<CompilerResult> {
   static readonly pluginId = 'compiler';
-  static readonly configSchema = compilerConfigSchema;
 
   readonly id = CompilerPlugin.pluginId;
   readonly name = 'Compiler';
@@ -38,11 +28,9 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
 
   #cCompiler: CCompiler;
   #objectFilePath?: string = undefined;
-  #flags: string;
 
-  constructor(_config: CompilerConfig, pipelineConfig: PipelineConfig) {
-    this.#cCompiler = new CCompiler();
-    this.#flags = pipelineConfig.compilerFlags;
+  constructor(cCompiler: CCompiler) {
+    this.#cCompiler = cCompiler;
   }
 
   async execute(context: PipelineContext): Promise<{
@@ -68,7 +56,6 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
       context.functionName,
       context.generatedCode,
       context.config.contextPath,
-      this.#flags,
     );
     if (!compileResult.success) {
       const outputError = compileResult.compilationErrors.length

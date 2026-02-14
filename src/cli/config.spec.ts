@@ -55,6 +55,7 @@ describe('CLI Config', () => {
       const configContent = `
 global:
   contextPath: "/custom/context.h"
+  compilerScript: "echo test"
   maxRetries: 10
   outputDir: "/custom/output"
   promptsDir: "/custom/prompts"
@@ -78,6 +79,7 @@ plugins:
       const configContent = `
 global:
   contextPath: "/custom/context.h"
+  compilerScript: "echo test"
   promptsDir: "/custom/prompts"
 
 plugins:
@@ -101,7 +103,7 @@ plugins:
           contextPath: '',
           maxRetries: 10,
           outputDir: '/custom/output',
-          compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
+          compilerScript: 'echo "test"',
           promptsDir: '/custom/prompts',
           target: 'gba',
         },
@@ -123,7 +125,7 @@ plugins:
           contextPath: '',
           maxRetries: 10,
           outputDir: '/custom/output',
-          compilerFlags: '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm',
+          compilerScript: 'echo "test"',
           promptsDir: '/custom/prompts',
           target: 'gba',
         },

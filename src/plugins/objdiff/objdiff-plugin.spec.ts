@@ -3,13 +3,12 @@ import os from 'os';
 import path from 'path';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CCompiler, armCompilerPath } from '~/shared/c-compiler/c-compiler.js';
+import { ARM_DIFF_SETTINGS, getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
+import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
 import type { PipelineContext } from '~/shared/types.js';
 
 import { ObjdiffPlugin } from './objdiff-plugin.js';
-
-const DEFAULT_COMPILER_FLAGS = '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm';
 
 describe('ObjdiffPlugin', () => {
   let tempDir: string;
@@ -18,7 +17,7 @@ describe('ObjdiffPlugin', () => {
   beforeEach(async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'objdiff-plugin-test-'));
-    plugin = new ObjdiffPlugin();
+    plugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
   });
 
   afterAll(async () => {
@@ -97,11 +96,15 @@ describe('ObjdiffPlugin', () => {
   });
 
   describe('integration tests with actual compilation', async () => {
-    const compiler = new CCompiler();
+    const compiler = new CCompiler(getArmCompilerScript());
     // Empty context path since these tests don't use custom types
     const emptyContextPath = '';
 
     it('succeeds when compiled code matches target exactly', async () => {
+      let compiledObjPath: string | undefined;
+      let targetObjPath: string | undefined;
+      let finalTargetPath: string | undefined;
+
       try {
         const cCode = `
   void TestMatchFunc(void) {
@@ -110,23 +113,21 @@ describe('ObjdiffPlugin', () => {
   }
   `;
         // Compile same code twice - should match
-        const compiledResult = await compiler.compile('TestMatchFunc', cCode, emptyContextPath, DEFAULT_COMPILER_FLAGS);
-        const targetResult = await compiler.compile(
-          'TestMatchFunc_target',
-          cCode,
-          emptyContextPath,
-          DEFAULT_COMPILER_FLAGS,
-        );
+        const compiledResult = await compiler.compile('TestMatchFunc', cCode, emptyContextPath);
+        const targetResult = await compiler.compile('TestMatchFunc_target', cCode, emptyContextPath);
 
         if (!compiledResult.success || !targetResult.success) {
           throw new Error('Compilation failed');
         }
 
-        // Rename target file to expected name
-        const finalTargetPath = path.join('target.o');
+        compiledObjPath = compiledResult.objPath;
+        targetObjPath = targetResult.objPath;
+
+        // Copy target file
+        finalTargetPath = path.join(tempDir, 'target.o');
         await fs.copyFile(targetResult.objPath, finalTargetPath);
 
-        const integrationPlugin = new ObjdiffPlugin();
+        const integrationPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
         const context = createContext({
           compiledObjectPath: compiledResult.objPath,
           targetObjectPath: finalTargetPath,
@@ -140,13 +141,23 @@ describe('ObjdiffPlugin', () => {
         expect(result.data?.matchingCount).toBeGreaterThan(0);
         expect(result.data?.differenceCount).toBe(0);
       } finally {
-        fs.unlink(path.join(armCompilerPath, 'TestMatchFunc.o')).catch(() => {});
-        fs.unlink(path.join(armCompilerPath, 'TestMatchFunc_target.o')).catch(() => {});
-        fs.unlink(path.join('target.o')).catch(() => {});
+        if (compiledObjPath) {
+          fs.unlink(compiledObjPath).catch(() => {});
+        }
+        if (targetObjPath) {
+          fs.unlink(targetObjPath).catch(() => {});
+        }
+        if (finalTargetPath) {
+          fs.unlink(finalTargetPath).catch(() => {});
+        }
       }
     });
 
     it('fails when compiled code differs from target', async () => {
+      let compiledObjPath: string | undefined;
+      let targetObjPath: string | undefined;
+      let finalTargetPath: string | undefined;
+
       try {
         const currentCode = `
   void TestDiffFunc(void) {
@@ -159,27 +170,20 @@ describe('ObjdiffPlugin', () => {
       x = x + 1;
   }
   `;
-        const compiledResult = await compiler.compile(
-          'TestDiffFunc',
-          currentCode,
-          emptyContextPath,
-          DEFAULT_COMPILER_FLAGS,
-        );
-        const targetResult = await compiler.compile(
-          'TestDiffFunc_target',
-          targetCode,
-          emptyContextPath,
-          DEFAULT_COMPILER_FLAGS,
-        );
+        const compiledResult = await compiler.compile('TestDiffFunc', currentCode, emptyContextPath);
+        const targetResult = await compiler.compile('TestDiffFunc_target', targetCode, emptyContextPath);
 
         if (!compiledResult.success || !targetResult.success) {
           throw new Error('Compilation failed');
         }
 
-        const finalTargetPath = path.join('target_diff.o');
+        compiledObjPath = compiledResult.objPath;
+        targetObjPath = targetResult.objPath;
+
+        finalTargetPath = path.join(tempDir, 'target_diff.o');
         await fs.copyFile(targetResult.objPath, finalTargetPath);
 
-        const integrationPlugin = new ObjdiffPlugin();
+        const integrationPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
         const context = createContext({
           compiledObjectPath: compiledResult.objPath,
           targetObjectPath: finalTargetPath,
@@ -195,30 +199,43 @@ describe('ObjdiffPlugin', () => {
         expect(result.output).toContain('Target Assembly');
         expect(result.output).toContain('Differences');
       } finally {
-        fs.unlink(path.join(armCompilerPath, 'TestDiffFunc.o')).catch(() => {});
-        fs.unlink(path.join(armCompilerPath, 'TestDiffFunc_target.o')).catch(() => {});
-        fs.unlink(path.join('target_diff.o')).catch(() => {});
+        if (compiledObjPath) {
+          fs.unlink(compiledObjPath).catch(() => {});
+        }
+        if (targetObjPath) {
+          fs.unlink(targetObjPath).catch(() => {});
+        }
+        if (finalTargetPath) {
+          fs.unlink(finalTargetPath).catch(() => {});
+        }
       }
     });
 
     it('fails when function symbol is not found', async () => {
+      let compiledObjPath: string | undefined;
+      let targetObjPath: string | undefined;
+      let finalTargetPath: string | undefined;
+
       try {
         const cCode = `
   void ActualFunc(void) {
       volatile int x = 1;
   }
   `;
-        const compiledResult = await compiler.compile('ActualFunc', cCode, emptyContextPath, DEFAULT_COMPILER_FLAGS);
-        const targetResult = await compiler.compile('ActualFunc_copy', cCode, emptyContextPath, DEFAULT_COMPILER_FLAGS);
+        const compiledResult = await compiler.compile('ActualFunc', cCode, emptyContextPath);
+        const targetResult = await compiler.compile('ActualFunc_copy', cCode, emptyContextPath);
 
         if (!compiledResult.success || !targetResult.success) {
           throw new Error('Compilation failed');
         }
 
-        const finalTargetPath = path.join('target_symbol.o');
+        compiledObjPath = compiledResult.objPath;
+        targetObjPath = targetResult.objPath;
+
+        finalTargetPath = path.join(tempDir, 'target_symbol.o');
         await fs.copyFile(targetResult.objPath, finalTargetPath);
 
-        const integrationPlugin = new ObjdiffPlugin();
+        const integrationPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
         const context = createContext({
           compiledObjectPath: compiledResult.objPath,
           targetObjectPath: finalTargetPath,
@@ -235,9 +252,15 @@ Available symbols in current object: ActualFunc.
 
 Did you named your function as \`NonExistentFunc\`?`);
       } finally {
-        fs.unlink(path.join(armCompilerPath, 'ActualFunc.o')).catch(() => {});
-        fs.unlink(path.join(armCompilerPath, 'ActualFunc_copy.o')).catch(() => {});
-        fs.unlink(path.join('target_symbol.o')).catch(() => {});
+        if (compiledObjPath) {
+          fs.unlink(compiledObjPath).catch(() => {});
+        }
+        if (targetObjPath) {
+          fs.unlink(targetObjPath).catch(() => {});
+        }
+        if (finalTargetPath) {
+          fs.unlink(finalTargetPath).catch(() => {});
+        }
       }
     });
   });
