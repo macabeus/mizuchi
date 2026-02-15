@@ -49,8 +49,6 @@ export function createPipelineConfigSchema(projectRoot: string) {
     })
     .transform((config) => ({
       ...config,
-      // Apply project-relative defaults for paths that weren't explicitly set
-      contextPath: config.contextPath || path.join(projectRoot, 'context.h'),
       outputDir: config.outputDir === '.' ? projectRoot : config.outputDir,
     }));
 }
@@ -63,7 +61,7 @@ export function getDefaultConfig(): PipelineConfig {
   const schema = createPipelineConfigSchema(projectRoot);
 
   // Parse an object with required fields to get all defaults
-  return schema.parse({ contextPath: path.join(projectRoot, 'context.h'), compilerScript: '' });
+  return schema.parse({ getContextScript: '', compilerScript: '' });
 }
 
 /**
@@ -91,7 +89,7 @@ export function buildPipelineConfig(
   const defaults = getDefaultConfig();
 
   const pipelineConfig: PipelineConfig = {
-    contextPath: fileConfig.global?.contextPath ?? defaults.contextPath,
+    getContextScript: fileConfig.global?.getContextScript ?? defaults.getContextScript,
     outputDir: cliOptions.output
       ? path.resolve(cliOptions.output)
       : (fileConfig.global?.outputDir ?? defaults.outputDir),
@@ -120,12 +118,6 @@ export function getPluginConfigFromFile<T>(
  */
 export async function validatePaths(config: PipelineConfig): Promise<{ errors: string[] }> {
   const errors: string[] = [];
-
-  try {
-    await fs.access(config.contextPath);
-  } catch {
-    errors.push(`Context file not found: ${config.contextPath}`);
-  }
 
   try {
     await fs.access(config.promptsDir);

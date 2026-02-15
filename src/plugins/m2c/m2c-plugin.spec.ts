@@ -24,10 +24,10 @@ glabel SimpleAdd
     add r0, r1
     bx lr
 `,
+        contextFilePath: '',
         config: {
           ...defaultTestPipelineConfig,
           target: 'gba',
-          contextPath: '',
         },
       });
 
@@ -48,10 +48,10 @@ glabel SimpleFunc
     jr $ra
     addiu $v0, $zero, 1
 `,
+        contextFilePath: '',
         config: {
           ...defaultTestPipelineConfig,
           target: 'n64',
-          contextPath: '',
         },
       });
 
@@ -91,10 +91,10 @@ glabel TestFunc
 glabel InvalidFunc
     this is not valid assembly
 `,
+        contextFilePath: '',
         config: {
           ...defaultTestPipelineConfig,
           target: 'gba',
-          contextPath: '',
         },
       });
 

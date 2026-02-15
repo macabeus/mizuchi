@@ -100,38 +100,6 @@ interface ConversationCache {
 }
 
 /**
- * Default system prompt for Claude
- */
-const DEFAULT_SYSTEM_PROMPT = `You are an automated decompilation system that converts assembly code into a C code that compiles into identical assembly.
-
-**Operating Context**
-- This is a fully automated pipeline with no human review
-- Do not request clarifications, confirmations, or permissions
-- You can use the read-only tools to inspect the codebase, but you cannot write or modify files directly
-- The last C code you provided with be concatenate with the \`{{contextPath}}\` during compilation. No other import statements or includes are supported
-
-**Output Requirements**
-- Provide complete, compilable C code in a fenced code block (\`\`\`c)
-- The system extracts and compiles only the **last** \`\`\`c block in your response
-
-**Success Criteria**
-- The compiled output must produce assembly that matches the target exactly
-- Functional equivalence is insufficient; the generated assembly must be identical
-
-**Available Tools**
-- \`compile_and_view_assembly\`: Use this tool for testing. It compiles your C code and see the resulting assembly BEFORE submitting your final answer. This allows you to iterate and refine your code to match the target assembly more precisely. The code is also concatenated with \`{{contextPath}}\` during compilation
-
-**Workflow**
-1. Analyze the provided assembly
-2. Read the relevant structure and constants from the context file at \`{{contextPath}}\`
-3. Produce equivalent C code
-4. Use \`compile_and_view_assembly\` to test your code and see how it compiles
-5. Iterate on your code until the assembly looks correct
-6. Provide your final C code in a \`\`\`c block
-7. The system compiles your code and compares the resulting assembly against the target
-8. If mismatches occur, you will receive feedback for iteration`;
-
-/**
  * Configuration schema for ClaudeRunnerPlugin
  */
 export const claudeRunnerConfigSchema = z.object({
@@ -139,7 +107,10 @@ export const claudeRunnerConfigSchema = z.object({
   timeoutMs: z.number().positive().default(300_000).describe('Timeout in milliseconds for Claude requests'),
   cachePath: z.string().optional().describe('Path to JSON cache file for response caching'),
   model: z.string().optional().describe('Claude model to use'),
-  systemPrompt: z.string().optional().describe('System prompt for Claude').default(DEFAULT_SYSTEM_PROMPT),
+  systemPrompt: z
+    .string()
+    .describe('System prompt template for Claude. Template variables: {{contextFilePath}}, {{promptContent}}'),
+  kickoffMessage: z.string().describe('First user message sent to Claude to start the conversation'),
   stallThreshold: z
     .number()
     .int()
@@ -159,47 +130,6 @@ const CACHE_VERSION = 2;
  */
 function hashPrompt(prompt: string): string {
   return createHash('sha256').update(prompt).digest('hex');
-}
-
-/**
- * Wrap the prompt with instructions to output only code
- */
-function wrapPromptWithCodeInstructions(prompt: string): string {
-  const suffix = `
-
-# Implementation Process
-
-1. Code Analysis
-
-- Carefully analyze the original assembly function
-- Identify function parameters, return values, and local variables
-- Map register usage and memory access patterns
-- Understand the control flow and logic structure
-- Search the codebase to find existing struct, type definitions to reuse, and find patterns
-
-2. C Code Generation
-
-- Output ONLY the C code in a single \`\`\`c code block.
-
-- Write clean, readable C code following these guidelines:
-
-  - Use meaningful variable names
-  - Avoid unnecessary goto statements - prefer structured control flow (if/else, loops)
-  - Minimize pointer arithmetic where possible
-  - Avoid unnecessary type casts
-  - Use appropriate data types that match the assembly operations
-  - Maintain the code styleguide
-  - Before adding a new type definition, search in the codebase if this struct already exists and reuse them whenever possible
-
-- You might need to duplicate a structs if you identify that a struct might be wrong. If that's the case, duplicate it with a new name and modify it as needed.
-
-# Additional Guidelines
-
-- Test after each significant change
-- If stuck, try different approaches (different variable types, control structures, etc.)
-- When searching in the codebase, ignore the file \`kappa-db.json\``;
-
-  return prompt + suffix;
 }
 
 /**
@@ -412,8 +342,10 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   readonly id = ClaudeRunnerPlugin.pluginId;
   readonly name = 'Claude Runner';
   readonly description = 'Uses Claude Agent SDK to generate C code from assembly';
-  readonly systemPrompt: string;
 
+  systemPrompt = '';
+
+  #systemPromptTemplate: string;
   #config: ClaudeRunnerConfig;
   #feedbackPrompt?: string;
   #stallDetected = false;
@@ -433,7 +365,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #currentCacheNode: ConversationNode | null = null;
 
   // MCP tool dependencies
-  #contextPath: string;
+  #currentContextContent = '';
   #cCompiler: CCompiler;
   #objdiff: Objdiff;
   #mcpServer: McpServer;
@@ -445,10 +377,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     objdiff: Objdiff,
     queryFactory?: QueryFactory,
   ) {
-    this.systemPrompt = config.systemPrompt.replaceAll('{{contextPath}}', pipelineConfig.contextPath);
+    this.#systemPromptTemplate = config.systemPrompt;
 
     this.#config = config;
-    this.#contextPath = pipelineConfig.contextPath;
     this.#cCompiler = cCompiler;
     this.#objdiff = objdiff;
 
@@ -481,10 +412,6 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
    * Create the MCP server for the Mizuchi tools
    */
   #createMcpServer(): McpServer {
-    const contextPath = this.#contextPath;
-    const cCompiler = this.#cCompiler;
-    const objdiff = this.#objdiff;
-
     return createSdkMcpServer({
       name: 'mizuchi',
       version: '1.0.0',
@@ -500,7 +427,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             let compileResult: Awaited<ReturnType<CCompiler['compile']>> | undefined;
             try {
               // Compile the code
-              compileResult = await cCompiler.compile(args.function_name, args.code, contextPath);
+              compileResult = await this.#cCompiler.compile(args.function_name, args.code, this.#currentContextContent);
 
               if (!compileResult.success) {
                 const errorOutput = compileResult.compilationErrors.length
@@ -518,8 +445,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               }
 
               // Parse the object file and extract assembly
-              const parsedObject = await objdiff.parseObjectFile(compileResult.objPath, 'base');
-              const diffResult = await objdiff.runDiff(parsedObject);
+              const parsedObject = await this.#objdiff.parseObjectFile(compileResult.objPath, 'base');
+              const diffResult = await this.#objdiff.runDiff(parsedObject);
 
               if (!diffResult.left) {
                 // Clean up the object file
@@ -537,7 +464,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               // Check if the symbol exists
               const symbol = diffResult.left.findSymbol(args.function_name, undefined);
               if (!symbol) {
-                const availableSymbols = await objdiff.getSymbolNames(parsedObject);
+                const availableSymbols = await this.#objdiff.getSymbolNames(parsedObject);
                 // Clean up the object file
                 await fs.unlink(compileResult.objPath).catch(() => {});
                 return {
@@ -551,7 +478,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               }
 
               // Get the assembly
-              const assembly = await objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
+              const assembly = await this.#objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
 
               return {
                 content: [
@@ -685,9 +612,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   /**
    * Run a query for initial attempt
    */
-  async #runInitialQuery(prompt: string): Promise<{ response: string; fromCache: boolean }> {
-    const wrappedPrompt = wrapPromptWithCodeInstructions(prompt);
-    this.#initialPromptHash = hashPrompt(wrappedPrompt);
+  async #runInitialQuery(): Promise<{ response: string; fromCache: boolean }> {
+    // Cache key is based on the system prompt (which includes the task content)
+    this.#initialPromptHash = hashPrompt(this.systemPrompt);
 
     // Check cache for initial prompt
     const cachedConversation = this.#getCachedConversation(this.#initialPromptHash);
@@ -696,7 +623,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       this.#sessionId = cachedConversation.sessionId;
       this.#lastMessageId = cachedConversation.lastMessageId;
       this.#conversationHistory = [
-        { role: 'user', content: wrappedPrompt },
+        { role: 'user', content: this.#config.kickoffMessage },
         { role: 'assistant', content: cachedConversation.response },
       ];
       return { response: cachedConversation.response, fromCache: true };
@@ -704,7 +631,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
     // Create new query with timeout
     const model = this.#config.model || DEFAULT_MODEL;
-    this.#currentQuery = this.#queryFactory(wrappedPrompt, { model });
+    this.#currentQuery = this.#queryFactory(this.#config.kickoffMessage, { model });
 
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -721,7 +648,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       // Update state with content blocks if there are tool calls, otherwise use plain text
       const hasToolCalls = contentBlocks.some((b) => b.type === 'tool_use' || b.type === 'tool_result');
       this.#conversationHistory = [
-        { role: 'user', content: wrappedPrompt },
+        { role: 'user', content: this.#config.kickoffMessage },
         { role: 'assistant', content: hasToolCalls ? contentBlocks : text },
       ];
 
@@ -871,6 +798,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     }
 
     try {
+      // Update context content for MCP tool
+      this.#currentContextContent = context.contextContent ?? '';
+
       // Load cache on first execution
       await this.#loadCache();
 
@@ -894,8 +824,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           promptContent += buildM2cContextSection(context.m2cContext);
         }
 
-        promptUsed = wrapPromptWithCodeInstructions(promptContent);
-        const result = await this.#runInitialQuery(promptContent);
+        // Build system prompt by resolving template variables
+        this.systemPrompt = this.#systemPromptTemplate
+          .replaceAll('{{contextFilePath}}', context.contextFilePath ?? '')
+          .replaceAll('{{promptContent}}', promptContent);
+
+        promptUsed = this.#config.kickoffMessage;
+        const result = await this.#runInitialQuery();
         response = result.response;
         fromCache = result.fromCache;
       }
@@ -1080,11 +1015,11 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       sections.push({
         type: 'chat',
         title: 'Claude Conversation',
-        messages: [...this.#conversationHistory],
+        messages: [{ role: 'system', content: this.systemPrompt }, ...this.#conversationHistory],
       });
     }
 
-    // Keep generated code section for quick reference
+    // Add generated code section for quick reference
     if (result.data?.generatedCode) {
       sections.push({
         type: 'code',

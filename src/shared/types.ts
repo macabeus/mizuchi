@@ -65,6 +65,10 @@ export interface PipelineContext {
   compiledObjectPath?: string;
   /** Path to the target object file for comparison */
   targetObjectPath?: string;
+  /** Context file content (from getContextScript stdout) */
+  contextContent?: string;
+  /** Path to temp file containing context content */
+  contextFilePath?: string;
   /** Current attempt number (1-indexed) */
   attemptNumber: number;
   /** Maximum retries allowed */
@@ -117,7 +121,7 @@ export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
  * Chat message in a conversation
  */
 export interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string | ContentBlock[];
 }
 
@@ -189,6 +193,8 @@ export interface PipelineRunResult {
   functionName: string;
   success: boolean;
   totalDurationMs: number;
+  /** Result from setup-flow phase (e.g., get-context) */
+  setupFlow: AttemptResult;
   /** Result from programmatic-flow (e.g., m2c), if one was configured */
   programmaticFlow?: AttemptResult;
   /** Results for every attempt from the AI-powered flow */

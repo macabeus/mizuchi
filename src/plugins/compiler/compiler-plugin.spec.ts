@@ -1,17 +1,12 @@
 import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
-import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
+import { createTestContext } from '~/shared/test-utils.js';
 import type { PipelineContext } from '~/shared/types.js';
 
 import { CompilerPlugin } from './compiler-plugin.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 describe('CompilerPlugin', () => {
   let plugin: CompilerPlugin;
@@ -102,15 +97,12 @@ void DurationTest(void) {
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
     });
 
-    it('compiles code with includes from context.h', async () => {
-      // Create a temporary context.h file with type definitions
-      const tempContextPath = path.join(__dirname, 'test-context.h');
+    it('compiles code with includes from context content', async () => {
       const contextContent = `
 typedef unsigned int u32;
 typedef signed short s16;
 typedef int bool32;
 `;
-      await fs.writeFile(tempContextPath, contextContent);
 
       const codeWithTypes = `
 void TypesTest(void) {
@@ -121,18 +113,12 @@ void TypesTest(void) {
 `;
       const context = createContext({
         generatedCode: codeWithTypes,
-        config: {
-          ...defaultTestPipelineConfig,
-          contextPath: tempContextPath,
-        },
+        contextContent,
       });
 
       const { result } = await plugin.execute(context);
 
       expect(result.status).toBe('success');
-
-      // Clean up the temporary context file
-      await fs.unlink(tempContextPath);
     });
   });
 

@@ -112,7 +112,8 @@ function createMockQueryFactory(options: MockQueryFactoryOptions | string[]): Qu
 
 const defaultPluginConfig: ClaudeRunnerConfig = {
   timeoutMs: 300000,
-  systemPrompt: '',
+  systemPrompt: '{{promptContent}}',
+  kickoffMessage: 'Decompile the function.',
   stallThreshold: 3,
 };
 
@@ -181,16 +182,16 @@ describe('ClaudeRunnerPlugin', () => {
       const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
 
-      // First message should be the user prompt
-      const userMessage = chatSection.messages[0];
-      expect(userMessage.role).toBe('user');
-      expect(typeof userMessage.content).toBe('string');
+      // First message is system prompt (which includes the task + m2c context)
+      const systemMessage = chatSection.messages[0];
+      expect(systemMessage.role).toBe('system');
+      expect(typeof systemMessage.content).toBe('string');
 
-      // Verify the m2c context section is included
-      expect(userMessage.content).toContain('Initial Decompilation');
-      expect(userMessage.content).toContain(m2cGeneratedCode);
-      expect(userMessage.content).toContain('Matching Result');
-      expect(userMessage.content).toContain(m2cCompilationError);
+      // Verify the m2c context section is included in the system prompt
+      expect(systemMessage.content).toContain('Initial Decompilation');
+      expect(systemMessage.content).toContain(m2cGeneratedCode);
+      expect(systemMessage.content).toContain('Matching Result');
+      expect(systemMessage.content).toContain(m2cCompilationError);
     });
 
     it('extracts C code from response with code block', async () => {
@@ -610,11 +611,11 @@ void movePoint(Point* p) {
       const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
 
-      // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
-      expect(chatSection.messages.length).toBe(4);
+      // Should have 5 messages: system, initial user, initial assistant, follow-up user, follow-up assistant
+      expect(chatSection.messages.length).toBe(5);
 
-      // The third message should be the follow-up user message with reminder
-      const followUpMessage = chatSection.messages[2];
+      // The fourth message should be the follow-up user message with reminder
+      const followUpMessage = chatSection.messages[3];
       expect(followUpMessage.role).toBe('user');
       expect(typeof followUpMessage.content).toBe('string');
 
@@ -750,11 +751,11 @@ void movePoint(Point* p) {
       const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
 
-      // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
-      expect(chatSection.messages.length).toBe(4);
+      // Should have 5 messages: system, initial user, initial assistant, follow-up user, follow-up assistant
+      expect(chatSection.messages.length).toBe(5);
 
-      // The third message should be the follow-up user message with compilation error
-      const followUpMessage = chatSection.messages[2];
+      // The fourth message should be the follow-up user message with compilation error
+      const followUpMessage = chatSection.messages[3];
       expect(followUpMessage.role).toBe('user');
       expect(typeof followUpMessage.content).toBe('string');
 
@@ -812,11 +813,11 @@ void movePoint(Point* p) {
       const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
 
-      // Should have 4 messages: initial user, initial assistant, follow-up user, follow-up assistant
-      expect(chatSection.messages.length).toBe(4);
+      // Should have 5 messages: system, initial user, initial assistant, follow-up user, follow-up assistant
+      expect(chatSection.messages.length).toBe(5);
 
-      // The third message should be the follow-up user message asking for C code
-      const followUpMessage = chatSection.messages[2];
+      // The fourth message should be the follow-up user message asking for C code
+      const followUpMessage = chatSection.messages[3];
       expect(followUpMessage.role).toBe('user');
       expect(typeof followUpMessage.content).toBe('string');
 
@@ -881,7 +882,8 @@ void movePoint(Point* p) {
         expect(chatSection).toBeDefined();
 
         const messages = chatSection.messages;
-        const followUpMessage = messages[2];
+        // messages[0] = system, messages[1] = user kickoff, messages[2] = assistant, messages[3] = follow-up user
+        const followUpMessage = messages[3];
         expect(followUpMessage.role).toBe('user');
         expect(typeof followUpMessage.content).toBe('string');
 
@@ -1364,8 +1366,9 @@ mov eax, 0
       const chatSection = sections.find((s) => s.type === 'chat') as PluginReportSection & { type: 'chat' };
       expect(chatSection).toBeDefined();
       expect(chatSection.messages.length).toBeGreaterThan(0);
-      expect(chatSection.messages[0].role).toBe('user');
-      expect(chatSection.messages[1].role).toBe('assistant');
+      expect(chatSection.messages[0].role).toBe('system');
+      expect(chatSection.messages[1].role).toBe('user');
+      expect(chatSection.messages[2].role).toBe('assistant');
 
       // Should also have code section
       const codeSection = sections.find((s) => s.type === 'code');

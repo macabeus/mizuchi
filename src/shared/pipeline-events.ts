@@ -112,6 +112,13 @@ export interface BenchmarkCompleteEvent {
 }
 
 /**
+ * Event emitted when the setup-flow phase starts
+ */
+export interface SetupFlowStartEvent {
+  type: 'setup-flow-start';
+}
+
+/**
  * Event emitted when the programmatic flow phase starts
  */
 export interface ProgrammaticFlowStartEvent {
@@ -125,6 +132,7 @@ export type PipelineEvent =
   | BenchmarkStartEvent
   | PluginRegisteredEvent
   | PromptStartEvent
+  | SetupFlowStartEvent
   | ProgrammaticFlowStartEvent
   | AttemptStartEvent
   | PluginExecutionStartEvent

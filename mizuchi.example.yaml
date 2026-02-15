@@ -4,8 +4,20 @@
 
 # Global settings that apply to the entire pipeline
 global:
-  # Path to the context.h file used during compilation
-  contextPath: '/path/to/your/context.h'
+  # Shell script whose stdout becomes the context content prepended during compilation.
+  # Template variables: {{functionName}}, {{targetObjectPath}}
+  #
+  # Static file example: always read the same context file regardless of the prompt
+  #   getContextScript: |
+  #     cat /path/to/decomp-project/ctx.h
+  #
+  # Dynamic example: call m2ctx.py to write the context file
+  #   getContextScript: |
+  #     cd /path/to/decomp-project
+  #     python3 tools/m2ctx.py "$(echo "{{targetObjectPath}}" | sed 's|.*/build/||; s|\.o$|.c|')"
+  #     cat ctx.c
+  getContextScript: |
+    cat /path/to/your/context.h
 
   # Maximum retry attempts per prompt (default: 25)
   maxRetries: 25
@@ -59,10 +71,75 @@ plugins:
     # Path to cache file for Claude responses (default: claude-cache.json in output directory)
     # cachePath: ./claude-cache.json
 
-    # Custom system prompt for Claude (optional)
-    # If not specified, uses the default decompilation system prompt
-    # systemPrompt: |
-    #   You are an automated decompilation system...
+    # First user message sent to Claude to start the conversation
+    kickoffMessage: 'Decompile the function described in the system prompt. Respond with only the C code in a ```c code block.'
+
+    # System prompt template for Claude
+    # Template variables: {{contextFilePath}}, {{promptContent}}
+    systemPrompt: |
+      You are an automated decompilation system that converts assembly code into a C code that compiles into identical assembly.
+
+      **Operating Context**
+      - This is a fully automated pipeline with no human review
+      - Do not request clarifications, confirmations, or permissions
+      - You can use the read-only tools to inspect the codebase, but you cannot write or modify files directly
+      - The last C code you provided will be concatenated with the `{{contextFilePath}}` during compilation. No other import statements or includes are supported
+
+      **Output Requirements**
+      - Provide complete, compilable C code in a fenced code block (```c)
+      - The system extracts and compiles only the **last** ```c block in your response
+
+      **Success Criteria**
+      - The compiled output must produce assembly that matches the target exactly
+      - Functional equivalence is insufficient; the generated assembly must be identical
+
+      **Available Tools**
+      - `compile_and_view_assembly`: Use this tool for testing. It compiles your C code and see the resulting assembly BEFORE submitting your final answer. This allows you to iterate and refine your code to match the target assembly more precisely. The code is also concatenated with `{{contextFilePath}}` during compilation
+
+      **Workflow**
+      1. Analyze the provided assembly
+      2. Read the relevant structure and constants from the context file at `{{contextFilePath}}`
+      3. Produce equivalent C code
+      4. Use `compile_and_view_assembly` to test your code and see how it compiles
+      5. Iterate on your code until the assembly looks correct
+      6. Provide your final C code in a ```c block
+      7. The system compiles your code and compares the resulting assembly against the target
+      8. If mismatches occur, you will receive feedback for iteration
+
+      <decompilation_task>
+      {{promptContent}}
+      </decompilation_task>
+
+      # Implementation Process
+
+      1. Code Analysis
+
+      - Carefully analyze the original assembly function
+      - Identify function parameters, return values, and local variables
+      - Map register usage and memory access patterns
+      - Understand the control flow and logic structure
+      - Search the codebase to find existing struct, type definitions to reuse, and find patterns
+
+      2. C Code Generation
+
+      - Output ONLY the C code in a single ```c code block.
+
+      - Write clean, readable C code following these guidelines:
+
+        - Use meaningful variable names
+        - Avoid unnecessary goto statements - prefer structured control flow (if/else, loops)
+        - Minimize pointer arithmetic where possible
+        - Avoid unnecessary type casts
+        - Use appropriate data types that match the assembly operations
+        - Maintain the code styleguide
+        - Before adding a new type definition, search in the codebase if this struct already exists and reuse them whenever possible
+
+      - You might need to duplicate a structs if you identify that a struct might be wrong. If that's the case, duplicate it with a new name and modify it as needed.
+
+      # Additional Guidelines
+
+      - Test after each significant change
+      - If stuck, try different approaches (different variable types, control structures, etc.)
 
   # m2c Plugin (optional)
   # Runs m2c in the programmatic-flow phase before the AI-powered flow.
@@ -77,7 +154,7 @@ plugins:
 # To configure for a MIPS target like N64, use settings like:
 #
 # global:
-#   contextPath: '/path/to/context.h'
+#   getContextScript: 'cat /path/to/context.h'
 #   compilerScript: |
 #     COMPILER_PATH='/path/to/compiler/dir' \
 #       '/path/to/mips-gcc' \

@@ -19,6 +19,7 @@ import {
   claudeRunnerConfigSchema,
 } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import { CompilerPlugin } from '~/plugins/compiler/compiler-plugin.js';
+import { GetContextPlugin } from '~/plugins/get-context/get-context-plugin.js';
 import { M2cConfig, M2cPlugin, m2cConfigSchema } from '~/plugins/m2c/m2c-plugin.js';
 import { ObjdiffConfig, ObjdiffPlugin, objdiffConfigSchema } from '~/plugins/objdiff/objdiff-plugin.js';
 import { loadPrompts } from '~/prompt-loader.js';
@@ -146,6 +147,12 @@ export default function Index({ options: opts }: Props) {
               name: p.name,
               status: 'pending' as const,
             })),
+          };
+
+        case 'setup-flow-start':
+          return {
+            ...prev,
+            pluginStatuses: [],
           };
 
         case 'programmatic-flow-start':
@@ -567,9 +574,13 @@ async function runPipeline(
     const objdiff = new Objdiff(objdiffConfig.diffSettings);
 
     // Create plugins
+    const getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript);
     const claudePlugin = new ClaudeRunnerPlugin(claudeRunnerConfig, pipelineConfig, cCompiler, objdiff);
     const compilerPlugin = new CompilerPlugin(cCompiler);
     const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
+
+    // Register setup flow plugins
+    manager.registerSetupFlow(getContextPlugin);
 
     // Register plugins for the programmatic-flow
     const m2cConfig: M2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
@@ -596,7 +607,6 @@ async function runPipeline(
     // Transform results to report format
     const pluginConfigs: ReportPluginConfigs = {
       claudeRunner: {
-        systemPrompt: claudePlugin.systemPrompt,
         stallThreshold: claudeRunnerConfig.stallThreshold,
       },
       compiler: {

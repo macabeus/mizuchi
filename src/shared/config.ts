@@ -39,7 +39,7 @@ export const pipelineConfigSchema = z.object({
   maxRetries: z.number().positive().default(25),
   outputDir: z.string().default('.'),
   compilerScript: z.string(),
-  contextPath: z.string(),
+  getContextScript: z.string(),
   promptsDir: z.string(),
   target: z.enum(platformTargets).default('gba'),
 });

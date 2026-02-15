@@ -47,12 +47,12 @@ export class CCompiler {
    * Compiles C code to an object file.
    * @param functionName - Name of the function being compiled (used for file naming)
    * @param cCode - The C source code to compile
-   * @param contextPath - Path to the context.h file containing type definitions
+   * @param contextContent - Context content (type definitions etc.) to prepend to the source
    */
   async compile(
     functionName: string,
     cCode: string,
-    contextPath: string,
+    contextContent: string,
   ): Promise<
     { success: true; objPath: string } | { success: false; errorMessage: string; compilationErrors: CompilationError[] }
   > {
@@ -64,15 +64,7 @@ export class CCompiler {
     const scriptPath = path.join(tmpDir, `${functionName}_compile.sh`);
 
     try {
-      // 1. Concatenate context file + marker + source
-      let contextContent = '';
-      if (contextPath) {
-        try {
-          contextContent = await fs.readFile(contextPath, 'utf-8');
-        } catch {
-          // Empty context if file doesn't exist
-        }
-      }
+      // 1. Concatenate context + marker + source
       const combined = contextContent + '\nextern void _MIZUCHI_CONCATENATED_CODE();\n' + cCode;
       await fs.writeFile(combinedPath, combined);
 

@@ -17,6 +17,7 @@ import type {
 } from './shared/types.js';
 
 export class PluginManager {
+  #setupFlowPlugins: Plugin<any>[] = [];
   #programmaticFlowPlugins: Plugin<any>[] = [];
   #plugins: Plugin<any>[] = [];
   #config: PipelineConfig;
@@ -72,6 +73,26 @@ export class PluginManager {
   }
 
   /**
+   * Register plugins for the setup-flow phase.
+   * These plugins run once per prompt before both programmatic-flow and AI-powered flow.
+   * If a setup-flow plugin fails, the pipeline fails fatally for that prompt.
+   */
+  registerSetupFlow(...plugins: Plugin<any>[]): this {
+    this.#setupFlowPlugins = plugins;
+    for (const plugin of plugins) {
+      this.#emit({
+        type: 'plugin-registered',
+        plugin: {
+          id: plugin.id,
+          name: plugin.name,
+          description: plugin.description,
+        },
+      });
+    }
+    return this;
+  }
+
+  /**
    * Get all registered plugins
    */
   getPlugins(): readonly Plugin<any>[] {
@@ -83,6 +104,13 @@ export class PluginManager {
    */
   getProgrammaticFlowPlugins(): readonly Plugin<any>[] {
     return this.#programmaticFlowPlugins;
+  }
+
+  /**
+   * Get all registered setup-flow plugins
+   */
+  getSetupFlowPlugins(): readonly Plugin<any>[] {
+    return this.#setupFlowPlugins;
   }
 
   /**
@@ -112,6 +140,31 @@ export class PluginManager {
       config: this.#config,
     };
 
+    // setup-flow phase (e.g., get-context)
+    this.#emit({ type: 'setup-flow-start' });
+
+    const { finalContext: setupFlowContext, ...setupFlowResult } = await this.#runAttempt(
+      context,
+      this.#setupFlowPlugins,
+    );
+
+    const setupFlow: AttemptResult = setupFlowResult;
+
+    if (!setupFlowResult.success) {
+      // setup-flow failure is fatal — no retry
+      return {
+        promptPath,
+        functionName,
+        success: false,
+        attempts: [],
+        totalDurationMs: Date.now() - startTime,
+        setupFlow,
+      };
+    }
+
+    // Carry forward context from setup-flow
+    context = { ...context, ...setupFlowContext };
+
     // Programmatic-flow phase
     let programmaticFlow: AttemptResult | undefined;
     if (this.#programmaticFlowPlugins.length > 0) {
@@ -131,6 +184,7 @@ export class PluginManager {
           success: true,
           attempts: [],
           totalDurationMs: Date.now() - startTime,
+          setupFlow,
           programmaticFlow,
         };
       }
@@ -198,6 +252,7 @@ export class PluginManager {
       success,
       attempts,
       totalDurationMs: Date.now() - startTime,
+      setupFlow,
       programmaticFlow,
     };
   }

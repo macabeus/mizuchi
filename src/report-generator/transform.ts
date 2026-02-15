@@ -10,7 +10,6 @@ import type { BenchmarkReport, ReportAttempt, ReportPluginResult, ReportPromptRe
  */
 export interface ReportPluginConfigs {
   claudeRunner: {
-    systemPrompt: string;
     stallThreshold: number;
   };
   compiler: {
@@ -46,6 +45,13 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       pluginResults: attempt.pluginResults.map(transformPluginResult),
     }));
 
+    const setupFlow = {
+      attemptNumber: promptResult.setupFlow.attemptNumber,
+      success: promptResult.setupFlow.success,
+      durationMs: promptResult.setupFlow.durationMs,
+      pluginResults: promptResult.setupFlow.pluginResults.map(transformPluginResult),
+    };
+
     const programmaticFlow = promptResult.programmaticFlow
       ? {
           attemptNumber: promptResult.programmaticFlow.attemptNumber,
@@ -61,6 +67,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       success: promptResult.success,
       attempts,
       totalDurationMs: promptResult.totalDurationMs,
+      setupFlow,
       programmaticFlow,
     };
   });
@@ -72,8 +79,8 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       promptsDir: results.config.promptsDir,
       maxRetries: results.config.maxRetries,
       stallThreshold: pluginConfigs.claudeRunner.stallThreshold,
-      claudeSystemPrompt: pluginConfigs.claudeRunner.systemPrompt,
       compilerScript: pluginConfigs.compiler.compilerScript,
+      getContextScript: results.config.getContextScript,
       target: results.config.target,
     },
     results: reportResults,

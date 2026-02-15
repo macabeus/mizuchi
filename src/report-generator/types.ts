@@ -41,7 +41,7 @@ export type ReportContentBlock = ReportTextBlock | ReportToolUseBlock | ReportTo
  * Chat message in a conversation
  */
 export interface ReportChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string | ReportContentBlock[];
 }
 
@@ -101,6 +101,8 @@ export interface ReportPromptResult {
   success: boolean;
   attempts: ReportAttempt[];
   totalDurationMs: number;
+  /** Result from setup-flow phase (e.g., get-context) */
+  setupFlow: ReportAttempt;
   /** Result from programmatic-flow phase (e.g., m2c), if one was configured */
   programmaticFlow?: ReportAttempt;
 }
@@ -123,8 +125,8 @@ export interface ReportConfig {
   promptsDir: string;
   maxRetries: number;
   stallThreshold: number;
-  claudeSystemPrompt: string;
   compilerScript: string;
+  getContextScript: string;
   target: string;
 }
 
