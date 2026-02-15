@@ -54,7 +54,7 @@ describe('CLI Config', () => {
       const configPath = path.join(tempDir, 'mizuchi.yaml');
       const configContent = `
 global:
-  contextPath: "/custom/context.h"
+  getContextScript: "cat /custom/context.h"
   compilerScript: "echo test"
   maxRetries: 10
   outputDir: "/custom/output"
@@ -78,7 +78,7 @@ plugins:
       const configPath = path.join(tempDir, 'minimal.yaml');
       const configContent = `
 global:
-  contextPath: "/custom/context.h"
+  getContextScript: "cat /custom/context.h"
   compilerScript: "echo test"
   promptsDir: "/custom/prompts"
 
@@ -100,7 +100,7 @@ plugins:
     it('uses file config when no CLI overrides', () => {
       const fileConfig: ConfigFile = {
         global: {
-          contextPath: '',
+          getContextScript: '',
           maxRetries: 10,
           outputDir: '/custom/output',
           compilerScript: 'echo "test"',
@@ -122,7 +122,7 @@ plugins:
     it('CLI options override file config', () => {
       const fileConfig: ConfigFile = {
         global: {
-          contextPath: '',
+          getContextScript: '',
           maxRetries: 10,
           outputDir: '/custom/output',
           compilerScript: 'echo "test"',
@@ -150,17 +150,14 @@ plugins:
     it('succeeds when prompts directory exists', async () => {
       const promptsDir = path.join(tempDir, 'prompts');
       const outputDir = path.join(tempDir, 'output');
-      const contextPath = path.join(tempDir, 'context.h');
 
       await fs.mkdir(promptsDir);
       await fs.mkdir(outputDir);
-      await fs.writeFile(contextPath, '// test context');
 
       const config = {
         ...getDefaultConfig(),
         promptsDir,
         outputDir,
-        contextPath,
       };
 
       const result = await validatePaths(config);
@@ -168,12 +165,8 @@ plugins:
     });
 
     it('returns errors when prompts directory does not exist', async () => {
-      const contextPath = path.join(tempDir, 'context.h');
-      await fs.writeFile(contextPath, '// test context');
-
       const config = {
         ...getDefaultConfig(),
-        contextPath,
         promptsDir: '/non/existent/prompts',
         outputDir: tempDir,
       };
@@ -185,16 +178,13 @@ plugins:
     it('creates output directory if it does not exist', async () => {
       const promptsDir = path.join(tempDir, 'prompts');
       const outputDir = path.join(tempDir, 'new-output');
-      const contextPath = path.join(tempDir, 'context.h');
 
       await fs.mkdir(promptsDir);
-      await fs.writeFile(contextPath, '// test context');
 
       const config = {
         ...getDefaultConfig(),
         promptsDir,
         outputDir,
-        contextPath,
       };
 
       const result = await validatePaths(config);

@@ -11,40 +11,60 @@ interface ChatSectionProps {
 export function ChatSection({ messages }: ChatSectionProps) {
   return (
     <div className="space-y-4">
-      {messages.map((msg, i) => (
-        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-          <div
-            className={`max-w-[85%] rounded-xl overflow-hidden ${
-              msg.role === 'user'
-                ? 'bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/30'
-                : 'bg-gradient-to-br from-slate-700/50 to-slate-800/50 border border-slate-600/30'
-            }`}
-          >
-            {/* Role header */}
-            <div
-              className={`px-4 py-2 border-b ${
-                msg.role === 'user' ? 'bg-blue-600/10 border-blue-500/20' : 'bg-slate-700/30 border-slate-600/20'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {msg.role === 'user' ? (
-                  <Icon name="user" className="w-4 h-4 text-blue-400" />
-                ) : (
-                  <Icon name="computer" className="w-4 h-4 text-cyan-400" />
-                )}
-                <span className={`text-xs font-medium ${msg.role === 'user' ? 'text-blue-400' : 'text-cyan-400'}`}>
-                  {msg.role === 'user' ? 'User' : 'Claude'}
-                </span>
+      {messages.map((msg, i) => {
+        if (msg.role === 'system') {
+          return (
+            <div key={i} className="flex justify-center">
+              <div className="w-full max-w-[95%] rounded-xl overflow-hidden bg-gradient-to-br from-purple-900/10 to-purple-900/15 border border-purple-500/20">
+                <div className="px-4 py-2 border-b bg-purple-600/10 border-purple-500/20">
+                  <div className="flex items-center justify-center gap-2">
+                    <Icon name="settings" className="w-4 h-4 text-purple-300" />
+                    <span className="text-xs font-medium text-purple-300">System Prompt</span>
+                  </div>
+                </div>
+                <div className="p-4 max-h-[600px] overflow-y-auto [scrollbar-width:thin]">
+                  <MessageContentRenderer content={msg.content} />
+                </div>
               </div>
             </div>
+          );
+        }
 
-            {/* Message content */}
-            <div className="p-4 max-h-[600px] overflow-y-auto [scrollbar-width:thin]">
-              <MessageContentRenderer content={msg.content} />
+        return (
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div
+              className={`max-w-[85%] rounded-xl overflow-hidden ${
+                msg.role === 'user'
+                  ? 'bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/30'
+                  : 'bg-gradient-to-br from-slate-700/50 to-slate-800/50 border border-slate-600/30'
+              }`}
+            >
+              {/* Role header */}
+              <div
+                className={`px-4 py-2 border-b ${
+                  msg.role === 'user' ? 'bg-blue-600/10 border-blue-500/20' : 'bg-slate-700/30 border-slate-600/20'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {msg.role === 'user' ? (
+                    <Icon name="user" className="w-4 h-4 text-blue-400" />
+                  ) : (
+                    <Icon name="computer" className="w-4 h-4 text-cyan-400" />
+                  )}
+                  <span className={`text-xs font-medium ${msg.role === 'user' ? 'text-blue-400' : 'text-cyan-400'}`}>
+                    {msg.role === 'user' ? 'User' : 'Claude'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Message content */}
+              <div className="p-4 max-h-[600px] overflow-y-auto [scrollbar-width:thin]">
+                <MessageContentRenderer content={msg.content} />
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

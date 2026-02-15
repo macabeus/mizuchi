@@ -55,7 +55,7 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
     const compileResult = await this.#cCompiler.compile(
       context.functionName,
       context.generatedCode,
-      context.config.contextPath,
+      context.contextContent ?? '',
     );
     if (!compileResult.success) {
       const outputError = compileResult.compilationErrors.length

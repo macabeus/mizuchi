@@ -116,6 +116,19 @@ export function Summary({ summary, config }: SummaryProps) {
             </div>
           </div>
 
+          {/* Get Context Script */}
+          {config.getContextScript && (
+            <div className="border-t border-slate-700 pt-4">
+              <details className="group">
+                <summary className="cursor-pointer text-slate-400 hover:text-slate-300 flex items-center gap-2">
+                  <span className="group-open:rotate-90 transition-transform">▶</span>
+                  Get Context Script
+                </summary>
+                <CodeBlock language="shell" code={config.getContextScript} />
+              </details>
+            </div>
+          )}
+
           {/* Compiler Script */}
           <div className="border-t border-slate-700 pt-4">
             <details className="group">
@@ -124,17 +137,6 @@ export function Summary({ summary, config }: SummaryProps) {
                 Compiler Script
               </summary>
               <CodeBlock language="shell" code={config.compilerScript} />
-            </details>
-          </div>
-
-          {/* System prompt */}
-          <div className="border-t border-slate-700 pt-4">
-            <details className="group">
-              <summary className="cursor-pointer text-slate-400 hover:text-slate-300 flex items-center gap-2">
-                <span className="group-open:rotate-90 transition-transform">▶</span>
-                Claude System Prompt
-              </summary>
-              <CodeBlock language="markdown" code={config.claudeSystemPrompt} />
             </details>
           </div>
         </div>

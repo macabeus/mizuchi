@@ -23,7 +23,8 @@ function formatDuration(ms: number): string {
 
 export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps) {
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
-  const [prePipelinePluginId, setPrePipelinePluginId] = useState<string | null>(null);
+  const [setupFlowPluginId, setSetupFlowPluginId] = useState<string | null>(null);
+  const [programmaticFlowPluginId, setProgrammaticFlowPluginId] = useState<string | null>(null);
 
   const promptName = result.promptPath.split('/').pop() || result.promptPath;
 
@@ -80,17 +81,23 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
                 id: 'finalCode',
                 type: 'button',
                 label: 'Final Code',
-                icon: 'code' as const,
+                icon: 'code',
               },
               {
                 id: 'flows',
                 type: 'divider',
               },
               {
+                id: 'setupFlow',
+                type: 'button',
+                label: 'Setup Flow',
+                icon: 'document',
+              },
+              {
                 id: 'programmaticFlow',
                 type: 'button',
                 label: 'Programmatic Flow',
-                icon: 'settings' as const,
+                icon: 'settings',
                 disabled: !result.programmaticFlow,
                 tooltip: 'Programmatic-flow is not enabled.',
               },
@@ -98,7 +105,7 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
                 id: 'aiPoweredFlow',
                 type: 'button',
                 label: 'AI-Powered Flow',
-                icon: 'sparkles' as const,
+                icon: 'sparkles',
                 disabled: result.attempts.length === 0,
                 tooltip: 'No AI-powered attempts available for this prompt.',
               },
@@ -108,12 +115,20 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
               switch (tab.id) {
                 case 'finalCode':
                   return <BestResultCode result={result} />;
+                case 'setupFlow':
+                  return (
+                    <AttemptContent
+                      attempt={result.setupFlow}
+                      selectedPluginId={setupFlowPluginId}
+                      onSelectPlugin={setSetupFlowPluginId}
+                    />
+                  );
                 case 'programmaticFlow':
                   return (
                     <AttemptContent
                       attempt={result.programmaticFlow!}
-                      selectedPluginId={prePipelinePluginId}
-                      onSelectPlugin={setPrePipelinePluginId}
+                      selectedPluginId={programmaticFlowPluginId}
+                      onSelectPlugin={setProgrammaticFlowPluginId}
                     />
                   );
                 case 'aiPoweredFlow':

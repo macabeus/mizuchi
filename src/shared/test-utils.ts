@@ -11,7 +11,7 @@ import type { PipelineContext } from './types.js';
  * Default global pipeline config for tests
  */
 export const defaultTestPipelineConfig: PipelineConfig = {
-  contextPath: '/test/context.h',
+  getContextScript: 'echo ""',
   outputDir: '/test/output',
   compilerScript: getArmCompilerScript(),
   maxRetries: 3,
@@ -37,6 +37,8 @@ export function createTestContext(overrides: Partial<PipelineContext> = {}): Pip
     maxRetries: 3,
     config: defaultTestPipelineConfig,
     targetObjectPath: '/test/target.o',
+    contextContent: '',
+    contextFilePath: '',
     ...overrides,
   };
 }

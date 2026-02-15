@@ -87,7 +87,7 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
         asmContent: context.asm,
         functionName: context.functionName,
         target: m2cTarget,
-        contextPath: context.config.contextPath,
+        contextPath: context.contextFilePath,
       });
 
       if (!m2cResult.success) {

@@ -502,6 +502,125 @@ describe('PluginManager', () => {
     });
   });
 
+  describe('.registerSetupFlow', () => {
+    it('registers setup-flow plugins and returns the manager for chaining', () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+      const plugin = createSuccessPlugin('pre1', 'Pre Plugin 1');
+
+      const result = manager.registerSetupFlow(plugin);
+
+      expect(result).toBe(manager);
+      expect(manager.getSetupFlowPlugins()).toContain(plugin);
+    });
+  });
+
+  describe('setup-flow', () => {
+    it('runs setup-flow before programmatic-flow and carries context forward', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+      const executionOrder: string[] = [];
+
+      const setupFlowPlugin = createMockPlugin({
+        id: 'get-context',
+        name: 'Get Context',
+        executeFn: async (ctx) => {
+          executionOrder.push('get-context');
+          return {
+            result: {
+              pluginId: 'get-context',
+              pluginName: 'Get Context',
+              status: 'success',
+              durationMs: 10,
+            },
+            context: { ...ctx, contextContent: 'typedef int s32;', contextFilePath: '/tmp/ctx.h' },
+          };
+        },
+      });
+
+      let receivedContextContent: string | undefined;
+      const mainPlugin = createMockPlugin({
+        id: 'main1',
+        name: 'Main Plugin',
+        executeFn: async (ctx) => {
+          executionOrder.push('main1');
+          receivedContextContent = ctx.contextContent;
+          return {
+            result: { pluginId: 'main1', pluginName: 'Main Plugin', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+
+      manager.registerSetupFlow(setupFlowPlugin);
+      manager.register(mainPlugin);
+
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
+
+      expect(executionOrder).toEqual(['get-context', 'main1']);
+      expect(result.success).toBe(true);
+      expect(result.setupFlow).toBeDefined();
+      expect(result.setupFlow!.success).toBe(true);
+      expect(receivedContextContent).toBe('typedef int s32;');
+    });
+
+    it('fails fatally when setup-flow fails (no retry)', async () => {
+      const config = { ...defaultTestPipelineConfig, maxRetries: 3 };
+      const manager = new PluginManager(config);
+
+      manager.registerSetupFlow(createFailurePlugin('get-context', 'Get Context', 'Script failed'));
+      manager.register(createSuccessPlugin('main1', 'Main Plugin'));
+
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.setupFlow).toBeDefined();
+      expect(result.setupFlow!.success).toBe(false);
+      expect(result.attempts).toHaveLength(0);
+    });
+
+    it('carries context to programmatic-flow when both are configured', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+
+      const setupFlowPlugin = createMockPlugin({
+        id: 'get-context',
+        name: 'Get Context',
+        contextUpdates: { contextContent: 'typedef int u32;', contextFilePath: '/tmp/ctx.h' },
+      });
+
+      let receivedContextContent: string | undefined;
+      const programmaticPlugin = createMockPlugin({
+        id: 'programmatic',
+        name: 'Programmatic',
+        executeFn: async (ctx) => {
+          receivedContextContent = ctx.contextContent;
+          return {
+            result: { pluginId: 'programmatic', pluginName: 'Programmatic', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+
+      manager.registerSetupFlow(setupFlowPlugin);
+      manager.registerProgrammaticFlow(programmaticPlugin);
+      manager.register(createSuccessPlugin('main1', 'Main Plugin'));
+
+      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
+
+      expect(receivedContextContent).toBe('typedef int u32;');
+    });
+  });
+
   describe('.runBenchmark', () => {
     it('runs pipeline for all prompts', async () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
