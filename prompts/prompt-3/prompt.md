@@ -331,34 +331,6 @@ typedef struct Task {
 } Task;
 ```
 
-```c
-typedef struct Task {
-    /* 0x00 */ TaskPtr parent;
-    /* 0x02 */ TaskPtr prev;
-    /* 0x04 */ TaskPtr next;
-    /* 0x06 */ IwramData data;
-#if PORTABLE
-    u32 dataSize;
-#endif // PORTABLE
-    /* 0x08 */ TaskMain main;
-    /* 0x0C */ TaskDestructor dtor;
-    /* 0x10 */ u16 priority; // priority?
-    /* 0x12 */ u16 flags; // 0x1  = active
-                          // 0x2  = ???
-                          // 0x10 = use ewram for struct
-#if USE_SA2_TASK_SYSTEM
-    /* 0x14 */ u8 unk14;
-    /* 0x15 */ u8 unk15;
-    /* 0x16 */ u16 unk16;
-    /* 0x18 */ u16 unk18;
-#endif // USE_SA2_TASK_SYSTEM
-
-#if ENABLE_TASK_LOGGING
-    const char *name;
-#endif
-} Task;
-```
-
 # Primary Objective
 
 Decompile the following target assembly function from `asm/code.s` into clean, readable C code that compiles to an assembly matching EXACTLY the original one.

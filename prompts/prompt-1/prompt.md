@@ -129,19 +129,6 @@ bx r0
 
 ```c
 typedef struct Task {
-               TaskPtr parent;
-               TaskPtr prev;
-               TaskPtr next;
-               IwramData data;
-               TaskMain main;
-               TaskDestructor dtor;
-               u16 priority;
-               u16 flags;
-} Task;
-```
-
-```c
-typedef struct Task {
     /* 0x00 */ TaskPtr parent;
     /* 0x02 */ TaskPtr prev;
     /* 0x04 */ TaskPtr next;

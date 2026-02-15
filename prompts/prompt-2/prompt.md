@@ -506,40 +506,6 @@ bx r0
 
 ```c
 typedef struct {
-               u8 *tiles;
-               u32 frameNum;
-               u32 frameFlags;
-               u16 anim;
-               u16 animCursor;
-               s16 x;
-               s16 y;
-               s16 oamFlags;
-               s16 qAnimDelay;
-               u16 prevAnim;
-               u8 variant;
-               u8 prevVariant;
-               u8 animSpeed;
-               u8 oamBaseIndex;
-               u8 numSubFrames;
-               u8 palId;
-               Hitbox hitboxes[1];
-} Sprite;
-```
-
-```c
-typedef enum {
-    ACMD_RESULT__ANIM_CHANGED = -1,
-    ACMD_RESULT__ENDED = 0,
-    ACMD_RESULT__RUNNING = +1,
-} AnimCmdResult;
-```
-
-```c
-typedef AnimCmdResult (*AnimationCommandFunc)(void *cursor, Sprite *sprite);
-```
-
-```c
-typedef struct {
     /* 0x00 */ u8 *tiles; // in VRAM
     /* 0x04 */ u32 frameNum;
 
@@ -579,14 +545,6 @@ typedef struct {
     /* 0x1F */ u8 palId; // (0 - 15)
     /* 0x20 */ Hitbox hitboxes[1];
 } Sprite;
-```
-
-```c
-typedef enum {
-    ACMD_RESULT__ANIM_CHANGED = -1,
-    ACMD_RESULT__ENDED = 0,
-    ACMD_RESULT__RUNNING = +1,
-} AnimCmdResult;
 ```
 
 ```c
