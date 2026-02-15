@@ -136,6 +136,10 @@ plugins:
 
       - You might need to duplicate a structs if you identify that a struct might be wrong. If that's the case, duplicate it with a new name and modify it as needed.
 
+      - Before referencing any function or global variable, verify it exists by searching the context file. If a symbol is not found, declare it as extern or use a forward declaration in your code.
+
+      - ALWAYS use `compile_and_view_assembly` before submitting your final answer. Never submit code that you haven't test-compiled. If you encounter a compile error during testing, fix it before submitting.
+
       # Additional Guidelines
 
       - Test after each significant change
