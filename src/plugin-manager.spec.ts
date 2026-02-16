@@ -858,5 +858,102 @@ describe('PluginManager', () => {
       expect(results.results).toHaveLength(1);
       expect(results.results[0].success).toBe(false);
     });
+
+    it('catches unexpected errors escaping runPipeline and continues to next prompt', async () => {
+      const config = { ...defaultTestPipelineConfig, maxRetries: 2 };
+      const manager = new PluginManager(config);
+
+      let promptIndex = 0;
+      const plugin = createMockPlugin({
+        id: 'plugin1',
+        name: 'Plugin 1',
+        executeFn: async (ctx) => {
+          promptIndex++;
+          // First prompt always fails (to trigger prepareRetry)
+          // Second prompt succeeds
+          if (promptIndex === 1) {
+            return {
+              result: {
+                pluginId: 'plugin1',
+                pluginName: 'Plugin 1',
+                status: 'failure',
+                durationMs: 10,
+                error: 'Failed',
+              },
+              context: ctx,
+            };
+          }
+          return {
+            result: { pluginId: 'plugin1', pluginName: 'Plugin 1', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+        // prepareRetry throws, causing error to escape runPipeline
+        prepareRetryFn: () => {
+          throw new Error('prepareRetry crashed');
+        },
+      });
+
+      manager.register(plugin);
+
+      const prompts = [
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/target1.o',
+          asm: '.text\n',
+        },
+        {
+          path: 'prompt2.md',
+          content: 'content2',
+          functionName: 'func2',
+          targetObjectPath: '/target2.o',
+          asm: '.text\n',
+        },
+      ];
+
+      const results = await manager.runBenchmark(prompts);
+
+      // First prompt should be recorded as failed (not lost)
+      expect(results.results).toHaveLength(2);
+      expect(results.results[0].functionName).toBe('func1');
+      expect(results.results[0].success).toBe(false);
+      expect(results.results[0].setupFlow.pluginResults[0].error).toContain('prepareRetry crashed');
+
+      // Second prompt should still be processed
+      expect(results.results[1].functionName).toBe('func2');
+      expect(results.results[1].success).toBe(true);
+    });
+
+    it('records error message in failed result when unexpected error occurs', async () => {
+      const config = { ...defaultTestPipelineConfig, maxRetries: 2 };
+      const manager = new PluginManager(config);
+
+      const plugin = createMockPlugin({
+        id: 'plugin1',
+        name: 'Plugin 1',
+        executeResult: { status: 'failure', error: 'Always fails' },
+        prepareRetryFn: () => {
+          throw new Error('Specific crash reason');
+        },
+      });
+
+      manager.register(plugin);
+
+      const results = await manager.runBenchmark([
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/target1.o',
+          asm: '.text\n',
+        },
+      ]);
+
+      expect(results.results).toHaveLength(1);
+      expect(results.results[0].success).toBe(false);
+      expect(results.results[0].setupFlow.pluginResults[0].error).toContain('Specific crash reason');
+    });
   });
 });

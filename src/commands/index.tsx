@@ -567,6 +567,9 @@ async function runPipeline(
   setState: React.Dispatch<React.SetStateAction<ProgressState>>,
   cliPrompt: CliPrompt,
 ): Promise<void> {
+  let claudePlugin: ClaudeRunnerPlugin | undefined;
+  let compilerPlugin: CompilerPlugin | undefined;
+
   try {
     // Load configuration from file (if exists)
     const configPath = getConfigFilePath(opts.config);
@@ -661,14 +664,14 @@ async function runPipeline(
 
     // Create plugins
     const getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript);
-    const claudePlugin = new ClaudeRunnerPlugin({
+    claudePlugin = new ClaudeRunnerPlugin({
       config: claudeRunnerConfig,
       pipelineConfig,
       cCompiler,
       objdiff,
       cliPrompt,
     });
-    const compilerPlugin = new CompilerPlugin(cCompiler);
+    compilerPlugin = new CompilerPlugin(cCompiler);
     const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
 
     // Register setup flow plugins
@@ -727,6 +730,18 @@ async function runPipeline(
       process.exit(exitCode);
     }, 1);
   } catch (error) {
+    // Save cache before exiting so progress from completed prompts is not lost
+    try {
+      await claudePlugin?.saveCache();
+    } catch {
+      // Best-effort cache save
+    }
+    try {
+      await compilerPlugin?.cleanup();
+    } catch {
+      // Best-effort cleanup
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     setState((prev) => ({ ...prev, phase: 'error', errorMessage: message }));
 

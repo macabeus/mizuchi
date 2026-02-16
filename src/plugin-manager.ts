@@ -459,7 +459,41 @@ export class PluginManager {
           });
           break;
         }
-        throw error;
+
+        // Unexpected error — record as failed result and continue with next prompt
+        // TODO: The error is saved in the setup flow, although it could have happened in any plugin.
+        //       We may want to enhance this later to capture more details about where the error occurred.
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        results.push({
+          promptPath: prompt.path,
+          functionName: prompt.functionName,
+          success: false,
+          attempts: [],
+          totalDurationMs: 0,
+          setupFlow: {
+            attemptNumber: 0,
+            pluginResults: [
+              {
+                pluginId: 'pipeline',
+                pluginName: 'Pipeline',
+                status: 'failure',
+                durationMs: 0,
+                error: `Unexpected error during one of the plugin executions:\n\n${errorMessage}`,
+              },
+            ],
+            success: false,
+            durationMs: 0,
+          },
+        });
+
+        this.#emit({
+          type: 'prompt-complete',
+          promptPath: prompt.path,
+          functionName: prompt.functionName,
+          success: false,
+          attemptsUsed: 0,
+          durationMs: 0,
+        });
       }
     }
 
