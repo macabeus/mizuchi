@@ -1,8 +1,8 @@
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { option } from 'pastel';
 import path from 'path';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 
 import {
@@ -30,6 +30,7 @@ import {
   transformToReport,
 } from '~/report-generator/index.js';
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
+import type { CliPrompt, CliPromptChoice } from '~/shared/cli-prompt.js';
 import { PipelineConfig } from '~/shared/config';
 import { Objdiff } from '~/shared/objdiff.js';
 import type { PipelineEvent, PluginInfo } from '~/shared/pipeline-events.js';
@@ -104,6 +105,11 @@ interface ProgressState {
   htmlReportPath?: string;
   // Error message
   errorMessage?: string;
+  // Active interactive prompt
+  activePrompt: {
+    message: string;
+    choices: readonly CliPromptChoice[];
+  } | null;
 }
 
 export default function Index({ options: opts }: Props) {
@@ -113,7 +119,34 @@ export default function Index({ options: opts }: Props) {
     plugins: [],
     pluginStatuses: [],
     completedPrompts: [],
+    activePrompt: null,
   });
+
+  // Ref to store the resolve function for the active interactive prompt
+  const promptResolveRef = useRef<((value: string) => void) | null>(null);
+
+  // Create CLI prompt implementation (promise-bridge between async plugin code and React UI)
+  const cliPrompt: CliPrompt = useMemo(
+    () => ({
+      askChoice: <T extends string>(message: string, choices: readonly CliPromptChoice<T>[]) => {
+        return new Promise<T>((resolve) => {
+          promptResolveRef.current = resolve as (value: string) => void;
+          setState((prev) => ({
+            ...prev,
+            activePrompt: { message, choices: choices as readonly CliPromptChoice[] },
+          }));
+        });
+      },
+    }),
+    [],
+  );
+
+  const handlePromptSelect = useCallback((value: string) => {
+    const resolve = promptResolveRef.current;
+    promptResolveRef.current = null;
+    setState((prev) => ({ ...prev, activePrompt: null }));
+    resolve?.(value);
+  }, []);
 
   const handleEvent = useCallback((event: PipelineEvent) => {
     setState((prev) => {
@@ -240,8 +273,8 @@ export default function Index({ options: opts }: Props) {
   }, []);
 
   useEffect(() => {
-    runPipeline(opts, handleEvent, setState);
-  }, [opts, handleEvent]);
+    runPipeline(opts, handleEvent, setState, cliPrompt);
+  }, [opts, handleEvent, cliPrompt]);
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -302,9 +335,13 @@ export default function Index({ options: opts }: Props) {
           )}
 
           <Box marginBottom={1}>
-            <Text color="yellow">
-              <Spinner type="dots" /> {state.currentFlow}
-            </Text>
+            {state.activePrompt ? (
+              <Text dimColor>Paused</Text>
+            ) : (
+              <Text color="yellow">
+                <Spinner type="dots" /> {state.currentFlow}
+              </Text>
+            )}
           </Box>
 
           {/* Current attempt */}
@@ -319,9 +356,12 @@ export default function Index({ options: opts }: Props) {
           {/* Plugin statuses */}
           <Box flexDirection="column" marginLeft={2}>
             {state.pluginStatuses.map((plugin) => (
-              <PluginStatusLine key={plugin.id} plugin={plugin} />
+              <PluginStatusLine key={plugin.id} plugin={plugin} spinnersPaused={!!state.activePrompt} />
             ))}
           </Box>
+
+          {/* Interactive prompt (e.g., usage limit pause) */}
+          {state.activePrompt && <InteractivePrompt prompt={state.activePrompt} onSelect={handlePromptSelect} />}
 
           {/* Completed prompts summary */}
           {state.completedPrompts.length > 0 && (
@@ -356,13 +396,15 @@ export default function Index({ options: opts }: Props) {
 /**
  * Renders a single plugin's status
  */
-function PluginStatusLine({ plugin }: { plugin: PluginStatus }) {
+function PluginStatusLine({ plugin, spinnersPaused }: { plugin: PluginStatus; spinnersPaused: boolean }) {
   const getStatusIcon = () => {
     switch (plugin.status) {
       case 'pending':
         return <Text dimColor>-</Text>;
       case 'running':
-        return (
+        return spinnersPaused ? (
+          <Text color="yellow">~</Text>
+        ) : (
           <Text color="yellow">
             <Spinner type="dots" />
           </Text>
@@ -407,6 +449,49 @@ function PluginStatusLine({ plugin }: { plugin: PluginStatus }) {
                 ? `Done (${plugin.durationMs}ms)`
                 : ''}
       </Text>
+    </Box>
+  );
+}
+
+/**
+ * Renders an interactive choice prompt, pausing the pipeline until the user responds.
+ */
+function InteractivePrompt({
+  prompt,
+  onSelect,
+}: {
+  prompt: { message: string; choices: readonly CliPromptChoice[] };
+  onSelect: (value: string) => void;
+}) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useInput((_input, key) => {
+    if (key.upArrow) {
+      setSelectedIndex((prev) => Math.max(0, prev - 1));
+    } else if (key.downArrow) {
+      setSelectedIndex((prev) => Math.min(prompt.choices.length - 1, prev + 1));
+    } else if (key.return) {
+      onSelect(prompt.choices[selectedIndex]!.value);
+    }
+  });
+
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {prompt.message.split('\n').map((line, i) => (
+        <Text key={i} color="yellow">
+          {i === 0 ? '! ' : '  '}
+          {line}
+        </Text>
+      ))}
+
+      <Box flexDirection="column" marginTop={1} marginLeft={4}>
+        {prompt.choices.map((choice, i) => (
+          <Text key={choice.value} color={i === selectedIndex ? 'cyan' : undefined} bold={i === selectedIndex}>
+            {i === selectedIndex ? '> ' : '  '}
+            {choice.label}
+          </Text>
+        ))}
+      </Box>
     </Box>
   );
 }
@@ -480,6 +565,7 @@ async function runPipeline(
   opts: z.infer<typeof options>,
   onEvent: (event: PipelineEvent) => void,
   setState: React.Dispatch<React.SetStateAction<ProgressState>>,
+  cliPrompt: CliPrompt,
 ): Promise<void> {
   try {
     // Load configuration from file (if exists)
@@ -575,7 +661,13 @@ async function runPipeline(
 
     // Create plugins
     const getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript);
-    const claudePlugin = new ClaudeRunnerPlugin(claudeRunnerConfig, pipelineConfig, cCompiler, objdiff);
+    const claudePlugin = new ClaudeRunnerPlugin({
+      config: claudeRunnerConfig,
+      pipelineConfig,
+      cCompiler,
+      objdiff,
+      cliPrompt,
+    });
     const compilerPlugin = new CompilerPlugin(cCompiler);
     const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
 

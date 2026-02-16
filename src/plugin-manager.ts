@@ -5,6 +5,7 @@
  * Handles retry logic and context propagation between plugins.
  */
 import { PipelineConfig } from './shared/config.js';
+import { PipelineAbortError } from './shared/errors.js';
 import type { PipelineEventHandler } from './shared/pipeline-events.js';
 import type {
   AttemptResult,
@@ -324,6 +325,11 @@ export class PluginManager {
           shouldStop = true;
         }
       } catch (error) {
+        // PipelineAbortError must propagate immediately for graceful shutdown
+        if (error instanceof PipelineAbortError) {
+          throw error;
+        }
+
         const errorMessage = error instanceof Error ? error.message : String(error);
         const durationMs = Date.now() - pluginStartTime;
 
@@ -421,24 +427,40 @@ export class PluginManager {
         totalPrompts: prompts.length,
       });
 
-      const result = await this.runPipeline(
-        prompt.path,
-        prompt.content,
-        prompt.functionName,
-        prompt.targetObjectPath,
-        prompt.asm,
-      );
+      try {
+        const result = await this.runPipeline(
+          prompt.path,
+          prompt.content,
+          prompt.functionName,
+          prompt.targetObjectPath,
+          prompt.asm,
+        );
 
-      this.#emit({
-        type: 'prompt-complete',
-        promptPath: prompt.path,
-        functionName: prompt.functionName,
-        success: result.success,
-        attemptsUsed: result.attempts.length,
-        durationMs: result.totalDurationMs,
-      });
+        this.#emit({
+          type: 'prompt-complete',
+          promptPath: prompt.path,
+          functionName: prompt.functionName,
+          success: result.success,
+          attemptsUsed: result.attempts.length,
+          durationMs: result.totalDurationMs,
+        });
 
-      results.push(result);
+        results.push(result);
+      } catch (error) {
+        if (error instanceof PipelineAbortError) {
+          // Pipeline is aborted — stop processing and return partial results
+          this.#emit({
+            type: 'prompt-complete',
+            promptPath: prompt.path,
+            functionName: prompt.functionName,
+            success: false,
+            attemptsUsed: 0,
+            durationMs: 0,
+          });
+          break;
+        }
+        throw error;
+      }
     }
 
     // Calculate summary

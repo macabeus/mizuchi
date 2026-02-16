@@ -6,14 +6,16 @@
  *
  * Cache uses a conversation tree structure to track multi-turn interactions.
  */
-import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import { SDKAssistantMessageError, createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
 import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
 
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
+import type { CliPrompt } from '~/shared/cli-prompt.js';
 import { PipelineConfig } from '~/shared/config';
+import { PipelineAbortError, UsageLimitError } from '~/shared/errors.js';
 import { Objdiff } from '~/shared/objdiff.js';
 import type {
   ChatMessage,
@@ -68,6 +70,7 @@ interface SDKMessage {
   };
   subtype?: string;
   errors?: string[];
+  error?: SDKAssistantMessageError;
 }
 
 /**
@@ -369,14 +372,23 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #cCompiler: CCompiler;
   #objdiff: Objdiff;
   #mcpServer: McpServer;
+  #cliPrompt?: CliPrompt;
 
-  constructor(
-    config: ClaudeRunnerConfig,
-    pipelineConfig: PipelineConfig,
-    cCompiler: CCompiler,
-    objdiff: Objdiff,
-    queryFactory?: QueryFactory,
-  ) {
+  constructor({
+    config,
+    pipelineConfig,
+    cCompiler,
+    objdiff,
+    queryFactory,
+    cliPrompt,
+  }: {
+    config: ClaudeRunnerConfig;
+    pipelineConfig: PipelineConfig;
+    cCompiler: CCompiler;
+    objdiff: Objdiff;
+    queryFactory?: QueryFactory;
+    cliPrompt?: CliPrompt;
+  }) {
     this.#systemPromptTemplate = config.systemPrompt;
 
     this.#config = config;
@@ -402,6 +414,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             },
           },
         }) as unknown as Query);
+
+    this.#cliPrompt = cliPrompt;
 
     // Resolve cache path relative to output directory or current directory
     const baseDir = pipelineConfig?.outputDir || process.cwd();
@@ -567,25 +581,33 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   async #collectResponse(queryObj: Query): Promise<{ text: string; contentBlocks: ContentBlock[] }> {
     let responseText = '';
     const contentBlocks: ContentBlock[] = [];
+    let lastAssistantError: SDKAssistantMessageError | undefined;
 
     for await (const msg of queryObj) {
       if (msg.type === 'system' && msg.session_id) {
         this.#sessionId = msg.session_id;
-      } else if (msg.type === 'assistant' && msg.message?.content) {
-        if (msg.message.id) {
-          this.#lastMessageId = msg.message.id;
+      } else if (msg.type === 'assistant') {
+        // Track error type from assistant messages (e.g., 'rate_limit', 'billing_error')
+        if (msg.error) {
+          lastAssistantError = msg.error;
         }
-        for (const block of msg.message.content) {
-          if (block.type === 'text' && 'text' in block && block.text) {
-            responseText += block.text;
-            contentBlocks.push({ type: 'text', text: block.text });
-          } else if (block.type === 'tool_use' && 'id' in block && 'name' in block && 'input' in block) {
-            contentBlocks.push({
-              type: 'tool_use',
-              id: block.id,
-              name: block.name,
-              input: block.input as Record<string, unknown>,
-            });
+
+        if (msg.message?.content) {
+          if (msg.message.id) {
+            this.#lastMessageId = msg.message.id;
+          }
+          for (const block of msg.message.content) {
+            if (block.type === 'text' && 'text' in block && block.text) {
+              responseText += block.text;
+              contentBlocks.push({ type: 'text', text: block.text });
+            } else if (block.type === 'tool_use' && 'id' in block && 'name' in block && 'input' in block) {
+              contentBlocks.push({
+                type: 'tool_use',
+                id: block.id,
+                name: block.name,
+                input: block.input as Record<string, unknown>,
+              });
+            }
           }
         }
       } else if (msg.type === 'user' && msg.message?.content) {
@@ -602,6 +624,12 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       } else if (msg.type === 'result') {
         if (msg.subtype && msg.subtype !== 'success') {
           const errors = msg.errors ? msg.errors.join(', ') : 'Unknown error';
+
+          // Detect usage limit errors (plan-level rate limit or billing error)
+          if (lastAssistantError === 'rate_limit' || lastAssistantError === 'billing_error') {
+            throw new UsageLimitError(errors);
+          }
+
           throw new Error(`Claude error (${msg.subtype}): ${errors}`);
         }
       }
@@ -777,6 +805,66 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     this.#lastStallAttemptIndex = -1;
   }
 
+  /**
+   * Run the appropriate query (initial or follow-up) based on current state.
+   */
+  async #executeQuery(
+    context: PipelineContext,
+    promptContent: string,
+  ): Promise<{ response: string; fromCache: boolean; promptUsed: string }> {
+    if (this.#feedbackPrompt) {
+      const promptUsed = this.#feedbackPrompt;
+      const result = await this.#runFollowUpQuery(this.#feedbackPrompt);
+      this.#feedbackPrompt = undefined;
+      return { response: result.response, fromCache: result.fromCache, promptUsed };
+    }
+
+    // Initial attempt: run new query
+    this.#resetState();
+
+    // Build system prompt by resolving template variables
+    this.systemPrompt = this.#systemPromptTemplate
+      .replaceAll('{{contextFilePath}}', context.contextFilePath ?? '')
+      .replaceAll('{{promptContent}}', promptContent);
+
+    const result = await this.#runInitialQuery();
+    return { response: result.response, fromCache: result.fromCache, promptUsed: this.#config.kickoffMessage };
+  }
+
+  /**
+   * Wrap a query with usage-limit pause/resume handling.
+   * On UsageLimitError, prompts the user to continue or abort.
+   * On "continue", recursively retries. On "abort", throws PipelineAbortError.
+   */
+  async #executeQueryWithUsageLimitHandling(
+    context: PipelineContext,
+    promptContent: string,
+  ): Promise<{ response: string; fromCache: boolean; promptUsed: string }> {
+    try {
+      return await this.#executeQuery(context, promptContent);
+    } catch (error) {
+      if (error instanceof UsageLimitError && this.#cliPrompt) {
+        const attemptInfo = `attempt ${context.attemptNumber}/${context.maxRetries}`;
+        const message =
+          `API plan usage limit reached while processing "${context.functionName}" (${attemptInfo}).\n` +
+          `  ${error.message}\n` +
+          `  Wait for the limit to reset, then choose an option:`;
+
+        const choice = await this.#cliPrompt.askChoice(message, [
+          { label: 'Continue', value: 'continue' },
+          { label: 'Abort', value: 'abort' },
+        ]);
+
+        if (choice === 'abort') {
+          throw new PipelineAbortError();
+        }
+
+        return this.#executeQueryWithUsageLimitHandling(context, promptContent);
+      }
+      throw error;
+    }
+  }
+
   async execute(context: PipelineContext): Promise<{
     result: PluginResult<ClaudeRunnerResult>;
     context: PipelineContext;
@@ -804,36 +892,15 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       // Load cache on first execution
       await this.#loadCache();
 
-      let response: string;
-      let fromCache: boolean;
-      let promptUsed: string;
-
-      if (this.#feedbackPrompt) {
-        // Retry: continue with follow-up query
-        promptUsed = this.#feedbackPrompt;
-        const result = await this.#runFollowUpQuery(this.#feedbackPrompt);
-        response = result.response;
-        fromCache = result.fromCache;
-        this.#feedbackPrompt = undefined;
-      } else {
-        // Initial attempt: run new query
-        this.#resetState();
-
-        // Enhance prompt with context from programmatic-flow if available
-        if (context.m2cContext) {
-          promptContent += buildM2cContextSection(context.m2cContext);
-        }
-
-        // Build system prompt by resolving template variables
-        this.systemPrompt = this.#systemPromptTemplate
-          .replaceAll('{{contextFilePath}}', context.contextFilePath ?? '')
-          .replaceAll('{{promptContent}}', promptContent);
-
-        promptUsed = this.#config.kickoffMessage;
-        const result = await this.#runInitialQuery();
-        response = result.response;
-        fromCache = result.fromCache;
+      // Enhance prompt with context from programmatic-flow if available
+      if (context.m2cContext) {
+        promptContent += buildM2cContextSection(context.m2cContext);
       }
+
+      const { response, fromCache, promptUsed } = await this.#executeQueryWithUsageLimitHandling(
+        context,
+        promptContent,
+      );
 
       // Extract code
       const code = extractCCode(response);
@@ -903,6 +970,11 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         context: { ...context, generatedCode: code },
       };
     } catch (error) {
+      // PipelineAbortError must propagate to PluginManager for graceful shutdown
+      if (error instanceof PipelineAbortError) {
+        throw error;
+      }
+
       return {
         result: {
           pluginId: this.id,

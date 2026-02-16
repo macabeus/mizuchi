@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginManager } from './plugin-manager.js';
+import { PipelineAbortError } from './shared/errors.js';
 import {
   createFailurePlugin,
   createMockPlugin,
@@ -767,6 +768,95 @@ describe('PluginManager', () => {
       expect(results.summary).toHaveProperty('successRate');
       expect(results.summary).toHaveProperty('avgAttempts');
       expect(results.summary).toHaveProperty('totalDurationMs');
+    });
+
+    it('stops processing and returns partial results on PipelineAbortError', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+
+      let callCount = 0;
+      const plugin = createMockPlugin({
+        id: 'plugin1',
+        name: 'Plugin 1',
+        executeFn: async (ctx) => {
+          callCount++;
+          // Second prompt throws PipelineAbortError
+          if (callCount === 2) {
+            throw new PipelineAbortError();
+          }
+          return {
+            result: { pluginId: 'plugin1', pluginName: 'Plugin 1', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+
+      manager.register(plugin);
+
+      const prompts = [
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/target1.o',
+          asm: '.text\n',
+        },
+        {
+          path: 'prompt2.md',
+          content: 'content2',
+          functionName: 'func2',
+          targetObjectPath: '/target2.o',
+          asm: '.text\n',
+        },
+        {
+          path: 'prompt3.md',
+          content: 'content3',
+          functionName: 'func3',
+          targetObjectPath: '/target3.o',
+          asm: '.text\n',
+        },
+      ];
+
+      const results = await manager.runBenchmark(prompts);
+
+      // Should have only the first prompt's result (second aborted, third never processed)
+      expect(results.results).toHaveLength(1);
+      expect(results.results[0].functionName).toBe('func1');
+      expect(results.results[0].success).toBe(true);
+
+      // Summary should reflect partial results
+      expect(results.summary.totalPrompts).toBe(1);
+      expect(results.summary.successfulPrompts).toBe(1);
+
+      // Plugin was called twice (first succeeded, second threw abort)
+      expect(callCount).toBe(2);
+    });
+
+    it('propagates non-abort errors from plugins', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+
+      const plugin = createMockPlugin({
+        id: 'plugin1',
+        name: 'Plugin 1',
+        executeFn: async () => {
+          throw new Error('Unexpected crash');
+        },
+      });
+
+      manager.register(plugin);
+
+      // Regular errors are caught by #runAttempt and turned into failure results
+      const results = await manager.runBenchmark([
+        {
+          path: 'prompt1.md',
+          content: 'content1',
+          functionName: 'func1',
+          targetObjectPath: '/target1.o',
+          asm: '.text\n',
+        },
+      ]);
+
+      expect(results.results).toHaveLength(1);
+      expect(results.results[0].success).toBe(false);
     });
   });
 });
