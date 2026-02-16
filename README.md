@@ -9,7 +9,7 @@ Mizuchi automates the cycle of writing C code, compiling, and comparing against 
 It orchestrates a plugin-based pipeline that can leverage programmatic and AI-powered tools to automatically decompile assembly functions to C source code that produces byte-for-byte identical machine code when compiled.
 
 - ✨ Automatic retries with detailed context on compilation or match failures
-- 🐍 Integration with [m2c](https://github.com/matt-kempster/m2c) and [objdiff](https://github.com/encounter/objdiff/)
+- 🐍 Integration with Claude, [m2c](https://github.com/matt-kempster/m2c) and [objdiff](https://github.com/encounter/objdiff/).
 - 📊 Beautiful report UI
 
 <img width="1143" height="1057" alt="image" src="https://github.com/user-attachments/assets/025e6a00-7a6a-4425-9c11-8b86619cd546" />
@@ -38,12 +38,6 @@ It orchestrates a plugin-based pipeline that can leverage programmatic and AI-po
 > :warning: **Work in Progress**
 >
 > Mizuchi is currently focused on benchmarking LLM prompt effectiveness, with plans to become a general-purpose decompilation automation tool. Check the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
-
----
-
-> 🚏 **Mizuchi vs Alternatives**
->
-> [**Ralph**](https://github.com/frankbria/ralph-claude-code) is useful for iterating on repetitive tasks with Claude Code. Mizuchi differs by generating detailed reports and offering a plugin architecture for adding custom pipeline steps, with plans to support workflows beyond AI-based approaches.
 
 ## Installation
 
@@ -128,13 +122,24 @@ Mizuchi executes a sequential pipeline of plugins:
 
 ```mermaid
 flowchart TD
-  A[Prompt Loader] --> |Load prompts from directory| M
+  A[Prompt Loader] --> |Load prompts from directory| O
+
+  subgraph Setup Flow
+    O[Get Context]
+  end
+
+  O --> M
 
   subgraph Programmatic Flow
-    M[m2c] --> |Generate C| MC[Compiler]
+    M[m2c]
+    MC[Compiler]
+
+    M --> |Generate C| MC
     MC --> |Compile to object file| MD[Objdiff]
   end
 
+  M --> |m2c error| B
+  MC --> |Compilation Error| B
   MD --> |Match found| E[Success]
   MD --> |No match| B
 
@@ -142,6 +147,7 @@ flowchart TD
     B[Claude Runner]
     C[Compiler]
     D[Objdiff]
+
     B --> |Generate C| C
     C --> |Compilation Error → Retry| B
     C --> |Compile to object file| D
