@@ -147,6 +147,7 @@ const defaultPluginConfig: ClaudeRunnerConfig = {
   systemPrompt: '{{promptContent}}',
   kickoffMessage: 'Decompile the function.',
   stallThreshold: 3,
+  toolCallLimit: 7,
 };
 
 const testCCompiler = new CCompiler(getArmCompilerScript());
@@ -1405,6 +1406,166 @@ mov eax, 0
       // Should also have code section
       const codeSection = sections.find((s) => s.type === 'code');
       expect(codeSection).toBeDefined();
+    });
+  });
+
+  describe('compile_and_view_assembly tool', () => {
+    const validCode = 'int testFunc(void) { return 42; }';
+    const toolArgs = { code: validCode, function_name: 'testFunc' };
+
+    it('compiles valid C code and returns assembly with countdown', async () => {
+      const mockFactory = createMockQueryFactory(['test']);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      const result = await plugin.handleCompileAndViewAssembly(toolArgs);
+
+      const text = result.content[0].text;
+      expect(text).toContain('Compilation successful!');
+      expect(text).toContain("Assembly for 'testFunc'");
+      expect(text).toContain('```asm');
+      expect(text).toContain('⚠ Tool calls remaining: 6/7');
+    });
+
+    it('returns compilation error with countdown for invalid code', async () => {
+      const mockFactory = createMockQueryFactory(['test']);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      const result = await plugin.handleCompileAndViewAssembly({
+        code: 'int testFunc(void) { return }',
+        function_name: 'testFunc',
+      });
+
+      const text = result.content[0].text;
+      expect(text).toContain('Compilation failed');
+      expect(text).toContain('⚠ Tool calls remaining: 6/7');
+    });
+
+    it('returns symbol not found when function name does not match', async () => {
+      const mockFactory = createMockQueryFactory(['test']);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      const result = await plugin.handleCompileAndViewAssembly({
+        code: validCode,
+        function_name: 'wrongFunc',
+      });
+
+      const text = result.content[0].text;
+      expect(text).toContain("Symbol 'wrongFunc' not found");
+      expect(text).toContain('testFunc');
+      expect(text).toContain('⚠ Tool calls remaining: 6/7');
+    });
+
+    it('decrements countdown on each successive call', async () => {
+      const mockFactory = createMockQueryFactory(['test']);
+      const plugin = new ClaudeRunnerPlugin({
+        config: { ...defaultPluginConfig, toolCallLimit: 3 },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      const result1 = await plugin.handleCompileAndViewAssembly(toolArgs);
+      expect(result1.content[0].text).toContain('Tool calls remaining: 2/3');
+
+      const result2 = await plugin.handleCompileAndViewAssembly(toolArgs);
+      expect(result2.content[0].text).toContain('Tool calls remaining: 1/3');
+
+      const result3 = await plugin.handleCompileAndViewAssembly(toolArgs);
+      expect(result3.content[0].text).toContain('Tool calls remaining: 0/3');
+    });
+
+    it('refuses execution after reaching the tool call limit', async () => {
+      const mockFactory = createMockQueryFactory(['test']);
+      const plugin = new ClaudeRunnerPlugin({
+        config: { ...defaultPluginConfig, toolCallLimit: 2 },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      // Use up the limit
+      await plugin.handleCompileAndViewAssembly(toolArgs);
+      await plugin.handleCompileAndViewAssembly(toolArgs);
+
+      // Third call should be refused
+      const result = await plugin.handleCompileAndViewAssembly(toolArgs);
+      const text = result.content[0].text;
+      expect(text).toContain('❌ Tool call limit reached (2/2)');
+      expect(text).toContain('submit your final answer');
+      expect(text).not.toContain('Compilation successful');
+    });
+
+    it('keeps refusing after limit is reached', async () => {
+      const mockFactory = createMockQueryFactory(['test']);
+      const plugin = new ClaudeRunnerPlugin({
+        config: { ...defaultPluginConfig, toolCallLimit: 1 },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      await plugin.handleCompileAndViewAssembly(toolArgs);
+
+      // Both subsequent calls should be refused
+      const result2 = await plugin.handleCompileAndViewAssembly(toolArgs);
+      expect(result2.content[0].text).toContain('❌ Tool call limit reached');
+
+      const result3 = await plugin.handleCompileAndViewAssembly(toolArgs);
+      expect(result3.content[0].text).toContain('❌ Tool call limit reached');
+    });
+
+    it('resets counter between execute() calls', async () => {
+      const cCode = 'int testFunc(void) { return 42; }';
+      const response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createMockQueryFactory({
+        responses: [response, response],
+        requireResumeForFollowUp: false,
+      });
+      const plugin = new ClaudeRunnerPlugin({
+        config: { ...defaultPluginConfig, toolCallLimit: 2 },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      // Use up the limit
+      await plugin.handleCompileAndViewAssembly(toolArgs);
+      await plugin.handleCompileAndViewAssembly(toolArgs);
+
+      // Verify limit is reached
+      const blockedResult = await plugin.handleCompileAndViewAssembly(toolArgs);
+      expect(blockedResult.content[0].text).toContain('❌ Tool call limit reached');
+
+      // execute() resets the counter
+      await plugin.execute(context);
+
+      // Should work again
+      const result = await plugin.handleCompileAndViewAssembly(toolArgs);
+      expect(result.content[0].text).toContain('Compilation successful');
+      expect(result.content[0].text).toContain('Tool calls remaining: 1/2');
     });
   });
 

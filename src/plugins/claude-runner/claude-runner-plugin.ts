@@ -107,7 +107,7 @@ interface ConversationCache {
  */
 export const claudeRunnerConfigSchema = z.object({
   projectPath: z.string().optional().describe('Path to the Claude Agent read the project codebase from'),
-  timeoutMs: z.number().positive().default(300_000).describe('Timeout in milliseconds for Claude requests'),
+  timeoutMs: z.number().positive().default(600_000).describe('Timeout in milliseconds for Claude requests'),
   cachePath: z.string().optional().describe('Path to JSON cache file for response caching'),
   model: z.string().optional().describe('Claude model to use'),
   systemPrompt: z
@@ -120,6 +120,12 @@ export const claudeRunnerConfigSchema = z.object({
     .positive()
     .default(3)
     .describe('Number of consecutive attempts without improvement before triggering stall recovery guidance'),
+  toolCallLimit: z
+    .number()
+    .int()
+    .positive()
+    .default(7)
+    .describe('Maximum number of compile_and_view_assembly tool calls allowed per retry iteration'),
 });
 
 export type ClaudeRunnerConfig = z.infer<typeof claudeRunnerConfigSchema>;
@@ -367,6 +373,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #initialPromptHash: string | null = null;
   #currentCacheNode: ConversationNode | null = null;
 
+  // Tool call counter (resets each retry iteration)
+  #toolCallCount = 0;
+
   // MCP tool dependencies
   #currentContextContent = '';
   #cCompiler: CCompiler;
@@ -437,90 +446,112 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             code: z.string().describe('The C code to compile'),
             function_name: z.string().describe('The name of the function to extract assembly for'),
           },
-          async (args) => {
-            let compileResult: Awaited<ReturnType<CCompiler['compile']>> | undefined;
-            try {
-              // Compile the code
-              compileResult = await this.#cCompiler.compile(args.function_name, args.code, this.#currentContextContent);
-
-              if (!compileResult.success) {
-                const errorOutput = compileResult.compilationErrors.length
-                  ? compileResult.compilationErrors.map((err) => `Line ${err.line}: ${err.message}`).join('\n')
-                  : compileResult.errorMessage;
-
-                return {
-                  content: [
-                    {
-                      type: 'text' as const,
-                      text: `Compilation failed:\n\n${errorOutput}`,
-                    },
-                  ],
-                };
-              }
-
-              // Parse the object file and extract assembly
-              const parsedObject = await this.#objdiff.parseObjectFile(compileResult.objPath, 'base');
-              const diffResult = await this.#objdiff.runDiff(parsedObject);
-
-              if (!diffResult.left) {
-                // Clean up the object file
-                await fs.unlink(compileResult.objPath).catch(() => {});
-                return {
-                  content: [
-                    {
-                      type: 'text' as const,
-                      text: 'Failed to parse compiled object file',
-                    },
-                  ],
-                };
-              }
-
-              // Check if the symbol exists
-              const symbol = diffResult.left.findSymbol(args.function_name, undefined);
-              if (!symbol) {
-                const availableSymbols = await this.#objdiff.getSymbolNames(parsedObject);
-                // Clean up the object file
-                await fs.unlink(compileResult.objPath).catch(() => {});
-                return {
-                  content: [
-                    {
-                      type: 'text' as const,
-                      text: `Symbol '${args.function_name}' not found in compiled object.\n\nAvailable symbols: ${availableSymbols.join(', ')}\n\nMake sure your function is named exactly '${args.function_name}'.`,
-                    },
-                  ],
-                };
-              }
-
-              // Get the assembly
-              const assembly = await this.#objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
-
-              return {
-                content: [
-                  {
-                    type: 'text' as const,
-                    text: `Compilation successful!\n\nAssembly for '${args.function_name}':\n\`\`\`asm\n${assembly}\n\`\`\``,
-                  },
-                ],
-              };
-            } catch (error) {
-              return {
-                content: [
-                  {
-                    type: 'text' as const,
-                    text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-                  },
-                ],
-              };
-            } finally {
-              // Clean up the object file
-              if (compileResult?.success) {
-                await fs.unlink(compileResult.objPath).catch(() => {});
-              }
-            }
-          },
+          (args) => this.handleCompileAndViewAssembly(args),
         ),
       ],
     });
+  }
+
+  /**
+   * Handle a compile_and_view_assembly tool call.
+   * Compiles C code, extracts assembly, and enforces the per-turn call limit.
+   */
+  async handleCompileAndViewAssembly(args: { code: string; function_name: string }) {
+    // Enforce tool call limit
+    if (this.#toolCallCount >= this.#config.toolCallLimit) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `❌ Tool call limit reached (${this.#config.toolCallLimit}/${this.#config.toolCallLimit}). You must now submit your final answer with the best code you have.`,
+          },
+        ],
+      };
+    }
+
+    this.#toolCallCount++;
+    const remaining = this.#config.toolCallLimit - this.#toolCallCount;
+    const callWarning = `\n\n⚠ Tool calls remaining: ${remaining}/${this.#config.toolCallLimit}. You must submit your answer before running out of calls.`;
+
+    let compileResult: Awaited<ReturnType<CCompiler['compile']>> | undefined;
+    try {
+      // Compile the code
+      compileResult = await this.#cCompiler.compile(args.function_name, args.code, this.#currentContextContent);
+
+      if (!compileResult.success) {
+        const errorOutput = compileResult.compilationErrors.length
+          ? compileResult.compilationErrors.map((err) => `Line ${err.line}: ${err.message}`).join('\n')
+          : compileResult.errorMessage;
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Compilation failed:\n\n${errorOutput}${callWarning}`,
+            },
+          ],
+        };
+      }
+
+      // Parse the object file and extract assembly
+      const parsedObject = await this.#objdiff.parseObjectFile(compileResult.objPath, 'base');
+      const diffResult = await this.#objdiff.runDiff(parsedObject);
+
+      if (!diffResult.left) {
+        // Clean up the object file
+        await fs.unlink(compileResult.objPath).catch(() => {});
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to parse compiled object file${callWarning}`,
+            },
+          ],
+        };
+      }
+
+      // Check if the symbol exists
+      const symbol = diffResult.left.findSymbol(args.function_name, undefined);
+      if (!symbol) {
+        const availableSymbols = await this.#objdiff.getSymbolNames(parsedObject);
+        // Clean up the object file
+        await fs.unlink(compileResult.objPath).catch(() => {});
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Symbol '${args.function_name}' not found in compiled object.\n\nAvailable symbols: ${availableSymbols.join(', ')}\n\nMake sure your function is named exactly '${args.function_name}'.${callWarning}`,
+            },
+          ],
+        };
+      }
+
+      // Get the assembly
+      const assembly = await this.#objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Compilation successful!\n\nAssembly for '${args.function_name}':\n\`\`\`asm\n${assembly}\n\`\`\`${callWarning}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error: ${error instanceof Error ? error.message : String(error)}${callWarning}`,
+          },
+        ],
+      };
+    } finally {
+      // Clean up the object file
+      if (compileResult?.success) {
+        await fs.unlink(compileResult.objPath).catch(() => {});
+      }
+    }
   }
 
   /**
@@ -870,6 +901,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     context: PipelineContext;
   }> {
     const startTime = Date.now();
+
+    // Reset tool call counter for this turn
+    this.#toolCallCount = 0;
 
     let { promptContent } = context;
     if (!promptContent) {
