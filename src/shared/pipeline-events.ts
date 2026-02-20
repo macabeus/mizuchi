@@ -83,6 +83,8 @@ export interface AttemptCompleteEvent {
   attemptNumber: number;
   success: boolean;
   willRetry: boolean;
+  /** Number of assembly differences from objdiff, if available */
+  differenceCount?: number;
 }
 
 /**
@@ -126,6 +128,35 @@ export interface ProgrammaticFlowStartEvent {
 }
 
 /**
+ * Event emitted when a background task starts
+ */
+export interface BackgroundTaskStartEvent {
+  type: 'background-task-start';
+  taskId: string;
+  triggeredByAttempt: number;
+}
+
+/**
+ * Event emitted when a background task reports progress
+ */
+export interface BackgroundTaskProgressEvent {
+  type: 'background-task-progress';
+  taskId: string;
+  currentBestScore: number;
+  iterationsRun: number;
+}
+
+/**
+ * Event emitted when a background task completes
+ */
+export interface BackgroundTaskCompleteEvent {
+  type: 'background-task-complete';
+  taskId: string;
+  success: boolean;
+  durationMs: number;
+}
+
+/**
  * Union type of all pipeline events
  */
 export type PipelineEvent =
@@ -139,7 +170,10 @@ export type PipelineEvent =
   | PluginExecutionCompleteEvent
   | AttemptCompleteEvent
   | PromptCompleteEvent
-  | BenchmarkCompleteEvent;
+  | BenchmarkCompleteEvent
+  | BackgroundTaskStartEvent
+  | BackgroundTaskProgressEvent
+  | BackgroundTaskCompleteEvent;
 
 /**
  * Event handler callback type

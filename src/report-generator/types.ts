@@ -83,6 +83,32 @@ export interface ReportPluginResult {
 }
 
 /**
+ * Background permuter task result for the report
+ */
+export interface ReportBackgroundTask {
+  taskId: string;
+  success: boolean;
+  bestScore: number;
+  baseScore: number;
+  bestCode?: string;
+  /** Unified diff showing the mutations applied by the permuter */
+  bestDiff?: string;
+  iterationsRun: number;
+  durationMs: number;
+  triggeredByAttempt: number;
+  startTimestamp: string;
+  /** Raw stdout from the permuter process */
+  stdout: string;
+  /** Raw stderr from the permuter process */
+  stderr: string;
+}
+
+/**
+ * What found the match for a prompt
+ */
+export type ReportMatchSource = 'claude' | 'permuter' | 'programmatic-flow';
+
+/**
  * Single attempt result for the report
  */
 export type ReportAttempt = {
@@ -90,6 +116,7 @@ export type ReportAttempt = {
   success: boolean;
   durationMs: number;
   pluginResults: ReportPluginResult[];
+  startTimestamp?: string;
 };
 
 /**
@@ -105,6 +132,10 @@ export interface ReportPromptResult {
   setupFlow: ReportAttempt;
   /** Result from programmatic-flow phase (e.g., m2c), if one was configured */
   programmaticFlow?: ReportAttempt;
+  /** Background permuter task results */
+  backgroundTasks?: ReportBackgroundTask[];
+  /** What found the match (if successful) */
+  matchSource?: ReportMatchSource;
 }
 
 /**

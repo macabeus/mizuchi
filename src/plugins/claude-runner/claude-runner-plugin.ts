@@ -376,6 +376,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   // Tool call counter (resets each retry iteration)
   #toolCallCount = 0;
 
+  // External abort signal (e.g., from background permuter success)
+  #externalAbortSignal?: AbortSignal;
+
   // MCP tool dependencies
   #currentContextContent = '';
   #cCompiler: CCompiler;
@@ -429,6 +432,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     // Resolve cache path relative to output directory or current directory
     const baseDir = pipelineConfig?.outputDir || process.cwd();
     this.#cachePath = path.resolve(baseDir, config.cachePath || DEFAULT_CACHE_PATH);
+  }
+
+  /**
+   * Set an abort signal that fires when a background task succeeds.
+   * Called by the PluginManager at the start of each prompt with a fresh signal.
+   */
+  setForegroundAbortSignal(signal: AbortSignal): void {
+    this.#externalAbortSignal = signal;
   }
 
   /**
@@ -701,6 +712,16 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       }
     }, this.#config.timeoutMs);
 
+    // Listen for external abort signal (e.g., background permuter found a match)
+    const onExternalAbort = () => {
+      abortController.abort();
+      if (this.#currentQuery) {
+        this.#currentQuery.close();
+        this.#currentQuery = null;
+      }
+    };
+    this.#externalAbortSignal?.addEventListener('abort', onExternalAbort);
+
     try {
       const { text, contentBlocks } = await this.#collectResponse(this.#currentQuery);
 
@@ -726,12 +747,16 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
       return { response: text, fromCache: false };
     } catch (error) {
+      if (this.#externalAbortSignal?.aborted) {
+        throw new Error('Aborted: background permuter found a perfect match');
+      }
       if (abortController.signal.aborted) {
         throw new Error(`Claude timed out after ${this.#config.timeoutMs}ms`);
       }
       throw error;
     } finally {
       clearTimeout(timeoutId);
+      this.#externalAbortSignal?.removeEventListener('abort', onExternalAbort);
       if (this.#currentQuery) {
         this.#currentQuery.close();
         this.#currentQuery = null;
@@ -778,6 +803,16 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       }
     }, this.#config.timeoutMs);
 
+    // Listen for external abort signal (e.g., background permuter found a match)
+    const onExternalAbort = () => {
+      abortController.abort();
+      if (this.#currentQuery) {
+        this.#currentQuery.close();
+        this.#currentQuery = null;
+      }
+    };
+    this.#externalAbortSignal?.addEventListener('abort', onExternalAbort);
+
     try {
       const { text, contentBlocks } = await this.#collectResponse(this.#currentQuery);
 
@@ -807,12 +842,16 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
       return { response: text, fromCache: false };
     } catch (error) {
+      if (this.#externalAbortSignal?.aborted) {
+        throw new Error('Aborted: background permuter found a perfect match');
+      }
       if (abortController.signal.aborted) {
         throw new Error(`Claude timed out after ${this.#config.timeoutMs}ms`);
       }
       throw error;
     } finally {
       clearTimeout(timeoutId);
+      this.#externalAbortSignal?.removeEventListener('abort', onExternalAbort);
       if (this.#currentQuery) {
         this.#currentQuery.close();
         this.#currentQuery = null;

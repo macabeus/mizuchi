@@ -157,6 +157,29 @@ plugins:
     # Enable or disable m2c programmatic-flow (default: true)
     enable: true
 
+  # decomp-permuter Plugin (optional)
+  # Brute-forces code mutations to improve match percentage.
+  # If m2c is enabled, it runs in the programmatic-flow phase after m2c.
+  # On the AI-powered flow, it runs in background while Claude makes progress.
+  # Requires: scripts/setup-decomp-permuter.sh to be run first
+  decomp-permuter:
+    # Enable or disable decomp-permuter (default: false)
+    enable: true
+    # Maximum iterations on the programmatic-flow (default: 1000)
+    maxIterations: 1000
+    # Timeout in milliseconds per permuter run (default: 120000 = 2 minutes)
+    timeoutMs: 120000
+    # Flags passed to permuter.py (default: ['--show-errors', '-j 4'])
+    # Common flags: -j (multi-threaded), -J (distributed), --stack-diffs
+    # See: https://github.com/simonlindholm/decomp-permuter#usage
+    flags:
+      - '--show-errors'
+      - '-j 4'
+    # Override the permuter's compiler_type for randomization weights (default: inferred from target)
+    # Valid values: base, ido, mwcc, gcc
+    # Inferred defaults: gba/nds/n3ds → gcc, n64/ps1/ps2/psp/irix → ido, gc/wii → mwcc
+    # compilerType: gcc
+
 # ---- MIPS Example (N64) ----
 # To configure for a MIPS target like N64, use settings like:
 #

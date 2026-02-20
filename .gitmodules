@@ -1,3 +1,6 @@
 [submodule "vendor/m2c"]
 	path = vendor/m2c
 	url = git@github.com:matt-kempster/m2c.git
+[submodule "vendor/decomp-permuter"]
+	path = vendor/decomp-permuter
+	url = git@github.com:simonlindholm/decomp-permuter.git

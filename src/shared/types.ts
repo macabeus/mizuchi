@@ -5,6 +5,7 @@
  */
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
+import type { DecompPermuterPluginResult } from '~/plugins/decomp-permuter/decomp-permuter-plugin.js';
 import type { M2cPluginResult } from '~/plugins/m2c/m2c-plugin.js';
 import type { ObjdiffResult } from '~/plugins/objdiff/objdiff-plugin.js';
 
@@ -16,6 +17,7 @@ import type { PipelineConfig } from './config.js';
 export type PluginResultMap = {
   'claude-runner': PluginResult<ClaudeRunnerResult>;
   compiler: PluginResult<CompilerResult>;
+  'decomp-permuter': PluginResult<DecompPermuterPluginResult>;
   m2c: PluginResult<M2cPluginResult>;
   objdiff: PluginResult<ObjdiffResult>;
 };
@@ -147,6 +149,51 @@ export type PluginReportSection =
     };
 
 /**
+ * Context provided to background plugins when deciding whether to spawn
+ */
+export interface BackgroundSpawnContext {
+  /** Current attempt number */
+  attemptNumber: number;
+  /** Whether there will be more attempts after this one */
+  willRetry: boolean;
+  /** The pipeline context after this attempt completed */
+  context: PipelineContext;
+  /** Plugin results from this attempt */
+  attemptResults: PluginResult<any>[];
+}
+
+/**
+ * Metadata attached to background task results by the coordinator
+ */
+export interface TaskMetadata {
+  taskId: string;
+  durationMs: number;
+  triggeredByAttempt: number;
+  startTimestamp: string;
+}
+
+/**
+ * Interface for plugins that support background execution.
+ *
+ * A plugin can run both in the sequential chain (via Plugin.execute()) and
+ * in the background (via this capability). The coordinator calls shouldSpawn()
+ * after each attempt and, if the plugin returns a config, spawns a background
+ * task via run().
+ */
+export interface BackgroundCapability<TConfig = unknown, TResult = unknown> {
+  /** Decide whether to spawn a background task. Return config to spawn, or null to skip. */
+  shouldSpawn(context: BackgroundSpawnContext): TConfig | null;
+  /** Run the background task. Must respect the abort signal. */
+  run(config: TConfig, signal: AbortSignal): Promise<TResult>;
+  /** Check if a result constitutes success (should stop the pipeline). */
+  isSuccess(result: TResult): boolean;
+  /** Convert plugin-specific result to the generic BackgroundTaskResult. */
+  toBackgroundTaskResult(result: TResult, metadata: TaskMetadata): BackgroundTaskResult;
+  /** Reset state between prompts (e.g., clear spawn tracking). */
+  reset?(): void;
+}
+
+/**
  * Plugin interface that all plugins must implement
  */
 export interface Plugin<TPluginResult> {
@@ -183,7 +230,42 @@ export interface Plugin<TPluginResult> {
    * @returns Array of report sections to display
    */
   getReportSections?(result: PluginResult<TPluginResult>, context: PipelineContext): PluginReportSection[];
+
+  /**
+   * Receive an abort signal that fires when a background task succeeds.
+   * Called by the PluginManager at the start of each prompt with a fresh signal.
+   * Plugins that perform long-running foreground work (e.g., LLM queries) should
+   * abort promptly when this signal fires.
+   */
+  setForegroundAbortSignal?(signal: AbortSignal): void;
+
+  /**
+   * Optional background execution capability.
+   * When present, the BackgroundTaskCoordinator will call shouldSpawn() after each
+   * attempt and run background tasks alongside the AI-powered flow.
+   */
+  background?: BackgroundCapability<any, any>;
 }
+
+/**
+ * Result from a background task
+ */
+export interface BackgroundTaskResult {
+  taskId: string;
+  /** ID of the plugin that produced this result */
+  pluginId: string;
+  success: boolean;
+  durationMs: number;
+  triggeredByAttempt: number;
+  startTimestamp: string;
+  /** Plugin-specific result data */
+  data: unknown;
+}
+
+/**
+ * What found the match for a prompt
+ */
+export type MatchSource = 'claude' | 'permuter' | 'programmatic-flow';
 
 /**
  * Result of running the full pipeline for a single prompt
@@ -199,6 +281,10 @@ export interface PipelineRunResult {
   programmaticFlow?: AttemptResult;
   /** Results for every attempt from the AI-powered flow */
   attempts: AttemptResult[];
+  /** Results from background permuter tasks */
+  backgroundTasks?: BackgroundTaskResult[];
+  /** What found the match (if successful) */
+  matchSource?: MatchSource;
 }
 
 /**
@@ -209,6 +295,8 @@ export interface AttemptResult {
   pluginResults: PluginResult<Record<string, unknown>>[];
   success: boolean;
   durationMs: number;
+  /** ISO timestamp when the attempt started */
+  startTimestamp?: string;
 }
 
 /**

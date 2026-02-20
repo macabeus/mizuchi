@@ -1,9 +1,18 @@
 /**
  * Transform PipelineResults to BenchmarkReport format
  */
+import type { DecompPermuterResult } from '~/shared/decomp-permuter.js';
 import type { PipelineResults, PluginResult } from '~/shared/types.js';
 
-import type { BenchmarkReport, ReportAttempt, ReportPluginResult, ReportPromptResult, ReportSection } from './types.js';
+import type {
+  BenchmarkReport,
+  ReportAttempt,
+  ReportBackgroundTask,
+  ReportMatchSource,
+  ReportPluginResult,
+  ReportPromptResult,
+  ReportSection,
+} from './types.js';
 
 /**
  * Plugin configuration options for the report
@@ -43,6 +52,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       success: attempt.success,
       durationMs: attempt.durationMs,
       pluginResults: attempt.pluginResults.map(transformPluginResult),
+      startTimestamp: attempt.startTimestamp,
     }));
 
     const setupFlow = {
@@ -50,6 +60,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       success: promptResult.setupFlow.success,
       durationMs: promptResult.setupFlow.durationMs,
       pluginResults: promptResult.setupFlow.pluginResults.map(transformPluginResult),
+      startTimestamp: promptResult.setupFlow.startTimestamp,
     };
 
     const programmaticFlow = promptResult.programmaticFlow
@@ -58,8 +69,27 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
           success: promptResult.programmaticFlow.success,
           durationMs: promptResult.programmaticFlow.durationMs,
           pluginResults: promptResult.programmaticFlow.pluginResults.map(transformPluginResult),
+          startTimestamp: promptResult.programmaticFlow.startTimestamp,
         }
       : undefined;
+
+    const backgroundTasks: ReportBackgroundTask[] | undefined = promptResult.backgroundTasks?.map((bt) => {
+      const data = bt.data as DecompPermuterResult;
+      return {
+        taskId: bt.taskId,
+        success: bt.success,
+        bestScore: data.bestScore,
+        baseScore: data.baseScore,
+        bestCode: data.bestCode,
+        bestDiff: data.bestDiff,
+        iterationsRun: data.iterationsRun,
+        durationMs: bt.durationMs,
+        triggeredByAttempt: bt.triggeredByAttempt,
+        startTimestamp: bt.startTimestamp,
+        stdout: data.stdout,
+        stderr: data.stderr,
+      };
+    });
 
     return {
       promptPath: promptResult.promptPath,
@@ -69,6 +99,8 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       totalDurationMs: promptResult.totalDurationMs,
       setupFlow,
       programmaticFlow,
+      backgroundTasks: backgroundTasks?.length ? backgroundTasks : undefined,
+      matchSource: promptResult.matchSource as ReportMatchSource | undefined,
     };
   });
 

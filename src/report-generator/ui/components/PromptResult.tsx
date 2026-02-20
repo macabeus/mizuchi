@@ -1,13 +1,14 @@
 import { useState } from 'react';
 
-import type { ReportAttempt, ReportPromptResult } from '../../types';
+import type { ReportBackgroundTask, ReportPluginResult, ReportPromptResult, ReportSection } from '../../types';
+import { AttemptContent } from './AttemptContent';
 import { AttemptsChart } from './AttemptsChart';
 import { BestResultCode } from './BestResultCode';
 import { Icon } from './Icon';
 import { PluginDetails } from './PluginDetails';
-import { PluginFlow } from './PluginFlow';
 import { SideMenu } from './SideMenu';
 import { Tabs } from './Tabs';
+import { TimelineChart } from './TimelineChart';
 
 interface PromptResultProps {
   result: ReportPromptResult;
@@ -22,10 +23,6 @@ function formatDuration(ms: number): string {
 }
 
 export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps) {
-  const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
-  const [setupFlowPluginId, setSetupFlowPluginId] = useState<string | null>(null);
-  const [programmaticFlowPluginId, setProgrammaticFlowPluginId] = useState<string | null>(null);
-
   const promptName = result.promptPath.split('/').pop() || result.promptPath;
 
   return (
@@ -116,29 +113,11 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
                 case 'finalCode':
                   return <BestResultCode result={result} />;
                 case 'setupFlow':
-                  return (
-                    <AttemptContent
-                      attempt={result.setupFlow}
-                      selectedPluginId={setupFlowPluginId}
-                      onSelectPlugin={setSetupFlowPluginId}
-                    />
-                  );
+                  return <AttemptContent attempt={result.setupFlow} />;
                 case 'programmaticFlow':
-                  return (
-                    <AttemptContent
-                      attempt={result.programmaticFlow!}
-                      selectedPluginId={programmaticFlowPluginId}
-                      onSelectPlugin={setProgrammaticFlowPluginId}
-                    />
-                  );
+                  return <AttemptContent attempt={result.programmaticFlow!} />;
                 case 'aiPoweredFlow':
-                  return (
-                    <AIPoweredFlowContent
-                      result={result}
-                      selectedPluginId={selectedPluginId}
-                      onSelectPlugin={setSelectedPluginId}
-                    />
-                  );
+                  return <AIPoweredFlowContent result={result} />;
                 default:
                   return null;
               }
@@ -152,19 +131,88 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
 
 interface AIPoweredFlowContentProps {
   result: ReportPromptResult;
-  selectedPluginId: string | null;
-  onSelectPlugin: (id: string | null) => void;
 }
 
-function AIPoweredFlowContent({ result, selectedPluginId, onSelectPlugin }: AIPoweredFlowContentProps) {
+/**
+ * Build a synthetic ReportPluginResult from a background task,
+ * so we can reuse PluginDetails to render its sections.
+ */
+function buildBackgroundTaskDetails(task: ReportBackgroundTask): ReportPluginResult {
+  const sections: ReportSection[] = [
+    {
+      type: 'message',
+      title: 'Permuter Results',
+      message: [
+        `Base score: ${task.baseScore}`,
+        `Best score: ${task.bestScore}`,
+        `Iterations: ${task.iterationsRun}`,
+        `Duration: ${formatDuration(task.durationMs)}`,
+        `Triggered by: Attempt ${task.triggeredByAttempt}`,
+        `Perfect match: ${task.success ? 'Yes' : 'No'}`,
+      ].join('\n'),
+    },
+  ];
+
+  if (task.bestDiff) {
+    sections.push({
+      type: 'code',
+      title: 'Best Permutation Diff',
+      language: 'diff',
+      code: task.bestDiff,
+    });
+  }
+
+  if (task.stdout) {
+    sections.push({
+      type: 'code',
+      title: 'stdout',
+      language: 'text',
+      code: task.stdout,
+    });
+  }
+
+  if (task.stderr) {
+    sections.push({
+      type: 'code',
+      title: 'stderr',
+      language: 'text',
+      code: task.stderr,
+    });
+  }
+
+  return {
+    pluginId: 'decomp-permuter',
+    pluginName: `decomp-permuter (${task.taskId})`,
+    status: task.success ? 'success' : 'failure',
+    durationMs: task.durationMs,
+    sections,
+  };
+}
+
+function AIPoweredFlowContent({ result }: AIPoweredFlowContentProps) {
+  const [selectedTimelineTaskId, setSelectedTimelineTaskId] = useState<string | null>(null);
+  const hasTimeline = result.attempts.length > 0 || (result.backgroundTasks && result.backgroundTasks.length > 0);
+
+  // Find the background task matching the selected Gantt bar
+  const selectedBackgroundTask = selectedTimelineTaskId
+    ? result.backgroundTasks?.find((t) => t.taskId === selectedTimelineTaskId)
+    : null;
+
+  // Find the attempt matching the selected Gantt bar (IDs are "attempt-<number>")
+  const selectedAttempt =
+    selectedTimelineTaskId && selectedTimelineTaskId.startsWith('attempt-')
+      ? result.attempts.find((a) => a.attemptNumber === Number(selectedTimelineTaskId.replace('attempt-', '')))
+      : null;
+
+  const tabItems = [
+    { id: 'pluginFlow', name: 'Plugin Flow', icon: 'bolt' as const },
+    { id: 'attemptsChart', name: 'Attempts Chart', icon: 'lineChart' as const },
+    ...(hasTimeline ? [{ id: 'timeline', name: 'Timeline', icon: 'clock' as const }] : []),
+  ];
+
   return (
     <Tabs
-      items={
-        [
-          { id: 'pluginFlow', name: 'Plugin Flow', icon: 'bolt' },
-          { id: 'attemptsChart', name: 'Attempts Chart', icon: 'lineChart' },
-        ] as const
-      }
+      items={tabItems}
       content={(tab) => {
         switch (tab.id) {
           case 'pluginFlow':
@@ -188,67 +236,40 @@ function AIPoweredFlowContent({ result, selectedPluginId, onSelectPlugin }: AIPo
                 content={(_tab, index) => {
                   const attemptIndex = result.attempts.length - 1 - index;
                   const attempt = result.attempts[attemptIndex];
-                  return (
-                    <AttemptContent
-                      attempt={attempt}
-                      selectedPluginId={selectedPluginId}
-                      onSelectPlugin={onSelectPlugin}
-                    />
-                  );
+                  return <AttemptContent attempt={attempt} />;
                 }}
-                onTabChange={() => onSelectPlugin(null)}
               />
             );
           case 'attemptsChart':
             return <AttemptsChart result={result} />;
+          case 'timeline':
+            return (
+              <>
+                <TimelineChart
+                  result={result}
+                  activeTaskId={selectedTimelineTaskId}
+                  onTaskSelect={setSelectedTimelineTaskId}
+                />
+                {selectedAttempt && <AttemptContent attempt={selectedAttempt} />}
+                {selectedBackgroundTask && (
+                  <div className="px-5 pb-5">
+                    <PluginDetails plugin={buildBackgroundTaskDetails(selectedBackgroundTask)} />
+                  </div>
+                )}
+                {selectedTimelineTaskId &&
+                  !selectedAttempt &&
+                  !selectedBackgroundTask &&
+                  selectedTimelineTaskId.startsWith('permuter-') && (
+                    <p className="px-5 pb-5 text-sm text-slate-500 text-center py-6 bg-slate-800/30 rounded-lg border border-slate-700/30 mx-5">
+                      No details available for this task.
+                    </p>
+                  )}
+              </>
+            );
           default:
-            const _exhaustiveCheck: never = tab;
-            console.warn('Unhandled tab in AIPoweredFlowContent:', _exhaustiveCheck);
             return null;
         }
       }}
     />
-  );
-}
-
-interface AttemptContentProps {
-  attempt: ReportAttempt;
-  selectedPluginId: string | null;
-  onSelectPlugin: (id: string | null) => void;
-}
-
-function AttemptContent({ attempt, selectedPluginId, onSelectPlugin }: AttemptContentProps) {
-  const selectedPlugin = selectedPluginId ? attempt.pluginResults.find((p) => p.pluginId === selectedPluginId) : null;
-
-  return (
-    <div className="p-5">
-      {/* Plugin Flow Visualization */}
-      <div className="mb-5">
-        <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-          <Icon name="bolt" className="w-4 h-4 text-slate-400" />
-          Plugin Execution Flow
-        </h5>
-
-        <PluginFlow
-          plugins={attempt.pluginResults}
-          selectedPluginId={selectedPluginId}
-          onSelectPlugin={onSelectPlugin}
-        />
-      </div>
-
-      {/* Selected Plugin Details */}
-      {selectedPlugin && (
-        <div className="mt-5 pt-5 border-t border-slate-700">
-          <PluginDetails plugin={selectedPlugin} />
-        </div>
-      )}
-
-      {/* Show hint if no plugin selected */}
-      {!selectedPlugin && (
-        <p className="text-sm text-slate-500 text-center py-6 bg-slate-800/30 rounded-lg border border-slate-700/30">
-          Click on a plugin in the flow above to view its details
-        </p>
-      )}
-    </div>
   );
 }

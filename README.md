@@ -9,7 +9,7 @@ Mizuchi automates the cycle of writing C code, compiling, and comparing against 
 It orchestrates a plugin-based pipeline that can leverage programmatic and AI-powered tools to automatically decompile assembly functions to C source code that produces byte-for-byte identical machine code when compiled.
 
 - ✨ Automatic retries with detailed context on compilation or match failures
-- 🐍 Integration with Claude, [m2c](https://github.com/matt-kempster/m2c) and [objdiff](https://github.com/encounter/objdiff/).
+- 🐍 Integration with Claude, [m2c](https://github.com/matt-kempster/m2c), [decomp-permuter](https://github.com/simonlindholm/decomp-permuter), and [objdiff](https://github.com/encounter/objdiff/).
 - 📊 Beautiful report UI
 
 <img width="1143" height="1057" alt="image" src="https://github.com/user-attachments/assets/025e6a00-7a6a-4425-9c11-8b86619cd546" />
@@ -51,8 +51,17 @@ npm run build && npm run build:report-ui
 To enable the m2c programmatic-flow phase:
 
 ```bash
-git submodule update --init
+git submodule update --init vendor/m2c
 ./scripts/setup-m2c.sh
+```
+
+### decomp-permuter Setup (Optional)
+
+To enable decomp-permuter (brute-force mutation matching). Works both in the programmatic-flow phase and as background tasks during the AI-powered flow:
+
+```bash
+git submodule update --init vendor/decomp-permuter
+./scripts/setup-decomp-permuter.sh
 ```
 
 ### Requirements
@@ -118,7 +127,7 @@ asm: |
 
 ## Pipeline Overview
 
-Mizuchi executes a sequential pipeline of plugins:
+Mizuchi executes a pipeline of plugins:
 
 ```mermaid
 flowchart TD
@@ -133,9 +142,11 @@ flowchart TD
   subgraph Programmatic Flow
     M[m2c]
     MC[Compiler]
+    MP[decomp-permuter]
 
     M --> |Generate C| MC
-    MC --> |Compile to object file| MD[Objdiff]
+    MC --> |Compile to object file| MP
+    MP --> |Permute mutations| MD[Objdiff]
   end
 
   M --> |m2c error| B
@@ -147,18 +158,21 @@ flowchart TD
     B[Claude Runner]
     C[Compiler]
     D[Objdiff]
+    BP[Background permuter]
 
     B --> |Generate C| C
     C --> |Compilation Error → Retry| B
     C --> |Compile to object file| D
+    D --> |Improvement| BP
     D --> |Mismatch → Retry| B
   end
 
+  BP -.-> |Match found| E
   D --> |Match found| E
   D --> |Max retries exceeded| F[Fail]
 ```
 
-> 📌 **Roadmap**: Future plans include support for [decomp-permuter](https://github.com/simonlindholm/decomp-permuter) and automatic code insertion into the codebase. See the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
+> 📌 **Roadmap**: See the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
 
 ## Output
 
@@ -172,12 +186,13 @@ Mizuchi generates three output files:
 
 ### Built-in Plugins
 
-| Plugin            | Description                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------- |
-| **m2c**           | Optional: generates an initial C decompilation using [m2c](https://github.com/matt-kempster/m2c)     |
-| **Claude Runner** | Sends prompts to Claude and processes responses                                                      |
-| **Compiler**      | Compiles generated C code using a configurable shell script template                                 |
-| **Objdiff**       | Compares compiled object files against targets using [objdiff](https://github.com/encounter/objdiff) |
+| Plugin              | Description                                                                                                                             |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **m2c**             | Optional: generates an initial C decompilation using [m2c](https://github.com/matt-kempster/m2c)                                        |
+| **decomp-permuter** | Optional: brute-forces code mutations using [decomp-permuter](https://github.com/simonlindholm/decomp-permuter) to improve match scores |
+| **Claude Runner**   | Sends prompts to Claude and processes responses                                                                                         |
+| **Compiler**        | Compiles generated C code using a configurable shell script template                                                                    |
+| **Objdiff**         | Compares compiled object files against targets using [objdiff](https://github.com/encounter/objdiff)                                    |
 
 ## Development
 

@@ -19,6 +19,11 @@ import {
   claudeRunnerConfigSchema,
 } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import { CompilerPlugin } from '~/plugins/compiler/compiler-plugin.js';
+import {
+  DecompPermuterConfig,
+  DecompPermuterPlugin,
+  decompPermuterConfigSchema,
+} from '~/plugins/decomp-permuter/decomp-permuter-plugin.js';
 import { GetContextPlugin } from '~/plugins/get-context/get-context-plugin.js';
 import { M2cConfig, M2cPlugin, m2cConfigSchema } from '~/plugins/m2c/m2c-plugin.js';
 import { ObjdiffConfig, ObjdiffPlugin, objdiffConfigSchema } from '~/plugins/objdiff/objdiff-plugin.js';
@@ -29,6 +34,7 @@ import {
   saveJsonReport,
   transformToReport,
 } from '~/report-generator/index.js';
+import { BackgroundTaskCoordinator } from '~/shared/background-task-coordinator.js';
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 import type { CliPrompt, CliPromptChoice } from '~/shared/cli-prompt.js';
 import { PipelineConfig } from '~/shared/config';
@@ -100,6 +106,15 @@ interface ProgressState {
     success: boolean;
     attemptsUsed: number;
   }>;
+  // Best objdiff difference count from AI-powered flow attempts
+  bestDifferenceCount?: number;
+  // Background permuter tasks
+  backgroundTasks: Array<{
+    taskId: string;
+    triggeredByAttempt: number;
+    status: 'running' | 'completed';
+    success?: boolean;
+  }>;
   // Final results
   results?: PipelineResults;
   htmlReportPath?: string;
@@ -119,6 +134,7 @@ export default function Index({ options: opts }: Props) {
     plugins: [],
     pluginStatuses: [],
     completedPrompts: [],
+    backgroundTasks: [],
     activePrompt: null,
   });
 
@@ -175,6 +191,7 @@ export default function Index({ options: opts }: Props) {
               index: event.promptIndex,
               total: event.totalPrompts,
             },
+            bestDifferenceCount: undefined,
             pluginStatuses: prev.plugins.map((p) => ({
               id: p.id,
               name: p.name,
@@ -246,6 +263,18 @@ export default function Index({ options: opts }: Props) {
             ),
           };
 
+        case 'attempt-complete': {
+          const newBest =
+            event.differenceCount !== undefined &&
+            (prev.bestDifferenceCount === undefined || event.differenceCount < prev.bestDifferenceCount)
+              ? event.differenceCount
+              : prev.bestDifferenceCount;
+          return {
+            ...prev,
+            bestDifferenceCount: newBest,
+          };
+        }
+
         case 'prompt-complete':
           return {
             ...prev,
@@ -258,6 +287,34 @@ export default function Index({ options: opts }: Props) {
                 attemptsUsed: event.attemptsUsed,
               },
             ],
+            backgroundTasks: [],
+          };
+
+        case 'background-task-start':
+          return {
+            ...prev,
+            backgroundTasks: [
+              ...prev.backgroundTasks,
+              {
+                taskId: event.taskId,
+                triggeredByAttempt: event.triggeredByAttempt,
+                status: 'running' as const,
+              },
+            ],
+          };
+
+        case 'background-task-complete':
+          return {
+            ...prev,
+            backgroundTasks: prev.backgroundTasks.map((t) =>
+              t.taskId === event.taskId
+                ? {
+                    ...t,
+                    status: 'completed' as const,
+                    success: event.success,
+                  }
+                : t,
+            ),
           };
 
         case 'benchmark-complete':
@@ -359,6 +416,32 @@ export default function Index({ options: opts }: Props) {
               <PluginStatusLine key={plugin.id} plugin={plugin} spinnersPaused={!!state.activePrompt} />
             ))}
           </Box>
+
+          {/* Best match from AI-powered flow */}
+          {state.bestDifferenceCount !== undefined && (
+            <Box marginTop={1}>
+              <Text dimColor>
+                Best match:{' '}
+                {state.bestDifferenceCount === 0 ? (
+                  <Text color="green">perfect match</Text>
+                ) : (
+                  <Text>{state.bestDifferenceCount} differences</Text>
+                )}
+              </Text>
+            </Box>
+          )}
+
+          {/* Background permuter status */}
+          {state.backgroundTasks.length > 0 && (
+            <Box marginTop={1}>
+              <Text dimColor>
+                Permuter: {state.backgroundTasks.filter((t) => t.status === 'running').length} running
+                {state.backgroundTasks.some((t) => t.status === 'completed' && t.success) && (
+                  <Text color="green"> | match found</Text>
+                )}
+              </Text>
+            </Box>
+          )}
 
           {/* Interactive prompt (e.g., usage limit pause) */}
           {state.activePrompt && <InteractivePrompt prompt={state.activePrompt} onSelect={handlePromptSelect} />}
@@ -583,6 +666,7 @@ async function runPipeline(
 
   let claudePlugin: ClaudeRunnerPlugin | undefined;
   let compilerPlugin: CompilerPlugin | undefined;
+  let backgroundCoordinator: BackgroundTaskCoordinator | undefined;
 
   try {
     // Load configuration from file (if exists)
@@ -692,10 +776,30 @@ async function runPipeline(
     manager.registerSetupFlow(getContextPlugin);
 
     // Register plugins for the programmatic-flow
-    const m2cConfig: M2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
+    const m2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
+    const decompPermuterConfig = getPluginConfigFromFile<DecompPermuterConfig>(
+      fileConfig,
+      'decomp-permuter',
+      decompPermuterConfigSchema,
+    );
+
     if (m2cConfig.enable) {
       const m2cPlugin = new M2cPlugin(m2cConfig);
-      manager.registerProgrammaticFlow(m2cPlugin, compilerPlugin, objdiffPlugin);
+
+      if (decompPermuterConfig.enable) {
+        const decompPermuterPlugin = new DecompPermuterPlugin(decompPermuterConfig, cCompiler);
+        manager.registerProgrammaticFlow(m2cPlugin, compilerPlugin, decompPermuterPlugin, objdiffPlugin);
+        backgroundCoordinator = new BackgroundTaskCoordinator([decompPermuterPlugin], onEvent);
+      } else {
+        manager.registerProgrammaticFlow(m2cPlugin, compilerPlugin, objdiffPlugin);
+      }
+    }
+
+    // Set up background coordinator (when any background-capable plugin is registered).
+    // The coordinator owns the foreground abort signal — PluginManager wires it to
+    // plugins (e.g., Claude) at the start of each prompt via setForegroundAbortSignal().
+    if (backgroundCoordinator) {
+      manager.setBackgroundCoordinator(backgroundCoordinator);
     }
 
     // Register plugins for the ai-powered-flow
@@ -752,6 +856,11 @@ async function runPipeline(
     }
     try {
       await compilerPlugin?.cleanup();
+    } catch {
+      // Best-effort cleanup
+    }
+    try {
+      await backgroundCoordinator?.cancelAll();
     } catch {
       // Best-effort cleanup
     }

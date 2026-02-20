@@ -1,6 +1,7 @@
 import { common, createStarryNight } from '@wooorm/starry-night';
 import { useEffect, useRef, useState } from 'react';
 
+import { ansiToHtml, containsAnsiCodes } from '../utils/ansi-to-html';
 import { CopyButton } from './CopyButton';
 
 interface CodeBlockProps {
@@ -14,6 +15,11 @@ export function CodeBlock({ code, language, maxHeight = '400px' }: CodeBlockProp
   const starryNightRef = useRef<Awaited<ReturnType<typeof createStarryNight>> | null>(null);
 
   useEffect(() => {
+    if (containsAnsiCodes(code)) {
+      setHighlightedCode(ansiToHtml(code));
+      return;
+    }
+
     let mounted = true;
 
     async function initStarryNight() {
