@@ -7,3 +7,7 @@ CHANGELOG.md
 package-lock.json
 yarn.lock
 vendor/
+benchmark-*/
+benchmark-*.html
+benchmark-*.json
+claude-cache*.json
