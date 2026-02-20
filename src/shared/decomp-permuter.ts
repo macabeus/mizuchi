@@ -346,23 +346,10 @@ export class DecompPermuter {
       };
     } finally {
       // Clean up the working directory
-      // if (workingDir) {
-      //   await fs.rm(workingDir, { recursive: true, force: true }).catch(() => {});
-      // }
+      if (workingDir) {
+        await fs.rm(workingDir, { recursive: true, force: true }).catch(() => {});
+      }
     }
-  }
-
-  /**
-   * Spawn a background permuter process that can be cancelled.
-   * Returns a handle for cancellation and result retrieval.
-   */
-  spawnBackground(options: DecompPermuterOptions): BackgroundPermuterHandle {
-    const handle = new BackgroundPermuterHandle();
-    handle.promise = this.run(options).then((result) => {
-      handle.result = result;
-      return result;
-    });
-    return handle;
   }
 
   /**
@@ -690,12 +677,4 @@ fi
       return {};
     }
   }
-}
-
-/**
- * Handle for a background permuter task, supporting cancellation.
- */
-export class BackgroundPermuterHandle {
-  promise!: Promise<DecompPermuterResult>;
-  result?: DecompPermuterResult;
 }

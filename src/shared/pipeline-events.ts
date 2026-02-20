@@ -137,16 +137,6 @@ export interface BackgroundTaskStartEvent {
 }
 
 /**
- * Event emitted when a background task reports progress
- */
-export interface BackgroundTaskProgressEvent {
-  type: 'background-task-progress';
-  taskId: string;
-  currentBestScore: number;
-  iterationsRun: number;
-}
-
-/**
  * Event emitted when a background task completes
  */
 export interface BackgroundTaskCompleteEvent {
@@ -172,7 +162,6 @@ export type PipelineEvent =
   | PromptCompleteEvent
   | BenchmarkCompleteEvent
   | BackgroundTaskStartEvent
-  | BackgroundTaskProgressEvent
   | BackgroundTaskCompleteEvent;
 
 /**

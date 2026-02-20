@@ -36,7 +36,7 @@ export const decompPermuterConfigSchema = z.object({
   enable: z.boolean().default(false),
   maxIterations: z.number().default(1000),
   timeoutMs: z.number().default(120000),
-  flags: z.array(z.string()).default(['--show-errors', '-j 4']),
+  flags: z.array(z.string()).default(['--show-errors', '-j', '4']),
   /** Override the permuter's compiler_type for randomization weights.
    *  When omitted, inferred from the pipeline's `target` platform. */
   compilerType: z.enum(['base', 'ido', 'mwcc', 'gcc']).optional(),
