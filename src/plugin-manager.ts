@@ -222,9 +222,15 @@ export class PluginManager {
 
     let matchSource: MatchSource | undefined;
 
-    // Reset background plugin state for this prompt and wire fresh abort signal
+    // Reset background plugin state for this prompt and wire fresh abort signal.
+    // Listen for the 'success' event so we know when a background task finds a match.
+    let backgroundMatchSource: string | null = null;
+    const onBackgroundSuccess = (result: { pluginId: string }) => {
+      backgroundMatchSource = result.pluginId;
+    };
     if (this.#backgroundCoordinator) {
       this.#backgroundCoordinator.reset();
+      this.#backgroundCoordinator.on('success', onBackgroundSuccess);
       const signal = this.#backgroundCoordinator.foregroundAbortSignal;
       for (const plugin of this.#plugins) {
         plugin.setForegroundAbortSignal?.(signal);
@@ -233,8 +239,8 @@ export class PluginManager {
 
     for (let attempt = 1; attempt <= this.#config.maxRetries; attempt++) {
       // Check if a background task found a match between attempts
-      if (this.#backgroundCoordinator?.hasSucceeded()) {
-        matchSource = 'permuter';
+      if (backgroundMatchSource) {
+        matchSource = backgroundMatchSource;
         success = true;
         break;
       }
@@ -290,13 +296,15 @@ export class PluginManager {
       }
     }
 
-    // Cancel remaining background tasks and collect results
+    // Cancel remaining background tasks and collect results.
+    // A task may succeed during cancelAll (its .then() fires before the promise settles),
+    // so we check backgroundMatchSource one final time after awaiting.
     await this.#backgroundCoordinator?.cancelAll();
+    this.#backgroundCoordinator?.removeListener('success', onBackgroundSuccess);
     const backgroundTasks = this.#backgroundCoordinator?.getAllResults();
 
-    // Check one final time if a background task succeeded during the last attempt
-    if (!success && this.#backgroundCoordinator?.hasSucceeded()) {
-      matchSource = 'permuter';
+    if (!success && backgroundMatchSource) {
+      matchSource = backgroundMatchSource;
       success = true;
     }
 

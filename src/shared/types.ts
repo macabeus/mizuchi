@@ -265,7 +265,7 @@ export interface BackgroundTaskResult {
 /**
  * What found the match for a prompt
  */
-export type MatchSource = 'claude' | 'permuter' | 'programmatic-flow';
+export type MatchSource = string;
 
 /**
  * Result of running the full pipeline for a single prompt

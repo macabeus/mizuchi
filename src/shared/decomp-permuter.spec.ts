@@ -7,6 +7,45 @@ import { CCompiler } from './c-compiler/c-compiler.js';
 import { DecompPermuter, getToolchainForTarget } from './decomp-permuter.js';
 
 /**
+ * Finding a good seed for permuter tests
+ *
+ * Tests that need the permuter to find a score improvement use `--seed <N>`
+ * for determinism. Without a fixed seed, the permuter explores mutations
+ * randomly and may or may not find improvements within the test timeout,
+ * leading to flaky tests.
+ *
+ * To find a working seed for a given test function pair:
+ *
+ * 1. Write a temporary test that loops over candidate seeds:
+ *
+ *    for (const seed of [0, 10, 20, ..., 200]) {
+ *      it(`seed ${seed}`, async () => {
+ *        const result = await permuter.run({
+ *          cCode: NON_MATCHING_C_CODE,
+ *          targetObjectPath: targetObjPath,
+ *          functionName: '...',
+ *          compilerScript,
+ *          target: '...',
+ *          compilerType: '...',
+ *          maxIterations: 3,    // base-score + 2 improvements
+ *          timeoutMs: 10000,
+ *          flags: ['--seed', String(seed)],
+ *        });
+ *        console.log(`seed=${seed}: base=${result.baseScore} best=${result.bestScore} elapsed=...`);
+ *      }, 15000);
+ *    }
+ *
+ * 2. Pick a seed where best < base and elapsed is low (~1s).
+ *    A good seed finds an improvement within the first ~10 iterations.
+ *    Currently seed 98 works well for the SimpleAdd (a-b vs a+b) ARM case.
+ *
+ * 3. Note: without --seed, the permuter explores more of the mutation space
+ *    per iteration (truly random). With --seed, it locks the RNG and replays
+ *    the same mutation sequence, so it either finds an improvement quickly
+ *    or never does. Always verify the chosen seed with maxIterations: 2.
+ */
+
+/**
  * Add .NON_MATCHING alias symbols to an object file (in-place).
  *
  * N64 decomp projects (e.g. Animal Forest) use asm-processor to emit
@@ -74,15 +113,15 @@ describe('DecompPermuter', () => {
         target: 'gba',
         compilerType: 'gcc',
         // maxIterations: 1 → kills right after the base-score entry is parsed,
-        // preventing a 30s wait for improvement entries that never come at score 0.
+        // preventing a long wait for improvement entries that never come at score 0.
         maxIterations: 1,
-        timeoutMs: 15000,
+        timeoutMs: 10000,
       });
 
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBe(0);
       expect(result.bestScore).toBe(0);
-    }, 30000);
+    }, 10000);
 
     it('reports a non-zero base score for non-matching code', async () => {
       const result = await permuter.run({
@@ -94,7 +133,7 @@ describe('DecompPermuter', () => {
         compilerType: 'gcc',
         // Only need the base-score entry to verify baseScore > 0.
         maxIterations: 1,
-        timeoutMs: 15000,
+        timeoutMs: 10000,
       });
 
       expect(result.error).toBeUndefined();
@@ -103,7 +142,7 @@ describe('DecompPermuter', () => {
       // With maxIterations: 1, the process is killed after the base-score event, but a
       // few iterations may have run before the kill takes effect.
       expect(result.iterationsRun).toBeGreaterThanOrEqual(0);
-    }, 30000);
+    }, 10000);
 
     it('respects maxIterations limit', async () => {
       const maxIterations = 2;
@@ -116,15 +155,14 @@ describe('DecompPermuter', () => {
         target: 'gba',
         compilerType: 'gcc',
         maxIterations,
-        timeoutMs: 60000,
+        timeoutMs: 30000,
+        flags: ['--seed', '98'],
       });
       const elapsed = Date.now() - start;
 
       expect(result.error).toBeUndefined();
-      // maxIterations limits parsed score events, causing early process termination.
-      // The process should finish well before the 60s timeout.
-      expect(elapsed).toBeLessThan(30000);
-    }, 60000);
+      expect(elapsed).toBeLessThan(10000);
+    }, 15000);
 
     it('respects timeoutMs limit', async () => {
       const result = await permuter.run({
@@ -135,13 +173,13 @@ describe('DecompPermuter', () => {
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 100000,
-        timeoutMs: 3000, // 3 seconds
+        timeoutMs: 1500,
       });
 
       // Should terminate without error (timeout just kills the process)
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBeGreaterThan(0);
-    }, 15000);
+    }, 10000);
 
     it('passes context content to compile.sh', async () => {
       // Context content is concatenated before the C code during compilation.
@@ -158,13 +196,13 @@ describe('DecompPermuter', () => {
         compilerType: 'gcc',
         contextContent,
         maxIterations: 1,
-        timeoutMs: 15000,
+        timeoutMs: 10000,
       });
 
       // Should compile successfully with context prepended
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBe(0);
-    }, 30000);
+    }, 10000);
 
     it('compiles successfully when context has typedefs (no double-include)', async () => {
       // Reproduces: compile.sh prepends #include "context.h", but base.c
@@ -180,19 +218,19 @@ describe('DecompPermuter', () => {
         compilerType: 'gcc',
         contextContent,
         maxIterations: 1,
-        timeoutMs: 15000,
+        timeoutMs: 10000,
       });
 
       expect(result.stderr).not.toContain('redefinition');
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBe(0);
-    }, 30000);
+    }, 10000);
 
     it('stops promptly when abort signal fires', async () => {
       const abortController = new AbortController();
 
-      // Abort after 2 seconds
-      setTimeout(() => abortController.abort(), 2000);
+      // Abort after 500ms — enough for the permuter to start
+      setTimeout(() => abortController.abort(), 500);
 
       const start = Date.now();
       const result = await permuter.run({
@@ -203,16 +241,16 @@ describe('DecompPermuter', () => {
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 100000,
-        timeoutMs: 60000,
+        timeoutMs: 30000,
         signal: abortController.signal,
       });
 
       const elapsed = Date.now() - start;
 
-      // Should terminate well before the 60s timeout
-      expect(elapsed).toBeLessThan(15000);
+      // Should terminate shortly after the 500ms abort signal
+      expect(elapsed).toBeLessThan(5000);
       expect(result.error).toBeUndefined();
-    }, 30000);
+    }, 10000);
 
     it('scores correctly when target.o has multiple functions', async () => {
       // Compile a multi-function source as target.o — SimpleAdd is surrounded
@@ -239,7 +277,7 @@ describe('DecompPermuter', () => {
           target: 'gba',
           compilerType: 'gcc',
           maxIterations: 1,
-          timeoutMs: 15000,
+          timeoutMs: 10000,
         });
 
         expect(result.error).toBeUndefined();
@@ -250,7 +288,7 @@ describe('DecompPermuter', () => {
       } finally {
         await fs.unlink(multiTargetResult.objPath).catch(() => {});
       }
-    }, 30000);
+    }, 10000);
 
     it('returns error for invalid target object path', async () => {
       const result = await permuter.run({
@@ -306,12 +344,12 @@ describe('DecompPermuter', () => {
         target: 'n64',
         compilerType: 'ido',
         maxIterations: 1,
-        timeoutMs: 15000,
+        timeoutMs: 10000,
       });
 
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBe(0);
-    }, 30000);
+    }, 10000);
 
     it('reports non-zero base score for non-matching MIPS code', async () => {
       const result = await permuter.run({
@@ -322,12 +360,12 @@ describe('DecompPermuter', () => {
         target: 'n64',
         compilerType: 'ido',
         maxIterations: 1,
-        timeoutMs: 15000,
+        timeoutMs: 10000,
       });
 
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBeGreaterThan(0);
-    }, 30000);
+    }, 10000);
 
     it('scores correctly when MIPS target.o has multiple functions', async () => {
       const multiFunctionCode = [
@@ -351,7 +389,7 @@ describe('DecompPermuter', () => {
           target: 'n64',
           compilerType: 'ido',
           maxIterations: 1,
-          timeoutMs: 15000,
+          timeoutMs: 10000,
         });
 
         expect(result.error).toBeUndefined();
@@ -359,7 +397,7 @@ describe('DecompPermuter', () => {
       } finally {
         await fs.unlink(multiTargetResult.objPath).catch(() => {});
       }
-    }, 30000);
+    }, 10000);
 
     it('handles target.o with .NON_MATCHING alias symbols at same address', async () => {
       // N64 decomp projects use asm-processor which emits .NON_MATCHING aliases
@@ -399,7 +437,7 @@ describe('DecompPermuter', () => {
           target: 'n64',
           compilerType: 'ido',
           maxIterations: 1,
-          timeoutMs: 15000,
+          timeoutMs: 10000,
         });
 
         expect(result.error).toBeUndefined();
@@ -407,7 +445,7 @@ describe('DecompPermuter', () => {
       } finally {
         await fs.unlink(multiTargetResult.objPath).catch(() => {});
       }
-    }, 30000);
+    }, 10000);
   });
 
   describe('getToolchainForTarget', () => {

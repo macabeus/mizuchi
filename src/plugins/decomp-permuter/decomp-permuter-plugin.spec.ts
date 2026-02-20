@@ -64,7 +64,7 @@ describe('DecompPermuterPlugin', () => {
 
     it('runs the permuter on non-matching code', async () => {
       const plugin = new DecompPermuterPlugin(
-        { enable: true, maxIterations: 10, timeoutMs: 30000, flags: ['--show-errors'] },
+        { enable: true, maxIterations: 2, timeoutMs: 10000, flags: ['--show-errors', '--seed', '98'] },
         cCompiler,
       );
 
@@ -82,11 +82,11 @@ describe('DecompPermuterPlugin', () => {
       expect(result.data).toBeDefined();
       expect(result.data!.baseScore).toBeGreaterThan(0);
       expect(result.data!.iterationsRun).toBeGreaterThan(0);
-    }, 60000);
+    }, 15000);
 
     it('reports base score 0 when code already matches', async () => {
       const plugin = new DecompPermuterPlugin(
-        { enable: true, maxIterations: 5, timeoutMs: 30000, flags: ['--show-errors'] },
+        { enable: true, maxIterations: 1, timeoutMs: 10000, flags: ['--show-errors'] },
         cCompiler,
       );
 
@@ -102,11 +102,11 @@ describe('DecompPermuterPlugin', () => {
 
       expect(result.data).toBeDefined();
       expect(result.data!.baseScore).toBe(0);
-    }, 60000);
+    }, 15000);
 
     it('terminates promptly with -j 4 flag', async () => {
       const plugin = new DecompPermuterPlugin(
-        { enable: true, maxIterations: 2, timeoutMs: 30000, flags: ['--show-errors', '-j', '4'] },
+        { enable: true, maxIterations: 2, timeoutMs: 10000, flags: ['--show-errors', '-j', '4', '--seed', '98'] },
         cCompiler,
       );
 
@@ -125,11 +125,11 @@ describe('DecompPermuterPlugin', () => {
       expect(result.pluginId).toBe('decomp-permuter');
       expect(result.data).toBeDefined();
       expect(result.data!.baseScore).toBeGreaterThan(0);
-      // Should terminate well before the 30s timeout. Without the process group
+      // Should terminate well before timeout. Without the process group
       // kill fix, -j 4 spawns Python workers that keep pipes open indefinitely,
       // causing run() to hang until timeout.
-      expect(elapsed).toBeLessThan(20000);
-    }, 60000);
+      expect(elapsed).toBeLessThan(5000);
+    }, 15000);
 
     it('returns failure when no generatedCode is available', async () => {
       const plugin = new DecompPermuterPlugin(

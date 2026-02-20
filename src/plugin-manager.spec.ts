@@ -966,7 +966,6 @@ describe('PluginManager', () => {
 
       vi.spyOn(coordinator, 'onAttemptComplete');
       vi.spyOn(coordinator, 'reset');
-      vi.spyOn(coordinator, 'hasSucceeded').mockReturnValue(false);
       vi.spyOn(coordinator, 'cancelAll').mockResolvedValue();
       vi.spyOn(coordinator, 'getAllResults').mockReturnValue([]);
 
@@ -1021,21 +1020,21 @@ describe('PluginManager', () => {
       expect(coordinator.reset).toHaveBeenCalledTimes(1);
     });
 
-    it('stops early when coordinator reports success between attempts', async () => {
+    it('stops early when coordinator emits success between attempts', async () => {
       const { manager, coordinator } = setupManagerWithCoordinator(3);
       const plugin = createFailurePlugin('test', 'Test', 'fail');
 
       manager.register(plugin);
 
-      // After first attempt, background succeeds
-      vi.mocked(coordinator.hasSucceeded)
-        .mockReturnValueOnce(false) // checked before attempt 1
-        .mockReturnValueOnce(true); // checked before attempt 2
+      // Emit 'success' after the first attempt's onAttemptComplete
+      vi.mocked(coordinator.onAttemptComplete).mockImplementation(() => {
+        coordinator.emit('success', { taskId: 'test-1', pluginId: 'test', success: true });
+      });
 
       const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\n');
 
       expect(result.success).toBe(true);
-      expect(result.matchSource).toBe('permuter');
+      expect(result.matchSource).toBe('test');
       expect(result.attempts).toHaveLength(1);
     });
 
@@ -1050,21 +1049,21 @@ describe('PluginManager', () => {
       expect(coordinator.cancelAll).toHaveBeenCalledTimes(1);
     });
 
-    it('checks hasSucceeded one final time after cancelAll', async () => {
+    it('detects success that occurs during cancelAll', async () => {
       const { manager, coordinator } = setupManagerWithCoordinator(1);
       const plugin = createFailurePlugin('test', 'Test', 'fail');
 
       manager.register(plugin);
 
-      // hasSucceeded returns false during the loop, true after cancelAll
-      vi.mocked(coordinator.hasSucceeded)
-        .mockReturnValueOnce(false) // before attempt 1
-        .mockReturnValue(true); // final check after cancelAll
+      // Emit 'success' during cancelAll (simulates a task completing just as it is cancelled)
+      vi.mocked(coordinator.cancelAll).mockImplementation(async () => {
+        coordinator.emit('success', { taskId: 'test-1', pluginId: 'test', success: true });
+      });
 
       const result = await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\n');
 
       expect(result.success).toBe(true);
-      expect(result.matchSource).toBe('permuter');
+      expect(result.matchSource).toBe('test');
     });
 
     it('provides a fresh foreground abort signal for each prompt in runBenchmark', async () => {
@@ -1133,7 +1132,7 @@ describe('PluginManager', () => {
       expect(signalAbortedPerExecution[1]).toBe(false);
     });
 
-    it('foreground abort signal is aborted when background task succeeds', async () => {
+    it('short-circuits before attempt 2 when background emits success after attempt 1', async () => {
       const config = { ...defaultTestPipelineConfig, maxRetries: 2 };
       const manager = new PluginManager(config);
 
@@ -1163,15 +1162,14 @@ describe('PluginManager', () => {
         currentSignal = signal;
       };
 
-      // Create a real coordinator that will trigger success between attempts
       const coordinator = new BackgroundTaskCoordinator([]);
       vi.spyOn(coordinator, 'cancelAll').mockResolvedValue();
       vi.spyOn(coordinator, 'getAllResults').mockReturnValue([]);
 
-      // hasSucceeded: false for attempt 1, true for attempt 2 (background succeeded)
-      vi.spyOn(coordinator, 'hasSucceeded')
-        .mockReturnValueOnce(false) // before attempt 1
-        .mockReturnValue(true); // before attempt 2
+      // Emit 'success' after the first attempt completes (via onAttemptComplete)
+      vi.spyOn(coordinator, 'onAttemptComplete').mockImplementation(() => {
+        coordinator.emit('success', { taskId: 'test-1', pluginId: 'test', success: true });
+      });
 
       manager.setBackgroundCoordinator(coordinator);
       manager.register(plugin);
@@ -1180,7 +1178,7 @@ describe('PluginManager', () => {
 
       // Pipeline should short-circuit with background success before attempt 2 runs
       expect(result.success).toBe(true);
-      expect(result.matchSource).toBe('permuter');
+      expect(result.matchSource).toBe('test');
       expect(result.attempts).toHaveLength(1);
       // The second attempt never ran, so this should be undefined
       expect(signalAbortedDuringSecondAttempt).toBeUndefined();

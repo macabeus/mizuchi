@@ -6,7 +6,7 @@ import { Icon } from './Icon';
 
 const matchSourceLabels: Record<string, { label: string; color: string }> = {
   claude: { label: 'Claude', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-  permuter: { label: 'Permuter', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  'decomp-permuter': { label: 'Permuter', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
   'programmatic-flow': { label: 'Programmatic', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
 };
 
@@ -47,8 +47,8 @@ export function BestResultCode({ result }: BestResultProps) {
   }, null);
 
   // If permuter found a perfect match, use its code
-  if (permuterSuccess?.bestCode && result.matchSource === 'permuter') {
-    const badge = matchSourceLabels['permuter'];
+  if (permuterSuccess?.bestCode && result.matchSource === 'decomp-permuter') {
+    const badge = matchSourceLabels['decomp-permuter'];
     return (
       <div className="p-5">
         <div className="flex items-center justify-between mb-3">

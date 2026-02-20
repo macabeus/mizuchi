@@ -1747,4 +1747,89 @@ mov eax, 0
       expect(mockCliPrompt.askChoice).not.toHaveBeenCalled();
     });
   });
+
+  describe('foreground abort signal', () => {
+    it('aborts mid-request when the foreground abort signal fires', async () => {
+      // Create a query that blocks until externally resolved, simulating a long-running LLM call
+      let resolveQuery!: () => void;
+      const queryBlocked = new Promise<void>((resolve) => {
+        resolveQuery = resolve;
+      });
+
+      let closed = false;
+      const closeFn = vi.fn(() => {
+        closed = true;
+      });
+      const mockFactory: QueryFactory = vi.fn(() => {
+        async function* slowStream(): AsyncGenerator<SDKMessage> {
+          // Emit the init message so the plugin captures the session ID
+          yield {
+            type: 'system',
+            subtype: 'init',
+            session_id: TEST_SESSION_ID,
+          } as SDKMessage;
+
+          // Block here — simulates waiting for the LLM response
+          await queryBlocked;
+
+          // After unblocking, check if close() was called (simulates real SDK behavior)
+          if (closed) {
+            throw new Error('Query was closed');
+          }
+
+          yield {
+            type: 'assistant',
+            session_id: TEST_SESSION_ID,
+            message: { id: 'msg-1', content: [{ type: 'text', text: '```c\nint f() {}\n```' }] },
+          } as SDKMessage;
+          yield {
+            type: 'result',
+            subtype: 'success',
+            session_id: TEST_SESSION_ID,
+            is_error: false,
+          } as SDKMessage;
+        }
+
+        return {
+          [Symbol.asyncIterator]: () => slowStream(),
+          close: closeFn,
+        } as any;
+      });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      // Wire a foreground abort signal (as the PluginManager would)
+      const abortController = new AbortController();
+      plugin.setForegroundAbortSignal(abortController.signal);
+
+      const context = createTestContext();
+
+      // Start execute — it will block inside the slow query
+      const executePromise = plugin.execute(context);
+
+      // Give the async generator time to reach the blocking await
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Fire the abort signal (simulates background permuter finding a match)
+      abortController.abort();
+
+      // Unblock the generator so it can observe the abort
+      resolveQuery();
+
+      const { result } = await executePromise;
+
+      // The plugin should have failed with an abort error
+      expect(result.status).toBe('failure');
+      expect(result.error).toContain('background plugin found a perfect match');
+
+      // query.close() should have been called by the abort handler
+      expect(closeFn).toHaveBeenCalled();
+    });
+  });
 });

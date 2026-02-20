@@ -28,10 +28,16 @@ export type BackgroundPlugin = Plugin<any> & { background: BackgroundCapability<
 /**
  * Coordinates background tasks running alongside the AI-powered flow.
  *
+ * Emits:
+ * - `'success'` (BackgroundTaskResult) — when a background task finds a match.
+ *   The foreground abort signal also fires so long-running plugins (e.g., Claude)
+ *   can stop early. Listeners should treat this as the definitive notification
+ *   that background work has found a match.
+ *
  * Usage:
  * 1. Create coordinator with plugins that have background capabilities
- * 2. Call onAttemptComplete() after each attempt
- * 3. Check hasSucceeded() between attempts
+ * 2. Listen for `'success'` to react when a background task finds a match
+ * 3. Call onAttemptComplete() after each attempt
  * 4. Call cancelAll() when pipeline ends
  */
 export class BackgroundTaskCoordinator extends EventEmitter {
@@ -140,20 +146,6 @@ export class BackgroundTaskCoordinator extends EventEmitter {
     await Promise.allSettled(promises);
 
     this.#tasks.clear();
-  }
-
-  /**
-   * Check if any background task has succeeded.
-   */
-  hasSucceeded(): boolean {
-    return this.#successResult !== null;
-  }
-
-  /**
-   * Get the result of the successful background task, if any.
-   */
-  getSuccessResult(): BackgroundTaskResult | null {
-    return this.#successResult;
   }
 
   /**
