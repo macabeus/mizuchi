@@ -547,6 +547,7 @@ export class PluginManager {
               },
             ],
             success: false,
+            startTimestamp: new Date().toISOString(),
             durationMs: 0,
           },
         });

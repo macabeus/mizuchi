@@ -26,6 +26,7 @@ import type {
   Plugin,
   PluginReportSection,
   PluginResult,
+  PluginResultMap,
   TaskMetadata,
 } from '~/shared/types.js';
 
@@ -97,8 +98,10 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterResult> {
         return null;
       }
 
-      const objdiffResult = ctx.attemptResults.find((r) => r.pluginId === 'objdiff');
-      const differenceCount = (objdiffResult?.data as { differenceCount?: number } | undefined)?.differenceCount;
+      const objdiffResult = ctx.attemptResults.find((r) => r.pluginId === 'objdiff') as
+        | PluginResultMap['objdiff']
+        | undefined;
+      const differenceCount = objdiffResult?.data?.differenceCount;
       if (differenceCount === undefined || differenceCount > this.#bestDifferenceCount) {
         return null;
       }

@@ -108,7 +108,7 @@ interface ProgressState {
   }>;
   // Best objdiff difference count from AI-powered flow attempts
   bestDifferenceCount?: number;
-  // Background permuter tasks
+  // Background tasks (e.g., permuter)
   backgroundTasks: Array<{
     taskId: string;
     triggeredByAttempt: number;

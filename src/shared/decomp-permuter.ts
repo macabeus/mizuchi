@@ -115,7 +115,7 @@ export interface DecompPermuterOptions {
   timeoutMs: number;
   /** Optional abort signal to cancel the permuter process */
   signal?: AbortSignal;
-  /** Additional flags to pass to permuter.py (e.g. ['-j 4', '--stack-diffs']) */
+  /** Additional flags to pass to permuter.py (e.g. ['--stack-diffs', '-j', '4']) */
   flags?: string[];
 }
 
@@ -547,9 +547,6 @@ fi
    * Parse streaming output from permuter.py.
    *
    * Captures raw stdout/stderr into `capture` while yielding parsed events.
-   * Handles both \n-delimited score messages and \r-delimited progress lines
-   * in a single subscriber per stream, eliminating the need for a separate
-   * raw stdout handler.
    */
   async *#streamOutput(
     process: ChildProcess,

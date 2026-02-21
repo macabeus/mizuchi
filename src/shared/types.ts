@@ -303,7 +303,7 @@ export interface AttemptResult {
   success: boolean;
   durationMs: number;
   /** ISO timestamp when the attempt started */
-  startTimestamp?: string;
+  startTimestamp: string;
 }
 
 /**

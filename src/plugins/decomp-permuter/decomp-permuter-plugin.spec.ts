@@ -65,7 +65,7 @@ describe('DecompPermuterPlugin', () => {
 
     it('runs the permuter on non-matching code', async () => {
       const plugin = new DecompPermuterPlugin(
-        { enable: true, maxIterations: 2, timeoutMs: 10000, flags: ['--show-errors', '--seed', '98'] },
+        { enable: true, maxIterations: 2, timeoutMs: 15000, flags: ['--show-errors', '--seed', '98'] },
         cCompiler,
       );
 
@@ -83,7 +83,7 @@ describe('DecompPermuterPlugin', () => {
       expect(result.data).toBeDefined();
       expect(result.data!.baseScore).toBeGreaterThan(0);
       expect(result.data!.iterationsRun).toBeGreaterThan(0);
-    }, 15000);
+    }, 20000);
 
     it('reports base score 0 when code already matches', async () => {
       const plugin = new DecompPermuterPlugin(

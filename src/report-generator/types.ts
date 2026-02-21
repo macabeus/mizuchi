@@ -130,7 +130,7 @@ export type ReportAttempt = {
   success: boolean;
   durationMs: number;
   pluginResults: ReportPluginResult[];
-  startTimestamp?: string;
+  startTimestamp: string;
 };
 
 /**

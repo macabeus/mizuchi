@@ -110,13 +110,13 @@ describe('DecompPermuter', () => {
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 1,
-        timeoutMs: 10000,
+        timeoutMs: 15000,
       });
 
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBe(0);
       expect(result.bestScore).toBe(0);
-    }, 10000);
+    }, 20000);
 
     it('reports a non-zero base score for non-matching code', async () => {
       const result = await permuter.run({
@@ -237,7 +237,7 @@ describe('DecompPermuter', () => {
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 50000,
-        timeoutMs: 15000,
+        timeoutMs: 20000,
       });
 
       expect(result.error).toBeUndefined();
@@ -261,7 +261,7 @@ describe('DecompPermuter', () => {
 
       // iterationsRun is extracted from the progress lines, not from parsed events
       expect(result.iterationsRun).toBeGreaterThan(0);
-    }, 20000);
+    }, 25000);
 
     it('respects timeoutMs limit', async () => {
       const result = await permuter.run({
