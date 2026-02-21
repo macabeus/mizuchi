@@ -21,7 +21,7 @@ import type {
 
 export class PluginManager {
   #setupFlowPlugins: Plugin<any>[] = [];
-  #programmaticFlowPlugins: Plugin<any>[] = [];
+  #programmaticFlowStages: Plugin<any>[][] = [];
   #plugins: Plugin<any>[] = [];
   #config: PipelineConfig;
   #eventHandler?: PipelineEventHandler;
@@ -64,13 +64,13 @@ export class PluginManager {
   }
 
   /**
-   * Register plugins for the programmatic-flow phase.
-   * These plugins run once before the retry loop. If they succeed, the pipeline
-   * short-circuits without running the main retry loop.
+   * Register plugins for the programmatic-flow phase as one or more stages.
+   * Each stage is an array of plugins run via #runAttempt(). If a stage succeeds,
+   * the pipeline short-circuits. If it fails, the next stage runs with accumulated context.
    */
-  registerProgrammaticFlow(...plugins: Plugin<any>[]): this {
-    this.#programmaticFlowPlugins = plugins;
-    for (const plugin of plugins) {
+  registerProgrammaticFlow(...stages: Plugin<any>[][]): this {
+    this.#programmaticFlowStages = stages;
+    for (const plugin of stages.flat()) {
       this.#emit({
         type: 'plugin-registered',
         plugin: {
@@ -111,10 +111,10 @@ export class PluginManager {
   }
 
   /**
-   * Get all registered programmatic-flow plugins
+   * Get all registered programmatic-flow plugins (flattened across all stages)
    */
   getProgrammaticFlowPlugins(): readonly Plugin<any>[] {
-    return this.#programmaticFlowPlugins;
+    return this.#programmaticFlowStages.flat();
   }
 
   /**
@@ -178,17 +178,33 @@ export class PluginManager {
 
     // Programmatic-flow phase
     let programmaticFlow: AttemptResult | undefined;
-    if (this.#programmaticFlowPlugins.length > 0) {
+    if (this.#programmaticFlowStages.length > 0) {
       this.#emit({ type: 'programmatic-flow-start' });
 
-      const { finalContext: preContext, ...preAttemptResult } = await this.#runAttempt(
-        context,
-        this.#programmaticFlowPlugins,
-      );
+      const allPluginResults: PluginResult<any>[] = [];
+      let lastContext = context;
+      let stageSucceeded = false;
 
-      programmaticFlow = preAttemptResult;
+      for (const stage of this.#programmaticFlowStages) {
+        const { finalContext: stageContext, ...stageResult } = await this.#runAttempt(lastContext, stage);
+        allPluginResults.push(...stageResult.pluginResults);
+        lastContext = stageContext;
 
-      if (preAttemptResult.success) {
+        if (stageResult.success) {
+          stageSucceeded = true;
+          break;
+        }
+      }
+
+      programmaticFlow = {
+        attemptNumber: context.attemptNumber,
+        pluginResults: allPluginResults,
+        success: stageSucceeded,
+        durationMs: Date.now() - startTime,
+        startTimestamp: new Date().toISOString(),
+      };
+
+      if (stageSucceeded) {
         return {
           promptPath,
           functionName,
@@ -202,12 +218,12 @@ export class PluginManager {
       }
 
       // Carry forward m2cContext from the programmatic-flow
-      context.m2cContext = preContext.m2cContext;
+      context.m2cContext = lastContext.m2cContext;
 
       // Enrich m2cContext with compiler/objdiff results from the programmatic-flow
       if (context.m2cContext) {
-        const compilerResult = preAttemptResult.pluginResults.find((r) => r.pluginId === 'compiler');
-        const objdiffResult = preAttemptResult.pluginResults.find((r) => r.pluginId === 'objdiff');
+        const compilerResult = allPluginResults.find((r) => r.pluginId === 'compiler');
+        const objdiffResult = allPluginResults.find((r) => r.pluginId === 'objdiff');
 
         if (compilerResult?.status === 'failure') {
           context.m2cContext.compilationError = compilerResult.output || compilerResult.error;

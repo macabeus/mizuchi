@@ -340,7 +340,7 @@ describe('PluginManager', () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
       const plugin = createSuccessPlugin('pre1', 'Pre Plugin 1');
 
-      const result = manager.registerProgrammaticFlow(plugin);
+      const result = manager.registerProgrammaticFlow([plugin]);
 
       expect(result).toBe(manager);
       expect(manager.getProgrammaticFlowPlugins()).toContain(plugin);
@@ -352,7 +352,7 @@ describe('PluginManager', () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
       const mainPluginExecuted: string[] = [];
 
-      manager.registerProgrammaticFlow(createSuccessPlugin('pre1', 'Pre Plugin'));
+      manager.registerProgrammaticFlow([createSuccessPlugin('pre1', 'Pre Plugin')]);
       manager.register(
         createMockPlugin({
           id: 'main1',
@@ -385,7 +385,7 @@ describe('PluginManager', () => {
     it('falls through to AI-powered flow when programmatic-flow fails', async () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
 
-      manager.registerProgrammaticFlow(createFailurePlugin('pre1', 'Pre Plugin', 'Pre failed'));
+      manager.registerProgrammaticFlow([createFailurePlugin('pre1', 'Pre Plugin', 'Pre failed')]);
       manager.register(createSuccessPlugin('main1', 'Main Plugin'));
 
       const result = await manager.runPipeline(
@@ -459,7 +459,7 @@ describe('PluginManager', () => {
         },
       });
 
-      manager.registerProgrammaticFlow(prePlugin, preCompiler);
+      manager.registerProgrammaticFlow([prePlugin, preCompiler]);
       manager.register(mainPlugin);
 
       await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
@@ -495,12 +495,229 @@ describe('PluginManager', () => {
         },
       });
 
-      manager.registerProgrammaticFlow(prePlugin, preCompiler);
+      manager.registerProgrammaticFlow([prePlugin, preCompiler]);
       manager.register(mainPlugin);
 
       await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
 
       expect(receivedGeneratedCode).toBeUndefined();
+    });
+
+    it('returns early when stage 1 succeeds without running stage 2', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+      const executionOrder: string[] = [];
+
+      const stage1Plugin = createMockPlugin({
+        id: 'stage1',
+        name: 'Stage 1',
+        executeFn: async (ctx) => {
+          executionOrder.push('stage1');
+          return {
+            result: { pluginId: 'stage1', pluginName: 'Stage 1', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+
+      const stage2Plugin = createMockPlugin({
+        id: 'stage2',
+        name: 'Stage 2',
+        executeFn: async (ctx) => {
+          executionOrder.push('stage2');
+          return {
+            result: { pluginId: 'stage2', pluginName: 'Stage 2', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+
+      manager.registerProgrammaticFlow([stage1Plugin], [stage2Plugin]);
+      manager.register(createSuccessPlugin('main1', 'Main Plugin'));
+
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.matchSource).toBe('programmatic-flow');
+      expect(result.attempts).toHaveLength(0);
+      expect(executionOrder).toEqual(['stage1']);
+    });
+
+    it('runs stage 2 when stage 1 fails, returns success on stage 2 success', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+      const executionOrder: string[] = [];
+
+      const stage1Plugin = createMockPlugin({
+        id: 'stage1',
+        name: 'Stage 1',
+        executeFn: async (ctx) => {
+          executionOrder.push('stage1');
+          return {
+            result: {
+              pluginId: 'stage1',
+              pluginName: 'Stage 1',
+              status: 'failure',
+              durationMs: 10,
+              error: 'Stage 1 failed',
+            },
+            context: ctx,
+          };
+        },
+      });
+
+      const stage2Plugin = createMockPlugin({
+        id: 'stage2',
+        name: 'Stage 2',
+        executeFn: async (ctx) => {
+          executionOrder.push('stage2');
+          return {
+            result: { pluginId: 'stage2', pluginName: 'Stage 2', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+
+      manager.registerProgrammaticFlow([stage1Plugin], [stage2Plugin]);
+      manager.register(createSuccessPlugin('main1', 'Main Plugin'));
+
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.matchSource).toBe('programmatic-flow');
+      expect(result.attempts).toHaveLength(0);
+      expect(executionOrder).toEqual(['stage1', 'stage2']);
+    });
+
+    it('falls through to AI-powered flow when all stages fail', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+      const executionOrder: string[] = [];
+
+      const stage1Plugin = createFailurePlugin('stage1', 'Stage 1', 'Stage 1 failed');
+      const stage2Plugin = createFailurePlugin('stage2', 'Stage 2', 'Stage 2 failed');
+
+      manager.registerProgrammaticFlow([stage1Plugin], [stage2Plugin]);
+
+      const mainPlugin = createMockPlugin({
+        id: 'main1',
+        name: 'Main Plugin',
+        executeFn: async (ctx) => {
+          executionOrder.push('main1');
+          return {
+            result: { pluginId: 'main1', pluginName: 'Main Plugin', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+      manager.register(mainPlugin);
+
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.programmaticFlow).toBeDefined();
+      expect(result.programmaticFlow!.success).toBe(false);
+      expect(result.attempts).toHaveLength(1);
+      expect(executionOrder).toEqual(['main1']);
+    });
+
+    it('merges all stage results into programmaticFlow.pluginResults', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+
+      const stage1Plugin1 = createMockPlugin({
+        id: 's1p1',
+        name: 'S1P1',
+        executeFn: async (ctx) => ({
+          result: { pluginId: 's1p1', pluginName: 'S1P1', status: 'success', durationMs: 10 },
+          context: ctx,
+        }),
+      });
+      const stage1Plugin2 = createFailurePlugin('s1p2', 'S1P2', 'failed');
+      const stage2Plugin = createSuccessPlugin('s2p1', 'S2P1');
+
+      manager.registerProgrammaticFlow([stage1Plugin1, stage1Plugin2], [stage2Plugin]);
+      manager.register(createSuccessPlugin('main1', 'Main Plugin'));
+
+      const result = await manager.runPipeline(
+        'test.md',
+        'content',
+        'testFunc',
+        '/target.o',
+        '.text\nglabel testFunc\n    bx lr\n',
+      );
+
+      expect(result.programmaticFlow).toBeDefined();
+      const pluginIds = result.programmaticFlow!.pluginResults.map((r) => r.pluginId);
+      // Stage 1 has s1p1 (success) and s1p2 (failure, which also causes s1p2 skipped? no - it fails)
+      // Stage 1: s1p1 succeeded, s1p2 failed → stage fails → stage 2 runs
+      // Stage 2: s2p1 succeeded → stage succeeds
+      expect(pluginIds).toContain('s1p1');
+      expect(pluginIds).toContain('s1p2');
+      expect(pluginIds).toContain('s2p1');
+    });
+
+    it('enriches m2cContext with compiler/objdiff results from multi-stage flow', async () => {
+      const manager = new PluginManager(defaultTestPipelineConfig);
+
+      // Stage 1: m2c → compiler (fails)
+      const m2cPlugin = createMockPlugin({
+        id: 'm2c',
+        name: 'm2c',
+        executeFn: async (ctx) => ({
+          result: {
+            pluginId: 'm2c',
+            pluginName: 'm2c',
+            status: 'success',
+            durationMs: 10,
+          },
+          context: {
+            ...ctx,
+            generatedCode: 'int f() {}',
+            m2cContext: { generatedCode: 'int f() {}' },
+          },
+        }),
+      });
+      const compilerPlugin = createFailurePlugin('compiler', 'Compiler', 'Compilation error');
+
+      // Stage 2: also fails
+      const stage2Plugin = createFailurePlugin('stage2', 'Stage 2', 'Stage 2 failed');
+
+      let receivedM2cContext: any;
+      const mainPlugin = createMockPlugin({
+        id: 'main1',
+        name: 'Main Plugin',
+        executeFn: async (ctx) => {
+          receivedM2cContext = ctx.m2cContext;
+          return {
+            result: { pluginId: 'main1', pluginName: 'Main Plugin', status: 'success', durationMs: 10 },
+            context: ctx,
+          };
+        },
+      });
+
+      manager.registerProgrammaticFlow([m2cPlugin, compilerPlugin], [stage2Plugin]);
+      manager.register(mainPlugin);
+
+      await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');
+
+      expect(receivedM2cContext).toBeDefined();
+      expect(receivedM2cContext.generatedCode).toBe('int f() {}');
+      expect(receivedM2cContext.compilationError).toContain('Compilation error');
     });
   });
 
@@ -614,7 +831,7 @@ describe('PluginManager', () => {
       });
 
       manager.registerSetupFlow(setupFlowPlugin);
-      manager.registerProgrammaticFlow(programmaticPlugin);
+      manager.registerProgrammaticFlow([programmaticPlugin]);
       manager.register(createSuccessPlugin('main1', 'Main Plugin'));
 
       await manager.runPipeline('test.md', 'content', 'testFunc', '/target.o', '.text\nglabel testFunc\n    bx lr\n');

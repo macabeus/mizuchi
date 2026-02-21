@@ -788,10 +788,10 @@ async function runPipeline(
 
       if (decompPermuterConfig.enable) {
         const decompPermuterPlugin = new DecompPermuterPlugin(decompPermuterConfig, cCompiler);
-        manager.registerProgrammaticFlow(m2cPlugin, compilerPlugin, decompPermuterPlugin, objdiffPlugin);
+        manager.registerProgrammaticFlow([m2cPlugin, compilerPlugin, objdiffPlugin], [decompPermuterPlugin]);
         backgroundCoordinator = new BackgroundTaskCoordinator([decompPermuterPlugin], onEvent);
       } else {
-        manager.registerProgrammaticFlow(m2cPlugin, compilerPlugin, objdiffPlugin);
+        manager.registerProgrammaticFlow([m2cPlugin, compilerPlugin, objdiffPlugin]);
       }
     }
 
