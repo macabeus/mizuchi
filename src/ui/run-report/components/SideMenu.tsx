@@ -1,7 +1,6 @@
+import { Icon, IconName } from '@ui-shared/components/Icon';
+import { WithTooltip } from '@ui-shared/components/WithTooltip';
 import { useState } from 'react';
-
-import { Icon, IconName } from './Icon';
-import { WithTooltip } from './WithTooltip';
 
 type SideMenuItem =
   | {

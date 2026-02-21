@@ -1,8 +1,9 @@
+import { getPluginResult } from '@shared/utils.js';
+import { Icon } from '@ui-shared/components/Icon';
+
 import { ReportAttempt, type ReportPermuterBackgroundTask, ReportPromptResult } from '~/report-generator/types';
 
-import { getPluginResult } from '../../../shared/utils.js';
 import { CodeBlock } from './CodeBlock';
-import { Icon } from './Icon';
 
 const matchSourceLabels: Record<string, { label: string; color: string }> = {
   claude: { label: 'Claude', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },

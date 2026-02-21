@@ -56,5 +56,5 @@ jobs:
       - name: Build CLI
         run: npm run build
 
-      - name: Build Report UI
-        run: npm run build:report-ui
+      - name: Build UIs
+        run: npm run build:ui

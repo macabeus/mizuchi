@@ -1,7 +1,7 @@
+import { Icon } from '@ui-shared/components/Icon';
 import React from 'react';
 
-import type { ReportPluginResult } from '../../types';
-import { Icon } from './Icon';
+import type { ReportPluginResult } from '~/report-generator/types';
 
 interface PluginFlowProps {
   plugins: ReportPluginResult[];

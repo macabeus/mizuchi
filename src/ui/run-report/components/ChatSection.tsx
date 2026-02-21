@@ -1,8 +1,8 @@
+import { Icon } from '@ui-shared/components/Icon';
 import { common, createStarryNight } from '@wooorm/starry-night';
 import { useEffect, useRef, useState } from 'react';
 
-import type { ReportChatMessage, ReportContentBlock } from '../../types';
-import { Icon } from './Icon';
+import type { ReportChatMessage, ReportContentBlock } from '~/report-generator/types';
 
 interface ChatSectionProps {
   messages: ReportChatMessage[];

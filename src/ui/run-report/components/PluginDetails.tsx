@@ -1,7 +1,9 @@
-import type { ReportPluginResult } from '../../types';
+import { Icon } from '@ui-shared/components/Icon';
+
+import type { ReportPluginResult } from '~/report-generator/types';
+
 import { ChatSection } from './ChatSection';
 import { CodeBlock } from './CodeBlock';
-import { Icon } from './Icon';
 
 interface PluginDetailsProps {
   plugin: ReportPluginResult;

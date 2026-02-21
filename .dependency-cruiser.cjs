@@ -86,6 +86,54 @@ module.exports = {
         ],
       },
     },
+    // UI run-report can import from ui/shared/, shared/, and report-generator/
+    {
+      name: 'ui-run-report-import-restrictions',
+      severity: 'error',
+      comment: 'UI run-report can only import from ui/shared/, shared/, and report-generator/.',
+      from: {
+        path: '^src/ui/run-report/',
+      },
+      to: {
+        path: '^src/',
+        pathNot: [
+          '^src/ui/run-report/', // Own directory
+          '^src/ui/shared/', // Shared UI components
+          '^src/shared/', // Shared utilities
+          '^src/report-generator/', // Report generator types/logic
+        ],
+      },
+    },
+    // UI decomp-atlas can import from ui/shared/ and shared/
+    {
+      name: 'ui-decomp-atlas-import-restrictions',
+      severity: 'error',
+      comment: 'UI decomp-atlas can only import from ui/shared/ and shared/.',
+      from: {
+        path: '^src/ui/decomp-atlas/',
+      },
+      to: {
+        path: '^src/',
+        pathNot: [
+          '^src/ui/decomp-atlas/', // Own directory
+          '^src/ui/shared/', // Shared UI components
+          '^src/shared/', // Shared utilities
+        ],
+      },
+    },
+    // Run-report UI and decomp-atlas UI cannot import from each other
+    {
+      name: 'no-cross-ui-app-imports',
+      severity: 'error',
+      comment: 'UI apps cannot import from each other.',
+      from: {
+        path: '^src/ui/(run-report|decomp-atlas)/',
+      },
+      to: {
+        path: '^src/ui/(run-report|decomp-atlas)/',
+        pathNot: ['^src/ui/$1/'], // Only own directory allowed
+      },
+    },
   ],
   options: {
     doNotFollow: {

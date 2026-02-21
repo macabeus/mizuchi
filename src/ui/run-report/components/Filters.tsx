@@ -1,5 +1,6 @@
-import type { ReportFilters, ReportSort } from '../../types';
-import { Icon } from './Icon';
+import { Icon } from '@ui-shared/components/Icon';
+
+import type { ReportFilters, ReportSort } from '~/report-generator/types';
 
 interface FiltersProps {
   filters: ReportFilters;
