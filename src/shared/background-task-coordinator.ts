@@ -128,6 +128,29 @@ export class BackgroundTaskCoordinator extends EventEmitter {
         }
 
         return result;
+      })
+      .catch((error): BackgroundTaskResult => {
+        const result: BackgroundTaskResult = {
+          taskId,
+          pluginId: plugin.id,
+          success: false,
+          durationMs: Date.now() - startTime,
+          triggeredByAttempt,
+          startTimestamp,
+          data: { error: error instanceof Error ? error.message : String(error) },
+        };
+
+        this.#results.push(result);
+        this.#tasks.delete(taskId);
+
+        this.#eventHandler?.({
+          type: 'background-task-complete',
+          taskId,
+          success: false,
+          durationMs: result.durationMs,
+        });
+
+        return result;
       });
 
     this.#tasks.set(taskId, { promise, abortController });
@@ -142,8 +165,7 @@ export class BackgroundTaskCoordinator extends EventEmitter {
       task.abortController.abort();
     }
 
-    const promises = Array.from(this.#tasks.values()).map((t) => t.promise.catch(() => {}));
-    await Promise.allSettled(promises);
+    await Promise.allSettled(Array.from(this.#tasks.values()).map((t) => t.promise));
 
     this.#tasks.clear();
   }

@@ -1132,6 +1132,40 @@ describe('PluginManager', () => {
       expect(signalAbortedPerExecution[1]).toBe(false);
     });
 
+    it('records a failure result when a background task rejects', async () => {
+      const failingPlugin = {
+        ...createFailurePlugin('bg', 'Background', 'fail'),
+        background: {
+          shouldSpawn: () => ({ some: 'config' }),
+          run: () => Promise.reject(new Error('permuter crashed')),
+          isSuccess: () => false,
+          toBackgroundTaskResult: () => {
+            throw new Error('should not be called on rejection');
+          },
+          reset: () => {},
+        },
+      };
+
+      const coordinator = new BackgroundTaskCoordinator([failingPlugin]);
+
+      // Trigger a spawn via onAttemptComplete
+      coordinator.onAttemptComplete({
+        attemptNumber: 1,
+        willRetry: true,
+        context: {} as any,
+        attemptResults: [],
+      });
+
+      // Wait for the task to settle
+      await coordinator.cancelAll();
+
+      const results = coordinator.getAllResults();
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(false);
+      expect(results[0].pluginId).toBe('bg');
+      expect(results[0].data).toEqual({ error: 'permuter crashed' });
+    });
+
     it('short-circuits before attempt 2 when background emits success after attempt 1', async () => {
       const config = { ...defaultTestPipelineConfig, maxRetries: 2 };
       const manager = new PluginManager(config);
