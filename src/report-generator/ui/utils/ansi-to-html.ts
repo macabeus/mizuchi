@@ -90,22 +90,13 @@ function buildSpan(state: AnsiState, text: string): string {
 }
 
 function applyCarriageReturns(text: string): string {
-  const lines = text.split('\n');
-  const processed = lines.map((line) => {
-    if (!line.includes('\r')) {
-      return line;
-    }
-    // Split by \r and take the last non-empty segment (carriage return overwrites from start)
-    const segments = line.split('\r');
-    for (let i = segments.length - 1; i >= 0; i--) {
-      const trimmed = segments[i].replace(/\s+$/, '');
-      if (trimmed.length > 0) {
-        return segments[i];
-      }
-    }
-    return segments[segments.length - 1];
-  });
-  return processed.join('\n');
+  return text
+    .split('\n')
+    .map((line) => {
+      const segments = line.split('\r');
+      return segments[segments.length - 1];
+    })
+    .join('\n');
 }
 
 /**

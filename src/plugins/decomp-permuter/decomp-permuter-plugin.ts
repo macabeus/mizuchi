@@ -59,24 +59,7 @@ interface PermuterSpawnConfig {
   flags?: string[];
 }
 
-/**
- * decomp-permuter plugin result data
- */
-export interface DecompPermuterPluginResult {
-  baseScore: number;
-  bestScore: number;
-  iterationsRun: number;
-  bestCode?: string;
-  /** Unified diff showing the mutations applied by the permuter */
-  bestDiff?: string;
-  perfectMatch: boolean;
-  /** Raw stdout from the permuter process */
-  stdout: string;
-  /** Raw stderr from the permuter process */
-  stderr: string;
-}
-
-export class DecompPermuterPlugin implements Plugin<DecompPermuterPluginResult> {
+export class DecompPermuterPlugin implements Plugin<DecompPermuterResult> {
   static readonly pluginId = 'decomp-permuter';
   static readonly configSchema = decompPermuterConfigSchema;
 
@@ -158,14 +141,14 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterPluginResult> 
     },
 
     isSuccess: (result: DecompPermuterResult): boolean => {
-      return result.success;
+      return result.perfectMatch;
     },
 
     toBackgroundTaskResult: (result: DecompPermuterResult, metadata: TaskMetadata): BackgroundTaskResult => {
       return {
         ...metadata,
         pluginId: this.id,
-        success: result.success,
+        success: result.perfectMatch,
         data: result,
       };
     },
@@ -177,7 +160,7 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterPluginResult> 
   };
 
   async execute(context: PipelineContext): Promise<{
-    result: PluginResult<DecompPermuterPluginResult>;
+    result: PluginResult<DecompPermuterResult>;
     context: PipelineContext;
   }> {
     const startTime = Date.now();
@@ -244,14 +227,7 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterPluginResult> 
             durationMs: Date.now() - startTime,
             error: result.error,
             output: `Base score: ${result.baseScore}, Best score: ${result.bestScore}, Iterations: ${result.iterationsRun}`,
-            data: {
-              baseScore: result.baseScore,
-              bestScore: result.bestScore,
-              iterationsRun: result.iterationsRun,
-              perfectMatch: false,
-              stdout: result.stdout,
-              stderr: result.stderr,
-            },
+            data: result,
           },
           context,
         };
@@ -280,26 +256,17 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterPluginResult> 
         `Base score: ${result.baseScore}`,
         `Best score: ${result.bestScore}`,
         `Iterations: ${result.iterationsRun}`,
-        result.success ? 'Perfect match found!' : improved ? 'Improved but not perfect' : 'No improvement found',
+        result.perfectMatch ? 'Perfect match found!' : improved ? 'Improved but not perfect' : 'No improvement found',
       ].join('\n');
 
       return {
         result: {
           pluginId: this.id,
           pluginName: this.name,
-          status: result.success ? 'success' : 'failure',
+          status: result.perfectMatch ? 'success' : 'failure',
           durationMs: Date.now() - startTime,
           output,
-          data: {
-            baseScore: result.baseScore,
-            bestScore: result.bestScore,
-            iterationsRun: result.iterationsRun,
-            bestCode: result.bestCode,
-            bestDiff: result.bestDiff,
-            perfectMatch: result.success,
-            stdout: result.stdout,
-            stderr: result.stderr,
-          },
+          data: result,
         },
         context: updatedContext,
       };
@@ -317,7 +284,7 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterPluginResult> 
     }
   }
 
-  getReportSections(result: PluginResult<DecompPermuterPluginResult>): PluginReportSection[] {
+  getReportSections(result: PluginResult<DecompPermuterResult>): PluginReportSection[] {
     const sections: PluginReportSection[] = [];
 
     if (result.data) {

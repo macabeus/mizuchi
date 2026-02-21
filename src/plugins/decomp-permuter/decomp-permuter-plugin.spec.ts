@@ -3,8 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
+import { DecompPermuterResult } from '~/shared/decomp-permuter.js';
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
-import type { BackgroundSpawnContext } from '~/shared/types.js';
+import type { BackgroundSpawnContext, PluginResult } from '~/shared/types.js';
 
 import { DecompPermuterPlugin } from './decomp-permuter-plugin.js';
 
@@ -198,7 +199,7 @@ describe('DecompPermuterPlugin', () => {
         { enable: true, maxIterations: 10, timeoutMs: 10000, flags: ['--show-errors'] },
         cCompiler,
       );
-      const result = {
+      const result: PluginResult<DecompPermuterResult> = {
         pluginId: 'decomp-permuter',
         pluginName: 'decomp-permuter',
         status: 'failure' as const,
@@ -225,7 +226,7 @@ describe('DecompPermuterPlugin', () => {
         { enable: true, maxIterations: 10, timeoutMs: 10000, flags: ['--show-errors'] },
         cCompiler,
       );
-      const result = {
+      const result: PluginResult<DecompPermuterResult> = {
         pluginId: 'decomp-permuter',
         pluginName: 'decomp-permuter',
         status: 'success' as const,
@@ -311,7 +312,6 @@ describe('DecompPermuterPlugin', () => {
         const plugin = createPlugin();
         const result = plugin.background.shouldSpawn(makeSpawnContext());
 
-        expect(result).not.toBeNull();
         expect(result).toMatchObject({
           code: 'int f() { return 1; }',
           functionName: 'testFunc',
@@ -430,7 +430,7 @@ describe('DecompPermuterPlugin', () => {
         const plugin = createPlugin();
         expect(
           plugin.background.isSuccess({
-            success: true,
+            perfectMatch: true,
             baseScore: 100,
             bestScore: 0,
             iterationsRun: 50,
@@ -444,7 +444,7 @@ describe('DecompPermuterPlugin', () => {
         const plugin = createPlugin();
         expect(
           plugin.background.isSuccess({
-            success: false,
+            perfectMatch: false,
             baseScore: 100,
             bestScore: 50,
             iterationsRun: 50,
@@ -458,8 +458,8 @@ describe('DecompPermuterPlugin', () => {
     describe('.toBackgroundTaskResult', () => {
       it('maps permuter result to background task result', () => {
         const plugin = createPlugin();
-        const permuterResult = {
-          success: true,
+        const permuterResult: DecompPermuterResult = {
+          perfectMatch: true,
           baseScore: 100,
           bestScore: 0,
           iterationsRun: 50,

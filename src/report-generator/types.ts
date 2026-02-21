@@ -83,24 +83,38 @@ export interface ReportPluginResult {
 }
 
 /**
- * Background permuter task result for the report
+ * Background task result for the report
  */
-export interface ReportBackgroundTask {
+export type ReportBackgroundTask = ReportPermuterBackgroundTask | ReportErrorBackgroundTask;
+
+export interface ReportPermuterBackgroundTask {
   taskId: string;
-  success: boolean;
-  bestScore: number;
-  baseScore: number;
-  bestCode?: string;
-  /** Unified diff showing the mutations applied by the permuter */
-  bestDiff?: string;
-  iterationsRun: number;
   durationMs: number;
   triggeredByAttempt: number;
   startTimestamp: string;
-  /** Raw stdout from the permuter process */
-  stdout: string;
-  /** Raw stderr from the permuter process */
-  stderr: string;
+  success: boolean;
+  pluginId: 'decomp-permuter';
+  data: {
+    perfectMatch: boolean;
+    baseScore: number;
+    bestScore: number;
+    iterationsRun: number;
+    bestCode?: string;
+    bestDiff?: string;
+    error?: string;
+    stdout: string;
+    stderr: string;
+  };
+}
+
+export interface ReportErrorBackgroundTask {
+  taskId: string;
+  durationMs: number;
+  triggeredByAttempt: number;
+  startTimestamp: string;
+  success: false;
+  pluginId: string;
+  data: { error: string };
 }
 
 /**

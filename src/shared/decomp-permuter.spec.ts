@@ -245,7 +245,7 @@ describe('DecompPermuter', () => {
       // The stream parser correctly extracted base and best scores
       expect(result.baseScore).toBe(200);
       expect(result.bestScore).toBe(0);
-      expect(result.success).toBe(true);
+      expect(result.perfectMatch).toBe(true);
 
       // stdout contains the base-score message (newline-delimited)
       expect(result.stdout).toMatch(/\[SimpleAdd\] base score = 200/);

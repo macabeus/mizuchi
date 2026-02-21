@@ -1,6 +1,12 @@
 import { useState } from 'react';
 
-import type { ReportBackgroundTask, ReportPluginResult, ReportPromptResult, ReportSection } from '../../types';
+import type {
+  ReportBackgroundTask,
+  ReportPermuterBackgroundTask,
+  ReportPluginResult,
+  ReportPromptResult,
+  ReportSection,
+} from '../../types';
 import { AttemptContent } from './AttemptContent';
 import { AttemptsChart } from './AttemptsChart';
 import { BestResultCode } from './BestResultCode';
@@ -137,52 +143,67 @@ interface AIPoweredFlowContentProps {
  * Build a synthetic ReportPluginResult from a background task,
  * so we can reuse PluginDetails to render its sections.
  */
+function isPermuterTask(task: ReportBackgroundTask): task is ReportPermuterBackgroundTask {
+  return task.pluginId === 'decomp-permuter';
+}
+
 function buildBackgroundTaskDetails(task: ReportBackgroundTask): ReportPluginResult {
-  const sections: ReportSection[] = [
-    {
+  const sections: ReportSection[] = [];
+
+  if (isPermuterTask(task)) {
+    const { data } = task;
+    sections.push({
       type: 'message',
       title: 'Permuter Results',
       message: [
-        `Base score: ${task.baseScore}`,
-        `Best score: ${task.bestScore}`,
-        `Iterations: ${task.iterationsRun}`,
+        `Base score: ${data.baseScore}`,
+        `Best score: ${data.bestScore}`,
+        `Iterations: ${data.iterationsRun}`,
         `Duration: ${formatDuration(task.durationMs)}`,
         `Triggered by: Attempt ${task.triggeredByAttempt}`,
         `Perfect match: ${task.success ? 'Yes' : 'No'}`,
       ].join('\n'),
-    },
-  ];
-
-  if (task.bestDiff) {
-    sections.push({
-      type: 'code',
-      title: 'Best Permutation Diff',
-      language: 'diff',
-      code: task.bestDiff,
     });
+
+    if (data.bestDiff) {
+      sections.push({
+        type: 'code',
+        title: 'Best Permutation Diff',
+        language: 'diff',
+        code: data.bestDiff,
+      });
+    }
+
+    if (data.stdout) {
+      sections.push({
+        type: 'code',
+        title: 'stdout',
+        language: 'text',
+        code: data.stdout,
+      });
+    }
+
+    if (data.stderr) {
+      sections.push({
+        type: 'code',
+        title: 'stderr',
+        language: 'text',
+        code: data.stderr,
+      });
+    }
   }
 
-  if (task.stdout) {
+  if ('error' in task.data) {
     sections.push({
-      type: 'code',
-      title: 'stdout',
-      language: 'text',
-      code: task.stdout,
-    });
-  }
-
-  if (task.stderr) {
-    sections.push({
-      type: 'code',
-      title: 'stderr',
-      language: 'text',
-      code: task.stderr,
+      type: 'message',
+      title: 'Error',
+      message: task.data.error ?? 'An unknown error occurred during this background task.',
     });
   }
 
   return {
-    pluginId: 'decomp-permuter',
-    pluginName: `decomp-permuter (${task.taskId})`,
+    pluginId: task.pluginId,
+    pluginName: `${task.pluginId} (${task.taskId})`,
     status: task.success ? 'success' : 'failure',
     durationMs: task.durationMs,
     sections,

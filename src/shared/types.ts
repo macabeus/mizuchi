@@ -5,9 +5,9 @@
  */
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
-import type { DecompPermuterPluginResult } from '~/plugins/decomp-permuter/decomp-permuter-plugin.js';
 import type { M2cPluginResult } from '~/plugins/m2c/m2c-plugin.js';
 import type { ObjdiffResult } from '~/plugins/objdiff/objdiff-plugin.js';
+import type { DecompPermuterResult } from '~/shared/decomp-permuter.js';
 
 import type { PipelineConfig } from './config.js';
 
@@ -17,7 +17,7 @@ import type { PipelineConfig } from './config.js';
 export type PluginResultMap = {
   'claude-runner': PluginResult<ClaudeRunnerResult>;
   compiler: PluginResult<CompilerResult>;
-  'decomp-permuter': PluginResult<DecompPermuterPluginResult>;
+  'decomp-permuter': PluginResult<DecompPermuterResult>;
   m2c: PluginResult<M2cPluginResult>;
   objdiff: PluginResult<ObjdiffResult>;
 };
@@ -250,17 +250,24 @@ export interface Plugin<TPluginResult> {
 /**
  * Result from a background task
  */
-export interface BackgroundTaskResult {
+export type BackgroundTaskResult = {
   taskId: string;
-  /** ID of the plugin that produced this result */
-  pluginId: string;
-  success: boolean;
   durationMs: number;
   triggeredByAttempt: number;
   startTimestamp: string;
-  /** Plugin-specific result data */
-  data: unknown;
-}
+} & (
+  | {
+      success: boolean;
+      pluginId: 'decomp-permuter';
+      data: DecompPermuterResult;
+    }
+  // Generic failure case for background tasks that failed to start
+  | {
+      success: false;
+      pluginId: string;
+      data: { error: string };
+    }
+);
 
 /**
  * What found the match for a prompt

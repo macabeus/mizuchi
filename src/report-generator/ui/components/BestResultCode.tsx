@@ -1,4 +1,4 @@
-import { ReportAttempt, ReportPromptResult } from '~/report-generator/types';
+import { ReportAttempt, type ReportPermuterBackgroundTask, ReportPromptResult } from '~/report-generator/types';
 
 import { getPluginResult } from '../../../shared/utils.js';
 import { CodeBlock } from './CodeBlock';
@@ -16,7 +16,10 @@ interface BestResultProps {
 
 export function BestResultCode({ result }: BestResultProps) {
   // Check if the permuter found a better result
-  const permuterSuccess = result.backgroundTasks?.find((t) => t.success);
+  const permuterSuccess = result.backgroundTasks?.find(
+    (t): t is ReportPermuterBackgroundTask => t.pluginId === 'decomp-permuter' && t.success,
+  );
+  const permuterBestCode = permuterSuccess?.data.bestCode;
 
   // Consider both programmatic and AI-powered flows
   const allAttempts = [...(result.programmaticFlow ? [result.programmaticFlow] : []), ...result.attempts];
@@ -47,7 +50,7 @@ export function BestResultCode({ result }: BestResultProps) {
   }, null);
 
   // If permuter found a perfect match, use its code
-  if (permuterSuccess?.bestCode && result.matchSource === 'decomp-permuter') {
+  if (permuterBestCode && result.matchSource === 'decomp-permuter') {
     const badge = matchSourceLabels['decomp-permuter'];
     return (
       <div className="p-5">
@@ -58,7 +61,7 @@ export function BestResultCode({ result }: BestResultProps) {
           </h4>
           <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${badge.color}`}>{badge.label}</span>
         </div>
-        <CodeBlock code={permuterSuccess.bestCode} language="c" />
+        <CodeBlock code={permuterBestCode} language="c" />
       </div>
     );
   }

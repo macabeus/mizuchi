@@ -3,7 +3,7 @@ import type { IApi, ILink, IScaleConfig, ITask } from '@svar-ui/react-gantt';
 import '@svar-ui/react-gantt/style.css';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-import type { ReportPromptResult } from '~/report-generator/types';
+import type { ReportPermuterBackgroundTask, ReportPromptResult } from '~/report-generator/types';
 
 // Register the "minute" scale unit for the SVAR Gantt library.
 //
@@ -194,6 +194,8 @@ function buildGanttData(result: ReportPromptResult): GanttData | null {
       minTime = Math.min(minTime, start.getTime());
       maxTime = Math.max(maxTime, end.getTime());
 
+      const isPermuter = (t: typeof task): t is ReportPermuterBackgroundTask => t.pluginId === 'decomp-permuter';
+
       tasks.push({
         id: task.taskId,
         text: `Permuter ${task.taskId.replace('permuter-', '')}`,
@@ -205,8 +207,8 @@ function buildGanttData(result: ReportPromptResult): GanttData | null {
         durationMs: task.durationMs,
         success: task.success,
         triggeredByAttempt: task.triggeredByAttempt,
-        bestScore: task.bestScore,
-        baseScore: task.baseScore,
+        bestScore: isPermuter(task) ? task.data.bestScore : undefined,
+        baseScore: isPermuter(task) ? task.data.baseScore : undefined,
       });
 
       // Link from the triggering attempt to this permuter task

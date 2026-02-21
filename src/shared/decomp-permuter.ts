@@ -126,7 +126,7 @@ export type DecompPermuterLogEntry =
   | { type: 'progress'; value: number };
 
 export interface DecompPermuterResult {
-  success: boolean;
+  perfectMatch: boolean;
   baseScore: number;
   bestScore: number;
   iterationsRun: number;
@@ -290,7 +290,7 @@ export class DecompPermuter {
       const stderr = capture.stderrChunks.join('');
       if (baseScore === -1 && exitCode !== null && exitCode !== 0) {
         return {
-          success: false,
+          perfectMatch: false,
           baseScore: -1,
           bestScore: -1,
           iterationsRun: 0,
@@ -310,7 +310,7 @@ export class DecompPermuter {
       }
 
       return {
-        success: perfectMatch,
+        perfectMatch,
         baseScore,
         bestScore: bestScore >= 0 ? bestScore : baseScore,
         iterationsRun: lastIterationSeen,
@@ -328,7 +328,7 @@ export class DecompPermuter {
       }
 
       return {
-        success: false,
+        perfectMatch: false,
         baseScore: -1,
         bestScore: -1,
         iterationsRun: 0,
