@@ -122,7 +122,8 @@ export interface DecompPermuterOptions {
 export type DecompPermuterLogEntry =
   | { type: 'base-score'; value: number }
   | { type: 'better-score'; value: number }
-  | { type: 'new-best'; value: number };
+  | { type: 'new-best'; value: number }
+  | { type: 'progress'; value: number };
 
 export interface DecompPermuterResult {
   success: boolean;
@@ -213,35 +214,19 @@ export class DecompPermuter {
         }
       }
 
-      // Capture raw stdout/stderr independently from the parsed stream.
-      // Also track the actual permuter iteration count from progress lines
-      // (which use \r for in-place terminal updates and are NOT \n-delimited).
-      const stdoutChunks: string[] = [];
-      const stderrChunks: string[] = [];
-      let lastIterationSeen = 0;
-      permuterProcess.stdout?.on('data', (data: Buffer) => {
-        const text = data.toString();
-        stdoutChunks.push(text);
-        for (const match of text.matchAll(/iteration (\d+)/g)) {
-          const n = Number(match[1]);
-          if (n > lastIterationSeen) {
-            lastIterationSeen = n;
-          }
-        }
-      });
-      permuterProcess.stderr?.on('data', (data: Buffer) => {
-        stderrChunks.push(data.toString());
-      });
-
       // Track the exit code so we can detect failures
       let exitCode: number | null = null;
       permuterProcess.on('exit', (code) => {
         exitCode = code;
       });
 
+      // #streamOutput captures raw stdout/stderr and parses events in one place.
+      const capture = { stdoutChunks: [] as string[], stderrChunks: [] as string[] };
+
       let baseScore = -1;
       let bestScore = -1;
       let perfectMatch = false;
+      let lastIterationSeen = 0;
 
       // parsedEvents counts \n-delimited score messages (base-score, better-score,
       // new-best) recognized by the stream parser. Used to enforce maxIterations
@@ -260,7 +245,14 @@ export class DecompPermuter {
       });
 
       const streamPromise = (async () => {
-        for await (const entry of this.#streamOutput(permuterProcess!)) {
+        for await (const entry of this.#streamOutput(permuterProcess!, capture)) {
+          if (entry.type === 'progress') {
+            if (entry.value > lastIterationSeen) {
+              lastIterationSeen = entry.value;
+            }
+            continue;
+          }
+
           if (entry.type === 'base-score') {
             baseScore = entry.value;
             bestScore = entry.value;
@@ -295,7 +287,7 @@ export class DecompPermuter {
 
       // If the process exited with a non-zero code and we never got a base score,
       // surface the error from stderr so callers can diagnose the failure.
-      const stderr = stderrChunks.join('');
+      const stderr = capture.stderrChunks.join('');
       if (baseScore === -1 && exitCode !== null && exitCode !== 0) {
         return {
           success: false,
@@ -303,7 +295,7 @@ export class DecompPermuter {
           bestScore: -1,
           iterationsRun: 0,
           error: stderr.trim() || `permuter.py exited with code ${exitCode}`,
-          stdout: stdoutChunks.join(''),
+          stdout: capture.stdoutChunks.join(''),
           stderr,
         };
       }
@@ -324,7 +316,7 @@ export class DecompPermuter {
         iterationsRun: lastIterationSeen,
         bestCode,
         bestDiff,
-        stdout: stdoutChunks.join(''),
+        stdout: capture.stdoutChunks.join(''),
         stderr,
       };
     } catch (error) {
@@ -553,52 +545,95 @@ fi
 
   /**
    * Parse streaming output from permuter.py.
-   * Yields log entries for base score, better scores, and new bests.
+   *
+   * Captures raw stdout/stderr into `capture` while yielding parsed events.
+   * Handles both \n-delimited score messages and \r-delimited progress lines
+   * in a single subscriber per stream, eliminating the need for a separate
+   * raw stdout handler.
    */
-  async *#streamOutput(process: ChildProcess): AsyncGenerator<DecompPermuterLogEntry> {
-    let buffer = '';
+  async *#streamOutput(
+    process: ChildProcess,
+    capture: { stdoutChunks: string[]; stderrChunks: string[] },
+  ): AsyncGenerator<DecompPermuterLogEntry> {
+    let lineBuffer = '';
     let processEnded = false;
 
-    const lines: string[] = [];
-    let resolveNext: ((value: IteratorResult<string>) => void) | null = null;
+    const events: DecompPermuterLogEntry[] = [];
+    let resolveNext: ((done: boolean) => void) | null = null;
 
-    const processLine = (data: string) => {
-      buffer += data;
-      const newLines = buffer.split('\n');
-      buffer = newLines.pop() || '';
+    const enqueue = (event: DecompPermuterLogEntry) => {
+      events.push(event);
+      if (resolveNext) {
+        const resolve = resolveNext;
+        resolveNext = null;
+        resolve(false);
+      }
+    };
 
-      for (const line of newLines) {
-        lines.push(line);
-        if (resolveNext) {
-          const resolve = resolveNext;
-          resolveNext = null;
-          resolve({ value: line, done: false });
+    const parseLine = (line: string) => {
+      const baseMatch = line.match(/base score = (?<value>\d+)/);
+      if (baseMatch?.groups?.value) {
+        enqueue({ type: 'base-score', value: Number(baseMatch.groups.value) });
+        return;
+      }
+
+      const betterMatch = line.match(/found a better score! \((?<value>\d+)/);
+      if (betterMatch?.groups?.value) {
+        enqueue({ type: 'better-score', value: Number(betterMatch.groups.value) });
+        return;
+      }
+
+      const newBestMatch = line.match(/new best score! \((?<value>\d+)/);
+      if (newBestMatch?.groups?.value) {
+        enqueue({ type: 'new-best', value: Number(newBestMatch.groups.value) });
+        return;
+      }
+    };
+
+    const processChunk = (text: string) => {
+      // Extract iteration count from \r-delimited progress lines.
+      // Yield only the highest iteration in this chunk to avoid flooding.
+      let maxIter = 0;
+      for (const match of text.matchAll(/iteration (\d+)/g)) {
+        const n = Number(match[1]);
+        if (n > maxIter) {
+          maxIter = n;
         }
+      }
+      if (maxIter > 0) {
+        enqueue({ type: 'progress', value: maxIter });
+      }
+
+      // Split on \n for score messages
+      lineBuffer += text;
+      const newLines = lineBuffer.split('\n');
+      lineBuffer = newLines.pop() || '';
+      for (const line of newLines) {
+        parseLine(line);
       }
     };
 
     process.stdout?.on('data', (data: Buffer) => {
-      processLine(data.toString());
+      const text = data.toString();
+      capture.stdoutChunks.push(text);
+      processChunk(text);
     });
 
     process.stderr?.on('data', (data: Buffer) => {
-      processLine(data.toString());
+      const text = data.toString();
+      capture.stderrChunks.push(text);
+      processChunk(text);
     });
 
     process.on('close', () => {
       processEnded = true;
-      if (buffer.trim()) {
-        lines.push(buffer);
-        if (resolveNext) {
-          const resolve = resolveNext;
-          resolveNext = null;
-          resolve({ value: buffer, done: false });
-        }
+      if (lineBuffer.trim()) {
+        parseLine(lineBuffer);
       }
       if (resolveNext) {
         const resolve = resolveNext;
         resolveNext = null;
-        resolve({ value: undefined as unknown as string, done: true });
+        resolve(true);
       }
     });
 
@@ -607,43 +642,22 @@ fi
       if (resolveNext) {
         const resolve = resolveNext;
         resolveNext = null;
-        resolve({ value: undefined as unknown as string, done: true });
+        resolve(true);
       }
     });
 
-    while (!processEnded || lines.length > 0) {
-      let line: string;
-      if (lines.length > 0) {
-        line = lines.shift()!;
+    while (!processEnded || events.length > 0) {
+      if (events.length > 0) {
+        yield events.shift()!;
       } else if (!processEnded) {
-        const result = await new Promise<IteratorResult<string>>((resolve) => {
+        const done = await new Promise<boolean>((resolve) => {
           resolveNext = resolve;
         });
-        if (result.done) {
+        if (done && events.length === 0) {
           break;
         }
-        line = result.value;
       } else {
         break;
-      }
-
-      // Parse permuter output patterns
-      const baseMatch = line.match(/base score = (?<value>\d+)/);
-      if (baseMatch?.groups?.value) {
-        yield { type: 'base-score', value: Number(baseMatch.groups.value) };
-        continue;
-      }
-
-      const betterMatch = line.match(/found a better score! \((?<value>\d+)/);
-      if (betterMatch?.groups?.value) {
-        yield { type: 'better-score', value: Number(betterMatch.groups.value) };
-        continue;
-      }
-
-      const newBestMatch = line.match(/new best score! \((?<value>\d+)/);
-      if (newBestMatch?.groups?.value) {
-        yield { type: 'new-best', value: Number(newBestMatch.groups.value) };
-        continue;
       }
     }
   }

@@ -106,7 +106,7 @@ export interface ReportBackgroundTask {
 /**
  * What found the match for a prompt
  */
-export type ReportMatchSource = 'claude' | 'permuter' | 'programmatic-flow';
+export type ReportMatchSource = string;
 
 /**
  * Single attempt result for the report

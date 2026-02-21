@@ -164,6 +164,49 @@ describe('DecompPermuter', () => {
       expect(elapsed).toBeLessThan(10000);
     }, 15000);
 
+    it('parses all relevant permuter messages from stdout', async () => {
+      // Uses PERM_GENERAL to give the permuter explicit alternatives to try.
+      // With 4 alternatives (a-b, b-a, a*b, a+b) against a target of a+b:
+      //   - a-b:  base score 200
+      //   - b-a:  same score → "tied best score!"
+      //   - a*b:  same score → "tied best score!"
+      //   - a+b:  score 0   → "found new best score!" + perfect match
+      const CODE_WITH_PERM = 'int SimpleAdd(int a, int b) { return PERM_GENERAL(a - b, b - a, a * b, a + b); }';
+
+      const result = await permuter.run({
+        cCode: CODE_WITH_PERM,
+        targetObjectPath: targetObjPath,
+        functionName: 'SimpleAdd',
+        compilerScript,
+        target: 'gba',
+        compilerType: 'gcc',
+        maxIterations: 50000,
+        timeoutMs: 15000,
+      });
+
+      expect(result.error).toBeUndefined();
+
+      // The stream parser correctly extracted base and best scores
+      expect(result.baseScore).toBe(200);
+      expect(result.bestScore).toBe(0);
+      expect(result.success).toBe(true);
+
+      // stdout contains the base-score message (newline-delimited)
+      expect(result.stdout).toMatch(/\[SimpleAdd\] base score = 200/);
+
+      // stdout contains "tied best score" when an alternative has the same score
+      expect(result.stdout).toMatch(/tied best score!/);
+
+      // stdout contains "new best score" when perfect match is found (score 0 vs 200)
+      expect(result.stdout).toMatch(/found new best score! \(0 vs 200\)/);
+
+      // stdout contains iteration progress lines (carriage-return-delimited)
+      expect(result.stdout).toMatch(/iteration \d+, \d+ errors, score = \d+/);
+
+      // iterationsRun is extracted from the progress lines, not from parsed events
+      expect(result.iterationsRun).toBeGreaterThan(0);
+    }, 20000);
+
     it('respects timeoutMs limit', async () => {
       const result = await permuter.run({
         cCode: NON_MATCHING_C_CODE,
