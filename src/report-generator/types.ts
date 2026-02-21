@@ -83,6 +83,46 @@ export interface ReportPluginResult {
 }
 
 /**
+ * Background task result for the report
+ */
+export type ReportBackgroundTask = ReportPermuterBackgroundTask | ReportErrorBackgroundTask;
+
+export interface ReportPermuterBackgroundTask {
+  taskId: string;
+  durationMs: number;
+  triggeredByAttempt: number;
+  startTimestamp: string;
+  success: boolean;
+  pluginId: 'decomp-permuter';
+  data: {
+    perfectMatch: boolean;
+    baseScore: number;
+    bestScore: number;
+    iterationsRun: number;
+    bestCode?: string;
+    bestDiff?: string;
+    error?: string;
+    stdout: string;
+    stderr: string;
+  };
+}
+
+export interface ReportErrorBackgroundTask {
+  taskId: string;
+  durationMs: number;
+  triggeredByAttempt: number;
+  startTimestamp: string;
+  success: false;
+  pluginId: string;
+  data: { error: string };
+}
+
+/**
+ * What found the match for a prompt
+ */
+export type ReportMatchSource = string;
+
+/**
  * Single attempt result for the report
  */
 export type ReportAttempt = {
@@ -90,6 +130,7 @@ export type ReportAttempt = {
   success: boolean;
   durationMs: number;
   pluginResults: ReportPluginResult[];
+  startTimestamp: string;
 };
 
 /**
@@ -105,6 +146,10 @@ export interface ReportPromptResult {
   setupFlow: ReportAttempt;
   /** Result from programmatic-flow phase (e.g., m2c), if one was configured */
   programmaticFlow?: ReportAttempt;
+  /** Background permuter task results */
+  backgroundTasks?: ReportBackgroundTask[];
+  /** What found the match (if successful) */
+  matchSource?: ReportMatchSource;
 }
 
 /**

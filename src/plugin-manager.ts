@@ -4,11 +4,13 @@
  * Orchestrates the execution of plugins in the benchmark pipeline.
  * Handles retry logic and context propagation between plugins.
  */
+import type { BackgroundTaskCoordinator } from './shared/background-task-coordinator.js';
 import { PipelineConfig } from './shared/config.js';
 import { PipelineAbortError } from './shared/errors.js';
 import type { PipelineEventHandler } from './shared/pipeline-events.js';
 import type {
   AttemptResult,
+  MatchSource,
   PipelineContext,
   PipelineResults,
   PipelineRunResult,
@@ -23,10 +25,18 @@ export class PluginManager {
   #plugins: Plugin<any>[] = [];
   #config: PipelineConfig;
   #eventHandler?: PipelineEventHandler;
+  #backgroundCoordinator?: BackgroundTaskCoordinator;
 
   constructor(config: PipelineConfig, eventHandler?: PipelineEventHandler) {
     this.#config = config;
     this.#eventHandler = eventHandler;
+  }
+
+  /**
+   * Set the background task coordinator for running background tasks during the AI-powered flow.
+   */
+  setBackgroundCoordinator(coordinator: BackgroundTaskCoordinator): void {
+    this.#backgroundCoordinator = coordinator;
   }
 
   /**
@@ -187,6 +197,7 @@ export class PluginManager {
           totalDurationMs: Date.now() - startTime,
           setupFlow,
           programmaticFlow,
+          matchSource: 'programmatic-flow',
         };
       }
 
@@ -209,7 +220,31 @@ export class PluginManager {
       context.generatedCode = undefined;
     }
 
+    let matchSource: MatchSource | undefined;
+
+    // Reset background plugin state for this prompt and wire fresh abort signal.
+    // Listen for the 'success' event so we know when a background task finds a match.
+    let backgroundMatchSource: string | null = null;
+    const onBackgroundSuccess = (result: { pluginId: string }) => {
+      backgroundMatchSource = result.pluginId;
+    };
+    if (this.#backgroundCoordinator) {
+      this.#backgroundCoordinator.reset();
+      this.#backgroundCoordinator.on('success', onBackgroundSuccess);
+      const signal = this.#backgroundCoordinator.foregroundAbortSignal;
+      for (const plugin of this.#plugins) {
+        plugin.setForegroundAbortSignal?.(signal);
+      }
+    }
+
     for (let attempt = 1; attempt <= this.#config.maxRetries; attempt++) {
+      // Check if a background task found a match between attempts
+      if (backgroundMatchSource) {
+        matchSource = backgroundMatchSource;
+        success = true;
+        break;
+      }
+
       context.attemptNumber = attempt;
 
       this.#emit({
@@ -218,22 +253,36 @@ export class PluginManager {
         maxRetries: this.#config.maxRetries,
       });
 
-      const { finalContext: _, ...attemptResult } = await this.#runAttempt(context);
+      const { finalContext: attemptFinalContext, ...attemptResult } = await this.#runAttempt(context);
       attempts.push(attemptResult);
 
       const willRetry = !attemptResult.success && attempt < this.#config.maxRetries;
+
+      // Extract differenceCount from objdiff result for the attempt-complete event
+      const objdiffResult = attemptResult.pluginResults.find((r) => r.pluginId === 'objdiff');
+      const differenceCount = (objdiffResult?.data as { differenceCount?: number } | undefined)?.differenceCount;
 
       this.#emit({
         type: 'attempt-complete',
         attemptNumber: attempt,
         success: attemptResult.success,
         willRetry,
+        differenceCount,
       });
 
       if (attemptResult.success) {
         success = true;
+        matchSource = 'claude';
         break;
       }
+
+      // Let background plugins decide whether to spawn
+      this.#backgroundCoordinator?.onAttemptComplete({
+        attemptNumber: attempt,
+        willRetry,
+        context: attemptFinalContext,
+        attemptResults: attemptResult.pluginResults,
+      });
 
       // Prepare for retry if needed
       if (willRetry) {
@@ -247,6 +296,18 @@ export class PluginManager {
       }
     }
 
+    // Cancel remaining background tasks and collect results.
+    // A task may succeed during cancelAll (its .then() fires before the promise settles),
+    // so we check backgroundMatchSource one final time after awaiting.
+    await this.#backgroundCoordinator?.cancelAll();
+    this.#backgroundCoordinator?.removeListener('success', onBackgroundSuccess);
+    const backgroundTasks = this.#backgroundCoordinator?.getAllResults();
+
+    if (!success && backgroundMatchSource) {
+      matchSource = backgroundMatchSource;
+      success = true;
+    }
+
     return {
       promptPath,
       functionName,
@@ -255,6 +316,8 @@ export class PluginManager {
       totalDurationMs: Date.now() - startTime,
       setupFlow,
       programmaticFlow,
+      backgroundTasks: backgroundTasks?.length ? backgroundTasks : undefined,
+      matchSource,
     };
   }
 
@@ -265,6 +328,7 @@ export class PluginManager {
     context: PipelineContext,
     plugins?: Plugin<any>[],
   ): Promise<AttemptResult & { finalContext: PipelineContext }> {
+    const startTimestamp = new Date().toISOString();
     const startTime = Date.now();
     const pluginResults: PluginResult<any>[] = [];
     let currentContext = { ...context };
@@ -360,6 +424,7 @@ export class PluginManager {
       pluginResults,
       success,
       durationMs: Date.now() - startTime,
+      startTimestamp,
       finalContext: currentContext,
     };
   }
@@ -482,6 +547,7 @@ export class PluginManager {
               },
             ],
             success: false,
+            startTimestamp: new Date().toISOString(),
             durationMs: 0,
           },
         });

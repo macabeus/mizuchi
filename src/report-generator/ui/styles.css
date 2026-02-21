@@ -195,3 +195,76 @@ pre code {
 .status-badge:hover {
   @apply scale-105;
 }
+
+/* Gantt chart overrides to blend with the report's slate dark theme */
+.gantt-timeline .wx-willow-dark-theme {
+  --wx-color-font: #e2e8f0 !important;
+  --wx-color-font-alt: #cbd5e1 !important;
+  --wx-background: #1e293b !important;
+  --wx-background-alt: #334155 !important;
+  --wx-background-hover: #1e293b !important;
+  --wx-gantt-border: 1px solid #334155 !important;
+  --wx-gantt-select-color: #334155 !important;
+  --wx-gantt-icon-color: #94a3b8 !important;
+  --wx-grid-header-font-color: #e2e8f0 !important;
+  --wx-grid-body-font-color: #e2e8f0 !important;
+  --wx-timescale-font-color: #e2e8f0 !important;
+  --wx-gantt-link-color: #64748b !important;
+  --wx-tooltip-background: #1e293b !important;
+  --wx-tooltip-font-color: #e2e8f0 !important;
+}
+
+/* Hide the column expand/collapse toggle and grid/chart resizer */
+.gantt-timeline .wx-button-expand-box,
+.gantt-timeline .wx-resizer {
+  display: none !important;
+}
+
+/* Hide column header resize grip */
+.gantt-timeline .wx-grip {
+  display: none !important;
+}
+
+/* Hide scrollbars */
+.gantt-timeline .wx-gantt,
+.gantt-timeline .wx-chart {
+  scrollbar-width: thin;
+}
+.gantt-timeline .wx-gantt::-webkit-scrollbar,
+.gantt-timeline .wx-chart::-webkit-scrollbar {
+  display: none;
+}
+
+/* Task bars: hover & selected states */
+.gantt-timeline .wx-task {
+  cursor: pointer;
+  transition:
+    filter 150ms ease,
+    box-shadow 150ms ease;
+  border-radius: 4px;
+}
+
+.gantt-timeline .wx-task:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.gantt-timeline .wx-task.wx-selected {
+  filter: brightness(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Task bars: active state (details panel is showing for this lane) */
+.gantt-bar-active {
+  box-shadow: inset 0 0 0 2px #3b82f6 !important;
+}
+
+/* Grid rows: hover state */
+.gantt-timeline .wx-reorder-task {
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.gantt-timeline .wx-reorder-task:hover {
+  background-color: rgba(148, 163, 184, 0.08) !important;
+}

@@ -376,6 +376,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   // Tool call counter (resets each retry iteration)
   #toolCallCount = 0;
 
+  // External abort signal (e.g., from background permuter success)
+  #externalAbortSignal?: AbortSignal;
+
   // MCP tool dependencies
   #currentContextContent = '';
   #cCompiler: CCompiler;
@@ -429,6 +432,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     // Resolve cache path relative to output directory or current directory
     const baseDir = pipelineConfig?.outputDir || process.cwd();
     this.#cachePath = path.resolve(baseDir, config.cachePath || DEFAULT_CACHE_PATH);
+  }
+
+  /**
+   * Set an abort signal that fires when a background task succeeds.
+   * Called by the PluginManager at the start of each prompt with a fresh signal.
+   */
+  setForegroundAbortSignal(signal: AbortSignal): void {
+    this.#externalAbortSignal = signal;
   }
 
   /**
@@ -669,6 +680,47 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   }
 
   /**
+   * Run a query with timeout and external-abort handling.
+   *
+   * Sets up a timeout that kills the query after `timeoutMs`, listens for the
+   * external abort signal (e.g., background permuter success), and cleans up
+   * in all cases. The caller provides a `work` callback that does the actual
+   * response processing.
+   */
+  async #runQueryWithAbort<T>(work: () => Promise<T>): Promise<T> {
+    const abortController = new AbortController();
+    const abortAndClose = () => {
+      abortController.abort();
+      if (this.#currentQuery) {
+        this.#currentQuery.close();
+        this.#currentQuery = null;
+      }
+    };
+
+    const timeoutId = setTimeout(abortAndClose, this.#config.timeoutMs);
+    this.#externalAbortSignal?.addEventListener('abort', abortAndClose);
+
+    try {
+      return await work();
+    } catch (error) {
+      if (this.#externalAbortSignal?.aborted) {
+        throw new Error('Aborted: background plugin found a perfect match');
+      }
+      if (abortController.signal.aborted) {
+        throw new Error(`Claude timed out after ${this.#config.timeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+      this.#externalAbortSignal?.removeEventListener('abort', abortAndClose);
+      if (this.#currentQuery) {
+        this.#currentQuery.close();
+        this.#currentQuery = null;
+      }
+    }
+  }
+
+  /**
    * Run a query for initial attempt
    */
   async #runInitialQuery(): Promise<{ response: string; fromCache: boolean }> {
@@ -691,18 +743,11 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     // Create new query with timeout
     const model = this.#config.model || DEFAULT_MODEL;
     this.#currentQuery = this.#queryFactory(this.#config.kickoffMessage, { model });
+    const activeQuery = this.#currentQuery;
+    const promptHash = this.#initialPromptHash;
 
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => {
-      abortController.abort();
-      if (this.#currentQuery) {
-        this.#currentQuery.close();
-        this.#currentQuery = null;
-      }
-    }, this.#config.timeoutMs);
-
-    try {
-      const { text, contentBlocks } = await this.#collectResponse(this.#currentQuery);
+    return this.#runQueryWithAbort(async () => {
+      const { text, contentBlocks } = await this.#collectResponse(activeQuery);
 
       // Update state with content blocks if there are tool calls, otherwise use plain text
       const hasToolCalls = contentBlocks.some((b) => b.type === 'tool_use' || b.type === 'tool_result');
@@ -722,21 +767,10 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         lastMessageId: this.#lastMessageId,
         followUpMessages: {},
       };
-      this.#addConversationToCache(this.#initialPromptHash, this.#currentCacheNode);
+      this.#addConversationToCache(promptHash, this.#currentCacheNode);
 
       return { response: text, fromCache: false };
-    } catch (error) {
-      if (abortController.signal.aborted) {
-        throw new Error(`Claude timed out after ${this.#config.timeoutMs}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-      if (this.#currentQuery) {
-        this.#currentQuery.close();
-        this.#currentQuery = null;
-      }
-    }
+    });
   }
 
   /**
@@ -768,18 +802,10 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     // The lastMessageId is stored for future SDK support of message-level resumption.
     const model = this.#config.model || DEFAULT_MODEL;
     this.#currentQuery = this.#queryFactory(followUpPrompt, { model, resume: this.#sessionId! });
+    const activeQuery = this.#currentQuery;
 
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => {
-      abortController.abort();
-      if (this.#currentQuery) {
-        this.#currentQuery.close();
-        this.#currentQuery = null;
-      }
-    }, this.#config.timeoutMs);
-
-    try {
-      const { text, contentBlocks } = await this.#collectResponse(this.#currentQuery);
+    return this.#runQueryWithAbort(async () => {
+      const { text, contentBlocks } = await this.#collectResponse(activeQuery);
 
       // Update conversation history with content blocks if there are tool calls
       const hasToolCalls = contentBlocks.some((b) => b.type === 'tool_use' || b.type === 'tool_result');
@@ -806,18 +832,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       this.#cacheModified = true;
 
       return { response: text, fromCache: false };
-    } catch (error) {
-      if (abortController.signal.aborted) {
-        throw new Error(`Claude timed out after ${this.#config.timeoutMs}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-      if (this.#currentQuery) {
-        this.#currentQuery.close();
-        this.#currentQuery = null;
-      }
-    }
+    });
   }
 
   /**

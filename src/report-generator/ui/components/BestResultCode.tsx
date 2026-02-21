@@ -1,14 +1,26 @@
-import { ReportAttempt, ReportPromptResult } from '~/report-generator/types';
+import { ReportAttempt, type ReportPermuterBackgroundTask, ReportPromptResult } from '~/report-generator/types';
 
 import { getPluginResult } from '../../../shared/utils.js';
 import { CodeBlock } from './CodeBlock';
 import { Icon } from './Icon';
+
+const matchSourceLabels: Record<string, { label: string; color: string }> = {
+  claude: { label: 'Claude', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  'decomp-permuter': { label: 'Permuter', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  'programmatic-flow': { label: 'Programmatic', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
+};
 
 interface BestResultProps {
   result: ReportPromptResult;
 }
 
 export function BestResultCode({ result }: BestResultProps) {
+  // Check if the permuter found a better result
+  const permuterSuccess = result.backgroundTasks?.find(
+    (t): t is ReportPermuterBackgroundTask => t.pluginId === 'decomp-permuter' && t.success,
+  );
+  const permuterBestCode = permuterSuccess?.data.bestCode;
+
   // Consider both programmatic and AI-powered flows
   const allAttempts = [...(result.programmaticFlow ? [result.programmaticFlow] : []), ...result.attempts];
 
@@ -37,6 +49,23 @@ export function BestResultCode({ result }: BestResultProps) {
     return best;
   }, null);
 
+  // If permuter found a perfect match, use its code
+  if (permuterBestCode && result.matchSource === 'decomp-permuter') {
+    const badge = matchSourceLabels['decomp-permuter'];
+    return (
+      <div className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold text-emerald-400 flex items-center gap-2">
+            <Icon name="checkCircle" className="w-5 h-5" />
+            Fully matching code
+          </h4>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${badge.color}`}>{badge.label}</span>
+        </div>
+        <CodeBlock code={permuterBestCode} language="c" />
+      </div>
+    );
+  }
+
   // Try claude-runner first, then m2c for programmatic-flow attempts
   const bestAttemptCode =
     bestAttempt &&
@@ -51,6 +80,8 @@ export function BestResultCode({ result }: BestResultProps) {
     );
   }
 
+  const badge = result.matchSource ? matchSourceLabels[result.matchSource] : undefined;
+
   return (
     <div className="p-5">
       <div className="flex items-center justify-between mb-3">
@@ -64,6 +95,9 @@ export function BestResultCode({ result }: BestResultProps) {
             <Icon name="checkCircle" className="w-5 h-5" />
             Compiling code with {getPluginResult(bestAttempt, 'objdiff')?.data?.differenceCount} difference(s)
           </h4>
+        )}
+        {badge && (
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${badge.color}`}>{badge.label}</span>
         )}
       </div>
 

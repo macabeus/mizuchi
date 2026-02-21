@@ -19,15 +19,18 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential binutils-arm-none-eabi
+          sudo apt-get install -y build-essential binutils-arm-none-eabi binutils-mips-linux-gnu
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Setup m2c
-        run: ./scripts/setup-m2c.sh
+      - name: Setup m2c & decomp-permuter
+        run: |
+          ./scripts/setup-m2c.sh &
+          ./scripts/setup-decomp-permuter.sh &
+          wait
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
