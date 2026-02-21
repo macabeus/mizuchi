@@ -72,15 +72,13 @@ function addNonMatchingAliases(objPath: string, functionNames: string[], toolcha
 }
 
 describe('DecompPermuter', () => {
+  // Tests for GBA-specific behavior: ARM scoring, multi-function objdump wrapper
   describe('.run (GCC/GBA)', () => {
     let permuter: DecompPermuter;
     let compiler: CCompiler;
-    /** Path to a compiled target .o file (compiled from MATCHING_C_CODE) */
     let targetObjPath: string;
 
-    // Simple ARM function — code that matches its own compiled assembly
     const MATCHING_C_CODE = 'int SimpleAdd(int a, int b) { return a + b; }';
-    // Code that compiles but produces different assembly from MATCHING_C_CODE's target
     const NON_MATCHING_C_CODE = 'int SimpleAdd(int a, int b) { return a - b; }';
 
     const compilerScript = getArmCompilerScript();
@@ -89,7 +87,6 @@ describe('DecompPermuter', () => {
       permuter = new DecompPermuter();
       compiler = new CCompiler(compilerScript);
 
-      // Compile the matching code to create a target .o
       const compileResult = await compiler.compile('SimpleAdd', MATCHING_C_CODE, '');
       expect(compileResult.success).toBe(true);
       if (!compileResult.success) {
@@ -112,8 +109,6 @@ describe('DecompPermuter', () => {
         compilerScript,
         target: 'gba',
         compilerType: 'gcc',
-        // maxIterations: 1 → kills right after the base-score entry is parsed,
-        // preventing a long wait for improvement entries that never come at score 0.
         maxIterations: 1,
         timeoutMs: 10000,
       });
@@ -131,18 +126,79 @@ describe('DecompPermuter', () => {
         compilerScript,
         target: 'gba',
         compilerType: 'gcc',
-        // Only need the base-score entry to verify baseScore > 0.
         maxIterations: 1,
         timeoutMs: 10000,
       });
 
       expect(result.error).toBeUndefined();
       expect(result.baseScore).toBeGreaterThan(0);
-      // iterationsRun tracks actual permuter iterations (from "iteration N" progress lines).
-      // With maxIterations: 1, the process is killed after the base-score event, but a
-      // few iterations may have run before the kill takes effect.
       expect(result.iterationsRun).toBeGreaterThanOrEqual(0);
     }, 10000);
+
+    it('scores correctly when target.o has multiple functions', async () => {
+      // SimpleAdd is surrounded by other functions whose assembly would inflate
+      // the score without the objdump wrapper filtering to just the target function.
+      const multiFunctionCode = [
+        'int HelperFunc(int x) { return x * 3 + 7; }',
+        'int SimpleAdd(int a, int b) { return a + b; }',
+        'int AnotherFunc(int a, int b, int c) { return a * b - c; }',
+      ].join('\n');
+
+      const multiTargetResult = await compiler.compile('SimpleAdd', multiFunctionCode, '');
+      expect(multiTargetResult.success).toBe(true);
+      if (!multiTargetResult.success) {
+        throw new Error('Failed to compile multi-function target');
+      }
+
+      try {
+        const result = await permuter.run({
+          cCode: MATCHING_C_CODE,
+          targetObjectPath: multiTargetResult.objPath,
+          functionName: 'SimpleAdd',
+          compilerScript,
+          target: 'gba',
+          compilerType: 'gcc',
+          maxIterations: 1,
+          timeoutMs: 10000,
+        });
+
+        expect(result.error).toBeUndefined();
+        expect(result.baseScore).toBe(0);
+      } finally {
+        await fs.unlink(multiTargetResult.objPath).catch(() => {});
+      }
+    }, 10000);
+  });
+
+  // Tests for generic DecompPermuter behavior (limits, streaming, abort, context, errors).
+  // Uses GCC/GBA as the test toolchain but the behaviors are architecture-independent.
+  describe('.run (general behavior)', () => {
+    let permuter: DecompPermuter;
+    let compiler: CCompiler;
+    let targetObjPath: string;
+
+    const MATCHING_C_CODE = 'int SimpleAdd(int a, int b) { return a + b; }';
+    const NON_MATCHING_C_CODE = 'int SimpleAdd(int a, int b) { return a - b; }';
+
+    const compilerScript = getArmCompilerScript();
+
+    beforeAll(async () => {
+      permuter = new DecompPermuter();
+      compiler = new CCompiler(compilerScript);
+
+      const compileResult = await compiler.compile('SimpleAdd', MATCHING_C_CODE, '');
+      expect(compileResult.success).toBe(true);
+      if (!compileResult.success) {
+        throw new Error('Failed to compile target code for tests');
+      }
+      targetObjPath = compileResult.objPath;
+    });
+
+    afterAll(async () => {
+      if (targetObjPath) {
+        await fs.unlink(targetObjPath).catch(() => {});
+      }
+    });
 
     it('respects maxIterations limit', async () => {
       const maxIterations = 2;
@@ -293,44 +349,6 @@ describe('DecompPermuter', () => {
       // Should terminate shortly after the 500ms abort signal
       expect(elapsed).toBeLessThan(5000);
       expect(result.error).toBeUndefined();
-    }, 10000);
-
-    it('scores correctly when target.o has multiple functions', async () => {
-      // Compile a multi-function source as target.o — SimpleAdd is surrounded
-      // by other functions whose assembly would inflate the score without the
-      // objdump wrapper filtering to just the target function.
-      const multiFunctionCode = [
-        'int HelperFunc(int x) { return x * 3 + 7; }',
-        'int SimpleAdd(int a, int b) { return a + b; }',
-        'int AnotherFunc(int a, int b, int c) { return a * b - c; }',
-      ].join('\n');
-
-      const multiTargetResult = await compiler.compile('SimpleAdd', multiFunctionCode, '');
-      expect(multiTargetResult.success).toBe(true);
-      if (!multiTargetResult.success) {
-        throw new Error('Failed to compile multi-function target');
-      }
-
-      try {
-        const result = await permuter.run({
-          cCode: MATCHING_C_CODE,
-          targetObjectPath: multiTargetResult.objPath,
-          functionName: 'SimpleAdd',
-          compilerScript,
-          target: 'gba',
-          compilerType: 'gcc',
-          maxIterations: 1,
-          timeoutMs: 10000,
-        });
-
-        expect(result.error).toBeUndefined();
-        // Without the objdump wrapper, baseScore would be huge because the
-        // scorer compares all assembly (3 functions vs 1). With the wrapper,
-        // only SimpleAdd is compared → perfect match.
-        expect(result.baseScore).toBe(0);
-      } finally {
-        await fs.unlink(multiTargetResult.objPath).catch(() => {});
-      }
     }, 10000);
 
     it('returns error for invalid target object path', async () => {
