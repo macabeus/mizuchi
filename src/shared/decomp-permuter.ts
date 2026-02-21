@@ -141,10 +141,18 @@ export interface DecompPermuterResult {
 }
 
 /**
- * Kill all processes in a process group.
+ * Kill all processes in a process group and schedule a forced stdio cleanup.
+ *
  * When spawned with `detached: true`, the child gets its own process group.
- * Sending a signal to `-pid` targets the entire group, including workers
- * spawned by Python's `multiprocessing` (e.g. with `-j 4`).
+ * Sending a signal to `-pid` targets the entire group. However, on macOS
+ * Python's `multiprocessing` (default `spawn` start method) creates workers
+ * in NEW process groups, so their subprocesses (e.g. compiler invocations)
+ * survive the group kill. These orphaned grandchildren inherit the pipe FDs,
+ * preventing Node.js's ChildProcess `close` event from firing.
+ *
+ * After a brief grace period (to let the dying process flush its last output),
+ * we force-destroy stdout/stderr so the Node.js side closes cleanly regardless
+ * of orphaned processes holding the write end.
  */
 function killProcessGroup(proc: ChildProcess): void {
   if (proc.pid) {
@@ -154,6 +162,13 @@ function killProcessGroup(proc: ChildProcess): void {
       // Process already exited or group doesn't exist
     }
   }
+  // Force-close pipes after a grace period. The timer is unref'd so it
+  // doesn't prevent Node.js from exiting if nothing else keeps the loop alive.
+  const timer = setTimeout(() => {
+    proc.stdout?.destroy();
+    proc.stderr?.destroy();
+  }, 1000);
+  timer.unref();
 }
 
 /**
@@ -615,12 +630,16 @@ fi
       capture.stdoutChunks.push(text);
       processChunk(text);
     });
+    // Swallow errors from force-destroyed pipes (see killProcessGroup)
+    process.stdout?.on('error', () => {});
 
     process.stderr?.on('data', (data: Buffer) => {
       const text = data.toString();
       capture.stderrChunks.push(text);
       processChunk(text);
     });
+    // Swallow errors from force-destroyed pipes (see killProcessGroup)
+    process.stderr?.on('error', () => {});
 
     process.on('close', () => {
       processEnded = true;
