@@ -198,7 +198,7 @@ function buildGanttData(result: ReportPromptResult): GanttData | null {
 
       tasks.push({
         id: task.taskId,
-        text: `Permuter ${task.taskId.replace('permuter-', '')}`,
+        text: `Permuter ${task.taskId.replace('decomp-permuter-', '')}`,
         start,
         end,
         type: 'task',
