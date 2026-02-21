@@ -131,7 +131,7 @@ export const claudeRunnerConfigSchema = z.object({
 export type ClaudeRunnerConfig = z.infer<typeof claudeRunnerConfigSchema>;
 
 const DEFAULT_CACHE_PATH = 'claude-cache.json';
-const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const CACHE_VERSION = 2;
 
 /**
