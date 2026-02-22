@@ -1,3 +1,13 @@
+import { type PlatformTarget, countAsmMetrics } from './asm-metrics';
+import {
+  type DifficultyModel,
+  type DifficultyScore,
+  type DifficultyTier,
+  type DifficultyTiers,
+  applyDifficultyModel,
+  trainDifficultyModel,
+} from './logistic-regression';
+
 export type DecompFunctionDoc = {
   id: string;
   name: string;
@@ -32,19 +42,30 @@ export class KappaDb {
   readonly #vectorIds: string[];
   readonly #normalizedVectors: Float64Array;
   readonly #dimension: number;
+  readonly #platform: PlatformTarget;
   #calledByIndex: Map<string, string[]> | null = null;
   #vectorsCache: ReadonlyMap<string, number[]> | null = null;
+  #difficultyModelCache: DifficultyModel | null = null;
+  #difficultyScoresCache: ReadonlyMap<string, DifficultyScore> | null = null;
+  #difficultyTiersCache: DifficultyTiers | null = null;
 
   /** @internal Use `KappaDb.fromDump()` instead. */
-  constructor(functions: DecompFunctionDoc[], vectorIds: string[], normalizedVectors: Float64Array, dimension: number) {
+  constructor(
+    functions: DecompFunctionDoc[],
+    vectorIds: string[],
+    normalizedVectors: Float64Array,
+    dimension: number,
+    platform: PlatformTarget,
+  ) {
     this.#functions = functions;
     this.#functionById = new Map(functions.map((f) => [f.id, f]));
     this.#vectorIds = vectorIds;
     this.#normalizedVectors = normalizedVectors;
     this.#dimension = dimension;
+    this.#platform = platform;
   }
 
-  static fromDump(data: KappaDbDump): KappaDb {
+  static fromDump(data: KappaDbDump, platform: PlatformTarget): KappaDb {
     const functions = data.decompFunctions;
     const vectorIds: string[] = [];
     const dimension = data.vectors.length > 0 ? data.vectors[0].embedding.length : 0;
@@ -72,7 +93,11 @@ export class KappaDb {
       }
     }
 
-    return new KappaDb(functions, vectorIds, normalizedVectors, dimension);
+    return new KappaDb(functions, vectorIds, normalizedVectors, dimension, platform);
+  }
+
+  get platform(): PlatformTarget {
+    return this.#platform;
   }
 
   get functions(): ReadonlyArray<DecompFunctionDoc> {
@@ -94,6 +119,13 @@ export class KappaDb {
     }
 
     return this.#vectorsCache;
+  }
+
+  get difficultyModel(): DifficultyModel {
+    if (!this.#difficultyModelCache) {
+      this.#difficultyModelCache = trainDifficultyModel(this.#functions, this.#platform);
+    }
+    return this.#difficultyModelCache;
   }
 
   getFunctionById(id: string): DecompFunctionDoc | undefined {
@@ -142,6 +174,49 @@ export class KappaDb {
       totalVectors: this.#vectorIds.length,
       embeddingDimension: this.#dimension,
     };
+  }
+
+  getDifficultyScores(): ReadonlyMap<string, DifficultyScore> {
+    if (!this.#difficultyScoresCache) {
+      const model = this.difficultyModel;
+      const scores = new Map<string, DifficultyScore>();
+      for (const fn of this.#functions) {
+        const metrics = countAsmMetrics(fn.asmCode, this.#platform);
+        // Default decompiled GBA functions to Thumb — agbcc always targets Thumb
+        if (this.#platform === 'arm' && metrics.armEncoding === undefined && fn.cCode) {
+          metrics.armEncoding = 'thumb';
+        }
+        const score = applyDifficultyModel(metrics, model);
+        scores.set(fn.id, { score, metrics });
+      }
+      this.#difficultyScoresCache = scores;
+    }
+    return this.#difficultyScoresCache;
+  }
+
+  getDifficultyTiers(): DifficultyTiers {
+    if (!this.#difficultyTiersCache) {
+      const scores = this.getDifficultyScores();
+      const sortedScores = [...scores.values()].map((s) => s.score).sort((a, b) => a - b);
+
+      const n = sortedScores.length;
+      const p33 = n > 0 ? sortedScores[Math.floor(n / 3)] : 0;
+      const p66 = n > 0 ? sortedScores[Math.floor((2 * n) / 3)] : 0;
+
+      const tiers = new Map<string, DifficultyTier>();
+      for (const [id, { score }] of scores) {
+        if (score <= p33) {
+          tiers.set(id, 'easy');
+        } else if (score <= p66) {
+          tiers.set(id, 'medium');
+        } else {
+          tiers.set(id, 'hard');
+        }
+      }
+
+      this.#difficultyTiersCache = { tiers, thresholds: [p33, p66] };
+    }
+    return this.#difficultyTiersCache;
   }
 
   findSimilar(id: string, limit = 10): SimilarResult[] {

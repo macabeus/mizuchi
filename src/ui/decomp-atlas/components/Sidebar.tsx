@@ -1,4 +1,4 @@
-import type { KappaDb } from '@shared/kappa-db';
+import type { KappaDb } from '@shared/kappa-db/kappa-db';
 import { Icon } from '@ui-shared/components/Icon';
 import { useMemo, useState } from 'react';
 
