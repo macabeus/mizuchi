@@ -21,8 +21,8 @@ async function findReportTemplate(): Promise<string> {
   // 1. Relative to current file (for running from source with tsx)
   // 2. In src/ directory (for running from compiled dist/)
   const possiblePaths = [
-    path.join(__dirname, 'ui', 'dist', 'index.html'),
-    path.join(__dirname, '..', '..', 'src', 'report-generator', 'ui', 'dist', 'index.html'),
+    path.join(__dirname, '..', 'ui', 'run-report', 'dist', 'index.html'),
+    path.join(__dirname, '..', '..', 'src', 'ui', 'run-report', 'dist', 'index.html'),
   ];
 
   for (const templatePath of possiblePaths) {
@@ -35,7 +35,7 @@ async function findReportTemplate(): Promise<string> {
   }
 
   throw new Error(
-    `Report UI template not found. Searched paths:\n${possiblePaths.join('\n')}\nRun 'npm run build:report-ui' first.`,
+    `Report UI template not found. Searched paths:\n${possiblePaths.join('\n')}\nRun 'npm run build:run-report' first.`,
   );
 }
 

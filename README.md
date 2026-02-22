@@ -10,7 +10,7 @@ It orchestrates a plugin-based pipeline that can leverage programmatic and AI-po
 
 - ✨ Automatic retries with detailed context on compilation or match failures
 - 🐍 Integration with Claude, [m2c](https://github.com/matt-kempster/m2c), [decomp-permuter](https://github.com/simonlindholm/decomp-permuter), and [objdiff](https://github.com/encounter/objdiff/).
-- 📊 Beautiful report UI
+- 📊 Beautiful UIs to visualize the pipeline result and your decomp project
 
 <img width="1143" height="1057" alt="image" src="https://github.com/user-attachments/assets/025e6a00-7a6a-4425-9c11-8b86619cd546" />
 
@@ -43,7 +43,7 @@ It orchestrates a plugin-based pipeline that can leverage programmatic and AI-po
 
 ```bash
 npm install
-npm run build && npm run build:report-ui
+npm run build && npm run build:ui
 ```
 
 ### m2c Setup (Optional)
@@ -218,6 +218,9 @@ npm run format
 # Run in development mode
 npm run dev
 
-# Run the report UI in development mode
-npm run dev:report-ui -- ./benchmark-results-[timestamp].json
+# Run the Run Report UI in development mode
+npm run dev:run-report -- ./benchmark-results-[timestamp].json
+
+# Run the Decomp Atlas in development mode
+npm run dev:decomp-atlas
 ```

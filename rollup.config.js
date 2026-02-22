@@ -17,8 +17,8 @@ function findTsFiles(dir, files = []) {
     const fullPath = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      // Skip report-generator/ui directory
-      if (fullPath.includes('report-generator/ui')) continue;
+      // Skip ui/ directory (run-report UI + decomp-atlas UI)
+      if (fullPath.includes('/ui/')) continue;
       findTsFiles(fullPath, files);
     } else if (entry.isFile()) {
       // Include .ts and .tsx files, exclude test files
@@ -111,7 +111,7 @@ export default {
         'src/**/*.spec.tsx',
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
-        'src/report-generator/ui/**/*',
+        'src/ui/**/*',
         'node_modules/**/*',
       ],
     }),

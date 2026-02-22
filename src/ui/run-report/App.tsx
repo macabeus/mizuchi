@@ -1,9 +1,10 @@
+import { Header } from '@ui-shared/components/Header';
+import { Icon } from '@ui-shared/components/Icon';
 import { useMemo, useState } from 'react';
 
-import type { ReportFilters, ReportSort } from '../types';
+import type { ReportFilters, ReportSort } from '~/report-generator/types';
+
 import { Filters } from './components/Filters';
-import { Header } from './components/Header';
-import { Icon } from './components/Icon';
 import { PromptResult } from './components/PromptResult';
 import { Summary } from './components/Summary';
 
@@ -96,7 +97,7 @@ export function App() {
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <Header timestamp={report.timestamp} />
+        <Header subtitle="Run Report" rightContent={<ReportTimestamp timestamp={report.timestamp} />} />
 
         {/* Summary Cards */}
         <Summary summary={report.summary} config={report.config} />
@@ -139,5 +140,31 @@ export function App() {
         </section>
       </div>
     </div>
+  );
+}
+
+function ReportTimestamp({ timestamp }: { timestamp: string }) {
+  const formattedDate = new Date(timestamp).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const formattedTime = new Date(timestamp).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  return (
+    <>
+      <div className="flex items-center gap-2 text-slate-400 mb-1">
+        <Icon name="calendar" className="w-4 h-4" />
+        <span className="text-sm font-medium">Report generated at</span>
+      </div>
+      <p className="text-white font-semibold">{formattedDate}</p>
+      <p className="text-slate-300 text-sm">{formattedTime}</p>
+    </>
   );
 }

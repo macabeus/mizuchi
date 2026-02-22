@@ -19,8 +19,16 @@
     "baseUrl": "../../..",
     "paths": {
       "~/*": ["./src/*"],
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@ui-shared/*": ["src/ui/shared/*"]
     }
   },
-  "include": ["./**/*.ts", "./**/*.tsx", "./**/*.d.ts"]
+  "include": [
+    "./**/*.ts",
+    "./**/*.tsx",
+    "./**/*.d.ts",
+    "../shared/**/*.ts",
+    "../shared/**/*.tsx",
+    "../shared/**/*.d.ts"
+  ]
 }

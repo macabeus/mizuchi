@@ -1,24 +1,11 @@
 import logoUrl from '../assets/logo.png';
-import { Icon } from './Icon';
 
 interface HeaderProps {
-  timestamp: string;
+  subtitle: string;
+  rightContent: React.ReactNode;
 }
 
-export function Header({ timestamp }: HeaderProps) {
-  const formattedDate = new Date(timestamp).toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-
-  const formattedTime = new Date(timestamp).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-
+export function Header({ subtitle, rightContent }: HeaderProps) {
   return (
     <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl shadow-xl mb-8 overflow-hidden">
       <div className="px-8 py-6">
@@ -35,19 +22,12 @@ export function Header({ timestamp }: HeaderProps) {
                   Mizuchi
                 </span>
               </h1>
-              <p className="text-slate-400 text-sm font-medium mt-0.5">Matching Decompilation Pipeline Runner</p>
+              <p className="text-slate-400 text-sm font-medium mt-0.5">{subtitle}</p>
             </div>
           </div>
 
-          {/* Timestamp */}
-          <div className="text-right">
-            <div className="flex items-center gap-2 text-slate-400 mb-1">
-              <Icon name="calendar" className="w-4 h-4" />
-              <span className="text-sm font-medium">Report generated at</span>
-            </div>
-            <p className="text-white font-semibold">{formattedDate}</p>
-            <p className="text-slate-300 text-sm">{formattedTime}</p>
-          </div>
+          {/* Right Content */}
+          <div className="text-right">{rightContent}</div>
         </div>
       </div>
 

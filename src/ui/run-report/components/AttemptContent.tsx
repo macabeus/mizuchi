@@ -1,7 +1,8 @@
+import { Icon } from '@ui-shared/components/Icon';
 import { useState } from 'react';
 
-import type { ReportAttempt } from '../../types';
-import { Icon } from './Icon';
+import type { ReportAttempt } from '~/report-generator/types';
+
 import { PluginDetails } from './PluginDetails';
 import { PluginFlow } from './PluginFlow';
 

@@ -1,6 +1,8 @@
-import type { ReportConfig, ReportSummary } from '../../types';
+import { Icon } from '@ui-shared/components/Icon';
+
+import type { ReportConfig, ReportSummary } from '~/report-generator/types';
+
 import { CodeBlock } from './CodeBlock';
-import { Icon } from './Icon';
 
 interface SummaryProps {
   summary: ReportSummary;

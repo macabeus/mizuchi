@@ -1,4 +1,4 @@
-import type { BenchmarkReport } from '~/types';
+import type { BenchmarkReport } from '~/report-generator/types';
 
 declare global {
   interface Window {

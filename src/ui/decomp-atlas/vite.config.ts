@@ -4,16 +4,13 @@ import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 export default defineConfig(({ command }) => ({
-  plugins: [
-    react(),
-    // Only use singlefile plugin in build mode
-    ...(command === 'build' ? [viteSingleFile()] : []),
-  ],
+  plugins: [react(), ...(command === 'build' ? [viteSingleFile()] : [])],
   root: __dirname,
   resolve: {
     alias: {
       '~': path.resolve(__dirname, '../../../src'),
       '@shared': path.resolve(__dirname, '../../../src/shared'),
+      '@ui-shared': path.resolve(__dirname, '../shared'),
     },
   },
   build: {

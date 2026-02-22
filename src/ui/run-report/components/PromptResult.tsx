@@ -1,3 +1,5 @@
+import { Icon } from '@ui-shared/components/Icon';
+import { Tabs } from '@ui-shared/components/Tabs';
 import { useState } from 'react';
 
 import type {
@@ -6,14 +8,13 @@ import type {
   ReportPluginResult,
   ReportPromptResult,
   ReportSection,
-} from '../../types';
+} from '~/report-generator/types';
+
 import { AttemptContent } from './AttemptContent';
 import { AttemptsChart } from './AttemptsChart';
 import { BestResultCode } from './BestResultCode';
-import { Icon } from './Icon';
 import { PluginDetails } from './PluginDetails';
 import { SideMenu } from './SideMenu';
-import { Tabs } from './Tabs';
 import { TimelineChart } from './TimelineChart';
 
 interface PromptResultProps {
