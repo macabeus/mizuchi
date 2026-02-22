@@ -1,4 +1,4 @@
-import type { KappaDb } from '@shared/kappa-db';
+import type { KappaDb } from '@shared/kappa-db/kappa-db';
 import { createContext, useContext } from 'react';
 
 const KappaDbContext = createContext<KappaDb | null>(null);
