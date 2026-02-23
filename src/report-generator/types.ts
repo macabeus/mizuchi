@@ -173,6 +173,7 @@ export interface ReportConfig {
   compilerScript: string;
   getContextScript: string;
   target: string;
+  model: string;
 }
 
 /**

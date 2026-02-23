@@ -821,6 +821,7 @@ async function runPipeline(
     const pluginConfigs: ReportPluginConfigs = {
       claudeRunner: {
         stallThreshold: claudeRunnerConfig.stallThreshold,
+        model: claudeRunnerConfig.model ?? 'claude-sonnet-4-6',
       },
       compiler: {
         compilerScript: pipelineConfig.compilerScript,

@@ -18,6 +18,7 @@ import type {
 export interface ReportPluginConfigs {
   claudeRunner: {
     stallThreshold: number;
+    model: string;
   };
   compiler: {
     compilerScript: string;
@@ -77,6 +78,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       compilerScript: pluginConfigs.compiler.compilerScript,
       getContextScript: results.config.getContextScript,
       target: results.config.target,
+      model: pluginConfigs.claudeRunner.model,
     },
     results: reportResults,
     summary: results.summary,

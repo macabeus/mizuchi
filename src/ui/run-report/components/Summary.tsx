@@ -103,6 +103,12 @@ export function Summary({ summary, config }: SummaryProps) {
               </code>
             </div>
             <div className="flex items-center gap-2">
+              <span className="text-slate-400">Model:</span>
+              <code className="bg-slate-700/50 px-2 py-1 rounded-md text-violet-400 font-mono text-xs">
+                {config.model}
+              </code>
+            </div>
+            <div className="flex items-center gap-2">
               <span className="text-slate-400">Prompts Directory:</span>
               <code className="bg-slate-700/50 px-2 py-1 rounded-md text-cyan-400 font-mono text-xs">
                 {config.promptsDir}
