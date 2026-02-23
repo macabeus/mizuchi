@@ -1,4 +1,4 @@
-import { type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { type SDKMessage, SDKResultSuccess } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ARM_DIFF_SETTINGS, getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
@@ -130,7 +130,13 @@ function createMockQueryFactory(options: MockQueryFactoryOptions | string[]): Qu
         subtype: 'success',
         session_id: TEST_SESSION_ID,
         is_error: false,
-      } as SDKMessage;
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 8000,
+          cache_creation_input_tokens: 200,
+        },
+      } as unknown as SDKResultSuccess;
     }
 
     return {
@@ -1406,6 +1412,33 @@ mov eax, 0
       // Should also have code section
       const codeSection = sections.find((s) => s.type === 'code');
       expect(codeSection).toBeDefined();
+    });
+
+    it('returns stats section with token usage', async () => {
+      const response = '```c\nint foo(void) { return 1; }\n```';
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+      const sections = plugin.getReportSections!(result, context);
+
+      const statsSection = sections.find((s) => s.type === 'message' && s.title === 'Stats') as PluginReportSection & {
+        type: 'message';
+      };
+      expect(statsSection).toBeDefined();
+      // Total input = 100 new + 8000 cache read + 200 cache write = 8,300
+      expect(statsSection.message).toContain('Input tokens: 8,300');
+      expect(statsSection.message).toContain('100 new');
+      expect(statsSection.message).toContain('8000 cache read');
+      expect(statsSection.message).toContain('200 cache write');
+      expect(statsSection.message).toContain('Output tokens: 50');
     });
   });
 

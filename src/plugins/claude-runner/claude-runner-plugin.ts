@@ -71,6 +71,12 @@ interface SDKMessage {
   subtype?: string;
   errors?: string[];
   error?: SDKAssistantMessageError;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
 }
 
 /**
@@ -339,6 +345,12 @@ export interface ClaudeRunnerResult {
   codeLength?: number;
   fromCache: boolean;
   stallDetected: boolean;
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+  };
 }
 
 /**
@@ -375,6 +387,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
   // Tool call counter (resets each retry iteration)
   #toolCallCount = 0;
+
+  // Cumulative token usage across all queries for this pipeline run
+  #tokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 
   // External abort signal (e.g., from background permuter success)
   #externalAbortSignal?: AbortSignal;
@@ -664,6 +679,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           }
         }
       } else if (msg.type === 'result') {
+        // Accumulate token usage from result messages
+        if (msg.usage) {
+          this.#tokenUsage.inputTokens += msg.usage.input_tokens;
+          this.#tokenUsage.outputTokens += msg.usage.output_tokens;
+          this.#tokenUsage.cacheReadInputTokens += msg.usage.cache_read_input_tokens ?? 0;
+          this.#tokenUsage.cacheCreationInputTokens += msg.usage.cache_creation_input_tokens ?? 0;
+        }
+
         if (msg.subtype && msg.subtype !== 'success') {
           const errors = msg.errors ? msg.errors.join(', ') : 'Unknown error';
 
@@ -849,6 +872,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     this.#initialPromptHash = null;
     this.#currentCacheNode = null;
     this.#lastStallAttemptIndex = -1;
+    this.#tokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
   }
 
   /**
@@ -969,6 +993,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               fromCache,
               generatedCode: '',
               stallDetected: this.#stallDetected,
+              tokenUsage: { ...this.#tokenUsage },
             },
           },
           context,
@@ -992,6 +1017,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               promptSent: promptUsed,
               fromCache,
               stallDetected: this.#stallDetected,
+              tokenUsage: { ...this.#tokenUsage },
             },
           },
           context: { ...context, generatedCode: code },
@@ -1014,6 +1040,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             codeLength: code.length,
             fromCache,
             stallDetected: this.#stallDetected,
+            tokenUsage: { ...this.#tokenUsage },
           },
         },
         context: { ...context, generatedCode: code },
@@ -1031,7 +1058,12 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           status: 'failure',
           durationMs: Date.now() - startTime,
           error: error instanceof Error ? error.message : String(error),
-          data: { fromCache: false, generatedCode: '', stallDetected: this.#stallDetected },
+          data: {
+            fromCache: false,
+            generatedCode: '',
+            stallDetected: this.#stallDetected,
+            tokenUsage: { ...this.#tokenUsage },
+          },
         },
         context,
       };
@@ -1137,6 +1169,20 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         type: 'chat',
         title: 'Claude Conversation',
         messages: [{ role: 'system', content: this.systemPrompt }, ...this.#conversationHistory],
+      });
+    }
+
+    // Add stats section with token usage
+    if (result.data?.tokenUsage) {
+      const { inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens } = result.data.tokenUsage;
+      const totalInputTokens = inputTokens + cacheReadInputTokens + cacheCreationInputTokens;
+      sections.push({
+        type: 'message',
+        title: 'Stats',
+        message: [
+          `Input tokens: ${totalInputTokens} (${inputTokens} new, ${cacheReadInputTokens} cache read, ${cacheCreationInputTokens} cache write)`,
+          `Output tokens: ${outputTokens}`,
+        ].join('\n'),
       });
     }
 
