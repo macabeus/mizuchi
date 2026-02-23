@@ -1,4 +1,4 @@
-import type { DecompFunctionDoc } from '@shared/kappa-db';
+import type { DecompFunctionDoc } from '@shared/kappa-db/kappa-db';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import { LinesChart as EChartsLinesChart, ScatterChart as EChartsScatterChart } from 'echarts/charts';
 import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components';
@@ -20,8 +20,8 @@ echarts.use([
 interface ScatterChartProps {
   selectedPath: string | null;
   selectedFunctionId: string | null;
-  onFunctionSelect?: (id: string) => void;
-  onFunctionDeselect?: () => void;
+  onFunctionSelect: (id: string) => void;
+  onFunctionDeselect: () => void;
 }
 
 interface Point {
@@ -395,7 +395,7 @@ export function ScatterChart({
   const onEvents = useMemo(
     () => ({
       click: (params: { data: [number, number, DecompFunctionDoc] }) => {
-        onFunctionSelect?.(params.data[2].id);
+        onFunctionSelect(params.data[2].id);
       },
     }),
     [onFunctionSelect],

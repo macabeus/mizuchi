@@ -34,15 +34,17 @@ module.exports = {
         ],
       },
     },
-    // Circular dependencies is allowed only for type-only dependencies
+    // Circular dependencies are allowed when at least one edge in the cycle is type-only
     {
       name: 'no-circular',
       severity: 'error',
-      comment: 'Circular dependencies are allowed only for type-only dependencies.',
+      comment: 'Circular dependencies are allowed when at least one edge in the cycle is type-only.',
       from: {},
       to: {
         circular: true,
-        dependencyTypesNot: ['type-only'],
+        viaOnly: {
+          dependencyTypesNot: ['type-only'],
+        },
       },
     },
     // Shared code is allowed to import only types from plugins

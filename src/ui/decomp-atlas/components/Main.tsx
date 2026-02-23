@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 
 import { useKappaDb } from '../KappaDbContext';
 import { FunctionDetails } from './FunctionDetails';
+import { FunctionScoring } from './FunctionScoring';
 import { ScatterChart } from './ScatterChart';
 import { Sidebar } from './Sidebar';
 
@@ -37,21 +38,34 @@ export function Main({ fileName }: MainProps) {
         />
 
         <Tabs
-          items={[{ id: 'embeddings', name: 'Embeddings Map', icon: 'lineChart' as const }]}
-          content={() => (
+          items={
+            [
+              { id: 'embeddings', name: 'Embeddings Map', icon: 'lineChart' },
+              { id: 'difficulty', name: 'Function Scoring', icon: 'barChart' },
+            ] as const
+          }
+          content={(tab) => (
             <>
-              <div className="flex gap-4 mt-4">
-                <Sidebar selectedPath={selectedPath} onPathSelect={setSelectedPath} />
+              {tab.id === 'embeddings' && (
+                <>
+                  <div className="flex gap-4 mt-4">
+                    <Sidebar selectedPath={selectedPath} onPathSelect={setSelectedPath} />
 
-                <div className="flex-1 min-w-0">
-                  <ScatterChart
-                    selectedPath={selectedPath}
-                    selectedFunctionId={selectedFunctionId}
-                    onFunctionSelect={setSelectedFunctionId}
-                    onFunctionDeselect={handleCloseDetails}
-                  />
-                </div>
-              </div>
+                    <div className="flex-1 min-w-0">
+                      <ScatterChart
+                        selectedPath={selectedPath}
+                        selectedFunctionId={selectedFunctionId}
+                        onFunctionSelect={setSelectedFunctionId}
+                        onFunctionDeselect={handleCloseDetails}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {tab.id === 'difficulty' && (
+                <FunctionScoring selectedFunctionId={selectedFunctionId} onFunctionSelect={setSelectedFunctionId} />
+              )}
 
               {selectedFunctionId && (
                 <FunctionDetails
