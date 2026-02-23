@@ -12,6 +12,7 @@ import {
   loadConfigFile,
   validatePaths,
 } from '~/cli/config.js';
+import { type ToolkitInitSummary, maybeRunToolkitInit } from '~/cli/toolkit-init.js';
 import { PluginManager } from '~/plugin-manager.js';
 import {
   ClaudeRunnerConfig,
@@ -59,6 +60,22 @@ export const options = z.object({
     .string()
     .optional()
     .describe(option({ description: 'Output directory for generated files and report', alias: 'o' })),
+  initToolkit: z
+    .enum(['dtk'])
+    .optional()
+    .describe(option({ description: 'Scaffold a decomp project toolkit (experimental). Currently supports: dtk' })),
+  projectDir: z
+    .string()
+    .optional()
+    .describe(option({ description: 'Destination directory for toolkit scaffolding (used with --init-toolkit)' })),
+  gameId: z
+    .string()
+    .optional()
+    .describe(option({ description: 'Game ID for toolkit scaffolding, e.g. GLZE01 (used with --init-toolkit)' })),
+  platform: z
+    .enum(['gc', 'wii'])
+    .optional()
+    .describe(option({ description: 'Console target for toolkit scaffolding (GC/Wii). Default: gc' })),
 });
 
 type Props = {
@@ -82,6 +99,7 @@ interface PluginStatus {
 interface ProgressState {
   phase: 'loading' | 'initializing' | 'running' | 'complete' | 'error';
   currentFlow: 'loading' | 'programmatic-flow' | 'ai-powered-flow';
+  loadingMessage?: string;
   config?: PipelineConfig;
   plugins: PluginInfo[];
   // Current prompt info
@@ -118,6 +136,7 @@ interface ProgressState {
   // Final results
   results?: PipelineResults;
   htmlReportPath?: string;
+  toolkitInitSummary?: ToolkitInitSummary;
   // Error message
   errorMessage?: string;
   // Active interactive prompt
@@ -131,6 +150,7 @@ export default function Index({ options: opts }: Props) {
   const [state, setState] = useState<ProgressState>({
     phase: 'loading',
     currentFlow: 'loading',
+    loadingMessage: 'Loading configuration...',
     plugins: [],
     pluginStatuses: [],
     completedPrompts: [],
@@ -346,7 +366,7 @@ export default function Index({ options: opts }: Props) {
       {state.phase === 'loading' && (
         <Box>
           <Text color="yellow">
-            <Spinner type="dots" /> Loading configuration...
+            <Spinner type="dots" /> {state.loadingMessage ?? 'Loading configuration...'}
           </Text>
         </Box>
       )}
@@ -459,6 +479,10 @@ export default function Index({ options: opts }: Props) {
       )}
 
       {/* Complete phase */}
+      {state.phase === 'complete' && state.toolkitInitSummary && (
+        <ToolkitInitSummaryView summary={state.toolkitInitSummary} />
+      )}
+
       {state.phase === 'complete' && state.results && (
         <PipelineSummary results={state.results} htmlReportPath={state.htmlReportPath} />
       )}
@@ -644,6 +668,40 @@ function PipelineSummary({ results, htmlReportPath }: { results: PipelineResults
   );
 }
 
+function ToolkitInitSummaryView({ summary }: { summary: ToolkitInitSummary }) {
+  return (
+    <Box flexDirection="column">
+      <Text color="green" bold>
+        Toolkit Scaffold Complete
+      </Text>
+
+      <Box marginTop={1} flexDirection="column">
+        <Text>
+          Toolkit: <Text bold>{summary.toolkit}</Text>
+        </Text>
+        <Text>
+          Platform: <Text bold>{summary.platform}</Text>
+        </Text>
+        <Text>
+          Game ID: <Text bold>{summary.gameId}</Text>
+        </Text>
+        <Text>
+          Project Dir: <Text bold>{summary.projectDir}</Text>
+        </Text>
+      </Box>
+
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>Next steps:</Text>
+        {summary.nextSteps.map((step, index) => (
+          <Text key={step} dimColor>
+            {index + 1}. {step}
+          </Text>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
 async function runPipeline(
   opts: z.infer<typeof options>,
   onEvent: (event: PipelineEvent) => void,
@@ -669,6 +727,33 @@ async function runPipeline(
   let backgroundCoordinator: BackgroundTaskCoordinator | undefined;
 
   try {
+    const toolkitInitSummary = await maybeRunToolkitInit(opts, (message) => {
+      setState((prev) => ({
+        ...prev,
+        phase: 'loading',
+        currentFlow: 'loading',
+        loadingMessage: message,
+      }));
+    });
+
+    if (toolkitInitSummary) {
+      setState((prev) => ({
+        ...prev,
+        phase: 'complete',
+        currentFlow: 'loading',
+        toolkitInitSummary,
+        loadingMessage: undefined,
+      }));
+
+      setTimeout(() => {
+        process.exit(0);
+      }, 1);
+
+      return;
+    }
+
+    setState((prev) => ({ ...prev, loadingMessage: 'Loading configuration...' }));
+
     // Load configuration from file (if exists)
     const configPath = getConfigFilePath(opts.config);
     const fileConfig = await loadConfigFile(configPath);

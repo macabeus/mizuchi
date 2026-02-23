@@ -68,6 +68,27 @@ git submodule update --init vendor/decomp-permuter
 
 - `ANTHROPIC_API_KEY` environment variable set
 
+### Experimental Project Scaffolding (GC/Wii via decomp-toolkit)
+
+Mizuchi can now scaffold a GC/Wii project from [`encounter/dtk-template`](https://github.com/encounter/dtk-template):
+
+```bash
+npm run dev -- --init-toolkit dtk --game-id GLZE01 --platform gc --project-dir ./windwaker-dtk
+```
+
+Currently it just:
+
+- Clones `dtk-template`
+- Renames `orig/GAMEID` and `config/GAMEID`
+- Rewrites the `GAMEID` placeholders in core config files (`configure.py`, `config.yml`, `build.sha1`)
+- Re-initializes a fresh local git repo
+
+Maybe later?
+
+- Disc extraction
+- `config.yml` game-specific tuning
+- `build.sha1` generation (`dtk shasum ...`)
+
 ## Quick Start
 
 1. **Create a configuration file**:
