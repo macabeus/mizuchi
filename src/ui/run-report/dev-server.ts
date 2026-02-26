@@ -1,6 +1,6 @@
 /**
  * Development server for the report UI with hot reload.
- * Usage: npx tsx dev-server.ts <path-to-benchmark-result.json>
+ * Usage: npx tsx dev-server.ts <path-to-run-result.json>
  */
 import fs from 'fs';
 import path from 'path';
@@ -13,7 +13,7 @@ async function main() {
   const jsonPath = process.argv[2];
 
   if (!jsonPath) {
-    console.error('Usage: npx tsx dev-server.ts <path-to-benchmark-result.json>');
+    console.error('Usage: npx tsx dev-server.ts <path-to-run-result.json>');
     process.exit(1);
   }
 
@@ -53,7 +53,7 @@ async function main() {
         const jsonString = JSON.stringify(reportData);
         const base64Data = Buffer.from(jsonString).toString('base64');
         const script = `<script>
-  window.__BENCHMARK_REPORT__ = JSON.parse(atob('${base64Data}'));
+  window.__RUN_REPORT__ = JSON.parse(atob('${base64Data}'));
 </script>`;
         return html.replace('</head>', `${script}</head>`);
       },

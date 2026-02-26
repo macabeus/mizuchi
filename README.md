@@ -95,7 +95,7 @@ See the [Prompt Folder Structure](#prompt-folder-structure) section for details.
 
 > **Tip**: Use the [Decomp Atlas](#decomp-atlas) to browse your project's functions and generate rich prompts from a web app.
 
-3. **Run the benchmark**:
+3. **Run the pipelines**:
 
 ```bash
 npm start
@@ -179,11 +179,11 @@ flowchart TD
 
 Mizuchi generates three output files:
 
-| File                                 | Description                                                                          |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `benchmark-results-{timestamp}.json` | Complete execution data including plugin results, timing, and success/failure status |
-| `benchmark-report-{timestamp}.html`  | Visual report with success rates, metrics, and per-prompt breakdown                  |
-| `claude-cache.json`                  | Cached Claude API responses keyed by prompt content hash                             |
+| File                           | Description                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| `run-results-{timestamp}.json` | Complete execution data including plugin results, timing, and success/failure status |
+| `run-report-{timestamp}.html`  | Visual report with success rates, metrics, and per-prompt breakdown                  |
+| `claude-cache.json`            | Cached Claude API responses keyed by prompt content hash                             |
 
 ### Built-in Plugins
 
@@ -238,7 +238,7 @@ npm run format
 npm run dev
 
 # Run the Run Report UI in development mode
-npm run dev:run-report -- ./benchmark-results-[timestamp].json
+npm run dev:run-report -- ./run-results-[timestamp].json
 
 # Run the Decomp Atlas API and UI in development mode
 npm run dev:decomp-atlas -- -c mizuchi.yaml

@@ -1,15 +1,15 @@
 /**
- * Transform PipelineResults to BenchmarkReport format
+ * Transform PipelineResults to RunReport format
  */
 import type { AttemptResult, PipelineResults, PluginResult } from '~/shared/types.js';
 
 import type {
-  BenchmarkReport,
   ReportBackgroundTask,
   ReportMatchSource,
   ReportPluginResult,
   ReportPromptResult,
   ReportSection,
+  RunReport,
 } from './types.js';
 
 /**
@@ -43,9 +43,9 @@ function transformAttempt(attempt: AttemptResult) {
 }
 
 /**
- * Transform PipelineResults to BenchmarkReport
+ * Transform PipelineResults to RunReport
  */
-export function transformToReport(results: PipelineResults, pluginConfigs: ReportPluginConfigs): BenchmarkReport {
+export function transformToReport(results: PipelineResults, pluginConfigs: ReportPluginConfigs): RunReport {
   const reportResults: ReportPromptResult[] = results.results.map((promptResult) => {
     const attempts = promptResult.attempts.map(transformAttempt);
     const setupFlow = transformAttempt(promptResult.setupFlow);

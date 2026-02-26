@@ -9,7 +9,7 @@ import { PromptResult } from './components/PromptResult';
 import { Summary } from './components/Summary';
 
 export function App() {
-  const report = window.__BENCHMARK_REPORT__;
+  const report = window.__RUN_REPORT__;
 
   const [filters, setFilters] = useState<ReportFilters>({ outcome: 'all' });
   const [sort, setSort] = useState<ReportSort>({ field: 'name', direction: 'asc' });
@@ -87,7 +87,7 @@ export function App() {
         <div className="text-center bg-slate-800/50 rounded-2xl p-8 border border-slate-700 shadow-xl">
           <Icon name="document" className="w-16 h-16 mx-auto mb-4 text-slate-500" />
           <h1 className="text-2xl font-bold text-white mb-2">No Report Data</h1>
-          <p className="text-slate-400">The benchmark report data was not found.</p>
+          <p className="text-slate-400">The run report data was not found.</p>
         </div>
       </div>
     );

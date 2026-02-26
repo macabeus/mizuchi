@@ -621,7 +621,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   }
 
   /**
-   * Save cache to file (called after benchmark completes)
+   * Save cache to file (called after the pipelines completes)
    */
   async saveCache(): Promise<void> {
     if (!this.#cache || !this.#cacheModified) {

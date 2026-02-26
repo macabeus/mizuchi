@@ -1,8 +1,8 @@
-import type { BenchmarkReport } from '~/report-generator/types';
+import type { RunReport } from '~/report-generator/types';
 
 declare global {
   interface Window {
-    __BENCHMARK_REPORT__?: BenchmarkReport;
+    __RUN_REPORT__?: RunReport;
   }
 }
 

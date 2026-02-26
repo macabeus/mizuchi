@@ -6,9 +6,9 @@ dist
 *.s
 *.m2c
 base_*.c
-benchmark-*/
-benchmark-*.html
-benchmark-*.json
+run-*/
+run-*.html
+run-*.json
 claude-cache*.json
 mizuchi*.yaml
 vendor/m2c/.venv

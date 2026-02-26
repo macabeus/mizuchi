@@ -16,10 +16,10 @@ export interface PluginInfo {
 }
 
 /**
- * Event emitted when benchmark starts
+ * Event emitted when pipeline starts
  */
-export interface BenchmarkStartEvent {
-  type: 'benchmark-start';
+export interface PipelineStartEvent {
+  type: 'pipeline-start';
   config: PipelineConfig;
   plugins: PluginInfo[];
   promptCount: number;
@@ -100,10 +100,10 @@ export interface PromptCompleteEvent {
 }
 
 /**
- * Event emitted when benchmark completes
+ * Event emitted when pipeline completes
  */
-export interface BenchmarkCompleteEvent {
-  type: 'benchmark-complete';
+export interface PipelineCompleteEvent {
+  type: 'pipeline-complete';
   summary: {
     totalPrompts: number;
     successfulPrompts: number;
@@ -150,7 +150,7 @@ export interface BackgroundTaskCompleteEvent {
  * Union type of all pipeline events
  */
 export type PipelineEvent =
-  | BenchmarkStartEvent
+  | PipelineStartEvent
   | PluginRegisteredEvent
   | PromptStartEvent
   | SetupFlowStartEvent
@@ -160,7 +160,7 @@ export type PipelineEvent =
   | PluginExecutionCompleteEvent
   | AttemptCompleteEvent
   | PromptCompleteEvent
-  | BenchmarkCompleteEvent
+  | PipelineCompleteEvent
   | BackgroundTaskStartEvent
   | BackgroundTaskCompleteEvent;
 

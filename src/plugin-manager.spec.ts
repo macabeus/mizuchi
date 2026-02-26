@@ -840,7 +840,7 @@ describe('PluginManager', () => {
     });
   });
 
-  describe('.runBenchmark', () => {
+  describe('.runPipelines', () => {
     it('runs pipeline for all prompts', async () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
@@ -862,7 +862,7 @@ describe('PluginManager', () => {
         },
       ];
 
-      const results = await manager.runBenchmark(prompts);
+      const results = await manager.runPipelines(prompts);
 
       expect(results.results).toHaveLength(2);
       expect(results.results[0].functionName).toBe('func1');
@@ -918,7 +918,7 @@ describe('PluginManager', () => {
         },
       ];
 
-      const results = await manager.runBenchmark(prompts);
+      const results = await manager.runPipelines(prompts);
 
       expect(results.summary.totalPrompts).toBe(3);
       expect(results.summary.successfulPrompts).toBe(2);
@@ -943,7 +943,7 @@ describe('PluginManager', () => {
 
       manager.register(plugin);
 
-      await manager.runBenchmark([
+      await manager.runPipelines([
         {
           path: 'prompt1.md',
           content: 'content1',
@@ -963,11 +963,11 @@ describe('PluginManager', () => {
       expect(receivedTargets).toEqual(['/custom/target1.o', '/custom/target2.o']);
     });
 
-    it('returns correct benchmark results structure', async () => {
+    it('returns correct run results structure', async () => {
       const manager = new PluginManager(defaultTestPipelineConfig);
       manager.register(createSuccessPlugin('plugin1', 'Plugin 1'));
 
-      const results = await manager.runBenchmark([
+      const results = await manager.runPipelines([
         {
           path: 'prompt1.md',
           content: 'content1',
@@ -1034,7 +1034,7 @@ describe('PluginManager', () => {
         },
       ];
 
-      const results = await manager.runBenchmark(prompts);
+      const results = await manager.runPipelines(prompts);
 
       // Should have only the first prompt's result (second aborted, third never processed)
       expect(results.results).toHaveLength(1);
@@ -1063,7 +1063,7 @@ describe('PluginManager', () => {
       manager.register(plugin);
 
       // Regular errors are caught by #runAttempt and turned into failure results
-      const results = await manager.runBenchmark([
+      const results = await manager.runPipelines([
         {
           path: 'prompt1.md',
           content: 'content1',
@@ -1131,7 +1131,7 @@ describe('PluginManager', () => {
         },
       ];
 
-      const results = await manager.runBenchmark(prompts);
+      const results = await manager.runPipelines(prompts);
 
       // First prompt should be recorded as failed (not lost)
       expect(results.results).toHaveLength(2);
@@ -1159,7 +1159,7 @@ describe('PluginManager', () => {
 
       manager.register(plugin);
 
-      const results = await manager.runBenchmark([
+      const results = await manager.runPipelines([
         {
           path: 'prompt1.md',
           content: 'content1',
@@ -1283,7 +1283,7 @@ describe('PluginManager', () => {
       expect(result.matchSource).toBe('test');
     });
 
-    it('provides a fresh foreground abort signal for each prompt in runBenchmark', async () => {
+    it('provides a fresh foreground abort signal for each prompt in runPipelines', async () => {
       const config = { ...defaultTestPipelineConfig, maxRetries: 1 };
       const manager = new PluginManager(config);
 
@@ -1338,7 +1338,7 @@ describe('PluginManager', () => {
       });
 
       // Run 2 prompts
-      await manager.runBenchmark([
+      await manager.runPipelines([
         { path: 'p1.md', content: 'c1', functionName: 'func1', targetObjectPath: '/t1.o', asm: '.text\n' },
         { path: 'p2.md', content: 'c2', functionName: 'func2', targetObjectPath: '/t2.o', asm: '.text\n' },
       ]);

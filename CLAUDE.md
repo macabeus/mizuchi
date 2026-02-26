@@ -26,7 +26,7 @@ npm start -- -c path/to/config.yaml
 
 # Development
 npm run dev                    # Run CLI directly with tsx
-npm run dev:run-report -- ./benchmark-results-*.json  # Run Run Report dev server
+npm run dev:run-report -- ./run-results-*.json  # Run Run Report dev server
 npm run dev:decomp-atlas       # Run Decomp Atlas dev server
 
 # Testing
@@ -47,10 +47,10 @@ Mizuchi includes two static React apps under `src/ui/`, sharing components and s
 
 ### Run Report UI (`src/ui/run-report/`)
 
-Visualizes pipeline benchmark results. Displays summary stats, per-prompt results with plugin flow diagrams, attempts charts, timeline Gantt charts, and syntax-highlighted code/chat sections.
+Visualizes pipeline run results. Displays summary stats, per-prompt results with plugin flow diagrams, attempts charts, timeline Gantt charts, and syntax-highlighted code/chat sections.
 
 - **Build**: `npm run build:run-report` — produces a self-contained `index.html` (via `vite-plugin-singlefile`)
-- **Dev**: `npm run dev:run-report -- ./benchmark-results-*.json` — starts a Vite dev server that injects the JSON report data and hot-reloads on file changes
+- **Dev**: `npm run dev:run-report -- ./run-results-*.json` — starts a Vite dev server that injects the JSON report data and hot-reloads on file changes
 
 The pipeline generates HTML reports automatically using this UI via `src/report-generator/index.ts`.
 

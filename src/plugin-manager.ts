@@ -1,7 +1,7 @@
 /**
  * Plugin Manager
  *
- * Orchestrates the execution of plugins in the benchmark pipeline.
+ * Orchestrates the execution of plugins in the pipelines.
  * Handles retry logic and context propagation between plugins.
  */
 import type { BackgroundTaskCoordinator } from './shared/background-task-coordinator.js';
@@ -477,14 +477,14 @@ export class PluginManager {
   }
 
   /**
-   * Run the full benchmark for all prompts
+   * Run pipeline for each prompt
    */
-  async runBenchmark(
+  async runPipelines(
     prompts: Array<{ path: string; content: string; functionName: string; targetObjectPath: string; asm: string }>,
   ): Promise<PipelineResults> {
-    // Emit benchmark start event
+    // Emit pipeline start event
     this.#emit({
-      type: 'benchmark-start',
+      type: 'pipeline-start',
       config: this.#config,
       plugins: this.#plugins.map((p) => ({
         id: p.id,
@@ -582,9 +582,9 @@ export class PluginManager {
     // Calculate summary
     const summary = this.#calculateSummary(results);
 
-    // Emit benchmark complete event
+    // Emit pipeline complete event
     this.#emit({
-      type: 'benchmark-complete',
+      type: 'pipeline-complete',
       summary,
     });
 

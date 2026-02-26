@@ -1,14 +1,14 @@
 /**
  * Report Generator
  *
- * Generates benchmark reports in JSON and HTML formats.
+ * Generates run reports in JSON and HTML formats.
  * The HTML report is a self-contained React application.
  */
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import type { BenchmarkReport } from './types.js';
+import type { RunReport } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,16 +40,16 @@ async function findReportTemplate(): Promise<string> {
 }
 
 /**
- * Save benchmark report as JSON
+ * Save run report as JSON
  */
-export async function saveJsonReport(report: BenchmarkReport, outputPath: string): Promise<void> {
+export async function saveJsonReport(report: RunReport, outputPath: string): Promise<void> {
   await fs.writeFile(outputPath, JSON.stringify(report, null, 2), 'utf-8');
 }
 
 /**
  * Generate HTML report
  */
-export async function generateHtmlReport(report: BenchmarkReport, outputPath: string): Promise<void> {
+export async function generateHtmlReport(report: RunReport, outputPath: string): Promise<void> {
   // Find the pre-built report template
   const templatePath = await findReportTemplate();
 
@@ -59,12 +59,12 @@ export async function generateHtmlReport(report: BenchmarkReport, outputPath: st
   const jsonString = JSON.stringify(report);
   const base64Data = Buffer.from(jsonString).toString('base64');
   const dataScript = `<script>
-  window.__BENCHMARK_REPORT__ = JSON.parse(atob('${base64Data}'));
+  window.__RUN_REPORT__ = JSON.parse(atob('${base64Data}'));
 </script>`;
   const html = template.replace('</head>', `${dataScript}</head>`);
 
   await fs.writeFile(outputPath, html, 'utf-8');
 }
 
-export type { BenchmarkReport, ReportSection, ReportPluginResult } from './types.js';
+export type { RunReport, ReportSection, ReportPluginResult } from './types.js';
 export { transformToReport, type ReportPluginConfigs } from './transform.js';

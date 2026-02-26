@@ -167,7 +167,7 @@ export default function Index({ options: opts }: Props) {
   const handleEvent = useCallback((event: PipelineEvent) => {
     setState((prev) => {
       switch (event.type) {
-        case 'benchmark-start':
+        case 'pipeline-start':
           return {
             ...prev,
             phase: 'running',
@@ -317,7 +317,7 @@ export default function Index({ options: opts }: Props) {
             ),
           };
 
-        case 'benchmark-complete':
+        case 'pipeline-complete':
           return {
             ...prev,
             phase: 'complete',
@@ -806,16 +806,16 @@ async function runPipeline(
     manager.register(claudePlugin).register(compilerPlugin).register(objdiffPlugin);
 
     // Run the pipeline
-    const results = await manager.runBenchmark(prompts);
+    const results = await manager.runPipelines(prompts);
 
-    // Save cache after benchmark completes
+    // Save cache after pipelines completes
     await claudePlugin.saveCache();
 
     await compilerPlugin.cleanup();
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const htmlPath = path.join(pipelineConfig.outputDir, `benchmark-report-${timestamp}.html`);
-    const jsonPath = path.join(pipelineConfig.outputDir, `benchmark-results-${timestamp}.json`);
+    const htmlPath = path.join(pipelineConfig.outputDir, `run-report-${timestamp}.html`);
+    const jsonPath = path.join(pipelineConfig.outputDir, `run-results-${timestamp}.json`);
 
     // Transform results to report format
     const pluginConfigs: ReportPluginConfigs = {

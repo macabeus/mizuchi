@@ -128,7 +128,7 @@ export interface ChatMessage {
 }
 
 /**
- * Report data that a plugin can contribute to the benchmark report
+ * Report data that a plugin can contribute to the run report
  */
 export type PluginReportSection =
   | {

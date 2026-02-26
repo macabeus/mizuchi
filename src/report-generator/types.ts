@@ -1,7 +1,7 @@
 /**
  * Report Generator Types
  *
- * Types for the benchmark report data structure.
+ * Types for the run report data structure.
  * These types are designed to be self-contained and independent from plugin implementations.
  */
 
@@ -177,9 +177,9 @@ export interface ReportConfig {
 }
 
 /**
- * Full benchmark report data
+ * Full run report data
  */
-export interface BenchmarkReport {
+export interface RunReport {
   version: number;
   timestamp: string;
   config: ReportConfig;
