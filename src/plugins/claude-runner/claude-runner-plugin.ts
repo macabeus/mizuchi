@@ -881,6 +881,16 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     context: PipelineContext,
     promptContent: string,
   ): Promise<{ response: string; fromCache: boolean; promptUsed: string }> {
+    // Guard against stale retry state from a previous function.
+    // When a background task (e.g., decomp-permuter) matches Function N, prepareRetry()
+    // may have already set #feedbackPrompt before the retry loop exits. Without this
+    // check, Function N+1's first attempt would inherit that stale feedback prompt
+    // and skip #resetState(), causing Claude to continue the previous conversation.
+    if (context.attemptNumber === 1) {
+      this.#feedbackPrompt = undefined;
+      this.#stallDetected = false;
+    }
+
     if (this.#feedbackPrompt) {
       const promptUsed = this.#feedbackPrompt;
       const result = await this.#runFollowUpQuery(this.#feedbackPrompt);
