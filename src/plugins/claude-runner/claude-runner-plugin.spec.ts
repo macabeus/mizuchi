@@ -159,6 +159,16 @@ const defaultPluginConfig: ClaudeRunnerConfig = {
 const testCCompiler = new CCompiler(getArmCompilerScript());
 const testObjdiff = new Objdiff(ARM_DIFF_SETTINGS);
 
+/**
+ * Wraps plugin.execute and advances context.attemptNumber afterward,
+ * matching how the PluginManager increments the attempt counter between loop iterations.
+ */
+async function executeAndAdvance(plugin: ClaudeRunnerPlugin, context: PipelineContext) {
+  const result = await plugin.execute(context);
+  context.attemptNumber++;
+  return result;
+}
+
 describe('ClaudeRunnerPlugin', () => {
   describe('constructor', () => {
     it('creates plugin with default options', () => {
@@ -578,7 +588,7 @@ void movePoint(Point* p) {
       const context = createTestContext();
 
       // First execution to establish the session
-      const result1 = await plugin.execute(context);
+      const result1 = await executeAndAdvance(plugin, context);
       expect(result1.result.status).toBe('success');
 
       const previousAttempts = [
@@ -749,7 +759,7 @@ void movePoint(Point* p) {
       const context = createTestContext();
 
       // First execution to establish the session
-      const result1 = await plugin.execute(context);
+      const result1 = await executeAndAdvance(plugin, context);
       expect(result1.result.status).toBe('success');
 
       const previousAttempts = [
@@ -817,7 +827,7 @@ void movePoint(Point* p) {
       const context = createTestContext();
 
       // First execution to establish the session
-      const result1 = await plugin.execute(context);
+      const result1 = await executeAndAdvance(plugin, context);
       expect(result1.result.status).toBe('success');
 
       const previousAttempts = [
@@ -942,7 +952,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         const previousAttempts = [
           createAttemptWithDiffCount(10),
@@ -971,7 +981,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         // differenceCount: 5 → 8 → 10, newest (10) >= oldest (5) = stalled
         const previousAttempts = [
@@ -1000,7 +1010,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         // differenceCount: 10 → 8 → 5, newest (5) < oldest (10) = improving
         const previousAttempts = [
@@ -1029,7 +1039,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         // Only 2 measured attempts (compilation error skipped), threshold=3 → no stall
         const previousAttempts = [
@@ -1058,7 +1068,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         // Only 2 attempts, threshold=3 → no stall
         const previousAttempts = [createAttemptWithDiffCount(10), createAttemptWithDiffCount(10)];
@@ -1083,7 +1093,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         // stallThreshold=2, 2 stalled attempts → triggers
         const previousAttempts = [createAttemptWithDiffCount(10), createAttemptWithDiffCount(10)];
@@ -1109,7 +1119,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         // Window is last 3 measured: [5, 4, 3], newest (3) < oldest (5) → not stalled
         const previousAttempts = [
@@ -1143,7 +1153,7 @@ void movePoint(Point* p) {
         });
         const context = createTestContext();
 
-        await plugin.execute(context);
+        await executeAndAdvance(plugin, context);
 
         // First 3 attempts stall: 10, 10, 10
         const previousAttempts = [
@@ -1153,7 +1163,7 @@ void movePoint(Point* p) {
         ];
 
         plugin.prepareRetry!(context, previousAttempts);
-        const { result: result1 } = await plugin.execute(context);
+        const { result: result1 } = await executeAndAdvance(plugin, context);
         const content1 = getFollowUpContent(plugin, result1, context);
         expect(content1).toContain('stuck in a loop');
 
@@ -1200,7 +1210,7 @@ void movePoint(Point* p) {
       const context = createTestContext();
 
       // Initial attempt
-      await plugin.execute(context);
+      await executeAndAdvance(plugin, context);
 
       // Prepare retry
       const previousAttempts = [
@@ -1863,6 +1873,81 @@ mov eax, 0
 
       // query.close() should have been called by the abort handler
       expect(closeFn).toHaveBeenCalled();
+    });
+  });
+
+  describe('cross-function state isolation', () => {
+    it('starts a fresh conversation for the next function after prepareRetry was called', async () => {
+      // Regression test: When decomp-permuter matches Function N in the background,
+      // prepareRetry() has already set #feedbackPrompt. When Function N+1 starts
+      // (attemptNumber=1), the plugin must ignore that stale feedback and reset state.
+      const cCode = 'void funcN(void) { }';
+      const cCode2 = 'void funcN1(void) { }';
+      const response1 = `\`\`\`c\n${cCode}\n\`\`\``;
+      const response2 = `\`\`\`c\n${cCode2}\n\`\`\``;
+
+      const mockFactory = createMockQueryFactory({
+        responses: [response1, response2],
+        requireResumeForFollowUp: false,
+      });
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      // Step 1: Execute attempt 1 for Function N
+      const contextN = createTestContext({ functionName: 'funcN', attemptNumber: 1, promptContent: 'Decompile funcN' });
+      await plugin.execute(contextN);
+
+      // Step 2: prepareRetry() sets #feedbackPrompt (as happens after a failed attempt)
+      plugin.prepareRetry!(contextN, [
+        {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success',
+            durationMs: 100,
+            data: { generatedCode: cCode, fromCache: false, stallDetected: false },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'failure',
+            durationMs: 50,
+            error: 'compilation error',
+          },
+        },
+      ]);
+
+      // Step 3: Background permuter matches Function N — pipeline skips to Function N+1.
+      // (No explicit action needed — the key is that #feedbackPrompt is now set.)
+
+      // Step 4: Execute attempt 1 for Function N+1.
+      // This MUST start a fresh conversation, not use the stale feedback from Function N.
+      const contextN1 = createTestContext({
+        functionName: 'funcN1',
+        attemptNumber: 1,
+        promptContent: 'Decompile funcN1',
+      });
+      const { result } = await plugin.execute(contextN1);
+
+      // The factory should have been called twice: once for Function N (initial),
+      // once for Function N+1 (initial again, NOT a follow-up).
+      expect(mockFactory).toHaveBeenCalledTimes(2);
+
+      // Both calls should be initial queries (no resume), proving state was reset
+      const calls = (mockFactory as ReturnType<typeof vi.fn>).mock.calls;
+      const firstCallOptions = calls[0][1];
+      const secondCallOptions = calls[1][1];
+      expect(firstCallOptions.resume).toBeUndefined();
+      expect(secondCallOptions.resume).toBeUndefined();
+
+      // The result should contain Function N+1's generated code, not stale feedback
+      expect(result.status).toBe('success');
+      expect(result.data?.generatedCode).toContain('funcN1');
     });
   });
 });

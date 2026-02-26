@@ -1383,6 +1383,69 @@ describe('PluginManager', () => {
       expect(results[0].data).toEqual({ error: 'permuter crashed' });
     });
 
+    it('starts attemptNumber at 1 for each new function after background match', async () => {
+      // Validates a PluginManager contract: each new function starts with attemptNumber=1,
+      // even when the previous function was matched by a background task (e.g., permuter).
+      // Plugins rely on attemptNumber=1 to detect fresh starts and reset internal state.
+
+      const config = { ...defaultTestPipelineConfig, maxRetries: 3 };
+      const manager = new PluginManager(config);
+
+      const executionLog: Array<{ functionName: string; attemptNumber: number }> = [];
+
+      const plugin = createMockPlugin({
+        id: 'claude-runner',
+        name: 'Claude Runner',
+        executeFn: async (ctx) => {
+          executionLog.push({
+            functionName: ctx.functionName,
+            attemptNumber: ctx.attemptNumber,
+          });
+
+          return {
+            result: {
+              pluginId: 'claude-runner',
+              pluginName: 'Claude Runner',
+              status: 'failure',
+              durationMs: 10,
+              error: 'no match',
+            },
+            context: ctx,
+          };
+        },
+      });
+
+      const coordinator = new BackgroundTaskCoordinator([]);
+      vi.spyOn(coordinator, 'cancelAll').mockResolvedValue();
+      vi.spyOn(coordinator, 'getAllResults').mockReturnValue([]);
+
+      // After first prompt's first failed attempt, background emits success
+      let attemptCount = 0;
+      vi.spyOn(coordinator, 'onAttemptComplete').mockImplementation(() => {
+        attemptCount++;
+        if (attemptCount === 1) {
+          coordinator.emit('success', { taskId: 'permuter-1', pluginId: 'decomp-permuter', success: true });
+        }
+      });
+
+      manager.setBackgroundCoordinator(coordinator);
+      manager.register(plugin);
+
+      const results = await manager.runPipelines([
+        { path: 'p1.md', content: 'c1', functionName: 'funcN', targetObjectPath: '/t1.o', asm: '.text\n' },
+        { path: 'p2.md', content: 'c2', functionName: 'funcN1', targetObjectPath: '/t2.o', asm: '.text\n' },
+      ]);
+
+      // Function N should have been matched by background
+      expect(results.results[0].success).toBe(true);
+      expect(results.results[0].matchSource).toBe('decomp-permuter');
+
+      // Function N+1's first attempt must start with attemptNumber=1
+      const funcN1Executions = executionLog.filter((e) => e.functionName === 'funcN1');
+      expect(funcN1Executions.length).toBeGreaterThan(0);
+      expect(funcN1Executions[0].attemptNumber).toBe(1);
+    });
+
     it('short-circuits before attempt 2 when background emits success after attempt 1', async () => {
       const config = { ...defaultTestPipelineConfig, maxRetries: 2 };
       const manager = new PluginManager(config);
