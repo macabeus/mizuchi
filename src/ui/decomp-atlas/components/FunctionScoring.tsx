@@ -7,6 +7,8 @@ import { Table } from '@ui-shared/components/Table';
 import { WithTooltip } from '@ui-shared/components/WithTooltip';
 import { useMemo } from 'react';
 
+import { isArmPlatform } from '~/shared/config';
+
 import { useKappaDb } from '../KappaDbContext';
 
 interface FunctionScoringProps {
@@ -165,7 +167,7 @@ export function FunctionScoring({ selectedFunctionId, onFunctionSelect }: Functi
       },
     ];
 
-    if (db.platform === 'arm') {
+    if (isArmPlatform(db.platform)) {
       cols.push({
         id: 'encoding',
         header: 'Enc',

@@ -69,6 +69,13 @@ export default {
     'os',
     // External dependencies (don't bundle these)
     '@anthropic-ai/claude-agent-sdk',
+    '@ast-grep/napi',
+    '@ast-grep/lang-c',
+    'fast-glob',
+    'hono',
+    'hono/cors',
+    '@hono/node-server',
+    '@hono/zod-validator',
     '@wooorm/starry-night',
     'ink',
     'ink-spinner',

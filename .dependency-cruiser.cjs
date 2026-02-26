@@ -120,6 +120,24 @@ module.exports = {
           '^src/ui/decomp-atlas/', // Own directory
           '^src/ui/shared/', // Shared UI components
           '^src/shared/', // Shared utilities
+          '^src/decomp-atlas-server/', // Decomp atlas server types/logic
+          '^src/cli/config.ts', // Load config file
+        ],
+      },
+    },
+    // Decomp atlas server can only import from shared/
+    {
+      name: 'decomp-atlas-server-import-restrictions',
+      severity: 'error',
+      comment: 'Decomp atlas server can only import from shared/ and its own directory.',
+      from: {
+        path: '^src/decomp-atlas-server/',
+      },
+      to: {
+        path: '^src/',
+        pathNot: [
+          '^src/decomp-atlas-server/', // Own directory
+          '^src/shared/', // Shared utilities
         ],
       },
     },

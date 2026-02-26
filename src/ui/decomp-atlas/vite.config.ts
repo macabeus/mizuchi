@@ -18,4 +18,9 @@ export default defineConfig(({ command }) => ({
     emptyOutDir: true,
     target: 'esnext',
   },
+  server: {
+    proxy: {
+      '/api/': 'http://localhost:3000',
+    },
+  },
 }));

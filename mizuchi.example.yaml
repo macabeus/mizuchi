@@ -46,6 +46,12 @@ global:
   #   - settings.yaml: Metadata (functionName, targetObjectPath)
   promptsDir: './prompts'
 
+  # Path to the decomp project root (used by Claude Agent and prompt builder)
+  projectPath: '/path/to/your/project'
+
+  # Path to GNU ld map file for resolving function → object file
+  mapFilePath: '/path/to/your/project/build/project.map'
+
   # Target platform for decompilation (default: gba)
   # Supported values: gba, nds, n3ds, n64, gc, wii, ps1, ps2, psp, win32, switch, android_x86, irix, saturn, dreamcast
   target: gba
@@ -65,9 +71,6 @@ plugins:
   # Uses Claude Agent SDK to generate C code from assembly prompts
   # Responses are automatically cached to avoid redundant API calls
   claude-runner:
-    # Path to the Claude Agent read the project codebase from
-    projectPath: '/path/to/your/project'
-
     # Timeout in milliseconds for Claude requests (default: 300000 = 5 minutes)
     timeoutMs: 300000
 

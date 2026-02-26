@@ -16,7 +16,9 @@ export const defaultTestPipelineConfig: PipelineConfig = {
   compilerScript: getArmCompilerScript(),
   maxRetries: 3,
   promptsDir: '/test/prompts',
+  projectPath: '/test/project',
   target: 'gba',
+  mapFilePath: '/test/project/mapfile.map',
 };
 
 /**

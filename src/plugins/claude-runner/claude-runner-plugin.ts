@@ -112,7 +112,6 @@ interface ConversationCache {
  * Configuration schema for ClaudeRunnerPlugin
  */
 export const claudeRunnerConfigSchema = z.object({
-  projectPath: z.string().optional().describe('Path to the Claude Agent read the project codebase from'),
   timeoutMs: z.number().positive().default(600_000).describe('Timeout in milliseconds for Claude requests'),
   cachePath: z.string().optional().describe('Path to JSON cache file for response caching'),
   model: z.string().optional().describe('Claude model to use'),
@@ -435,7 +434,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             model: options.model || DEFAULT_MODEL,
             allowedTools: ['Read', 'Glob', 'Grep', 'mcp__mizuchi__compile_and_view_assembly'],
             permissionMode: 'dontAsk',
-            cwd: config.projectPath,
+            cwd: pipelineConfig.projectPath,
             mcpServers: {
               mizuchi: this.#mcpServer,
             },

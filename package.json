@@ -13,7 +13,7 @@
     "build:decomp-atlas": "cd src/ui/decomp-atlas && npx vite build",
     "build:ui": "npm run build:run-report && npm run build:decomp-atlas",
     "dev:run-report": "tsx src/ui/run-report/dev-server.ts",
-    "dev:decomp-atlas": "cd src/ui/decomp-atlas && npx vite dev",
+    "dev:decomp-atlas": "tsx src/ui/decomp-atlas/dev-server.ts",
     "start": "node dist/cli.js",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
@@ -25,12 +25,17 @@
     "format:check": "prettier --check ."
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.42",
+    "@ast-grep/lang-c": "^0.0.5",
+    "@ast-grep/napi": "^0.41.0",
+    "@hono/node-server": "^1.19.9",
+    "@hono/zod-validator": "^0.7.6",
     "@svar-ui/react-gantt": "^2.5.2",
     "@wooorm/starry-night": "^3.9.0",
+    "hono": "^4.12.1",
     "ink": "^6.6.0",
     "ink-spinner": "^5.0.0",
     "objdiff-wasm": "^3.0.0",

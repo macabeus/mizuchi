@@ -19,7 +19,7 @@ describe('countAsmMetrics', () => {
         '	bx r0',
       ].join('\n');
 
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       // push, mov, cmp, beq, mov, bl, pop, pop, bx = 9 instructions
       expect(metrics.instructionCount).toBe(9);
       expect(metrics.branchCount).toBe(1); // beq
@@ -39,7 +39,7 @@ describe('countAsmMetrics', () => {
         '	bx r0',
       ].join('\n');
 
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.labelCount).toBe(1); // _080AB010:
       expect(metrics.branchCount).toBe(1); // bne
       expect(metrics.instructionCount).toBe(5); // push, movs, bne, pop, bx
@@ -58,21 +58,21 @@ describe('countAsmMetrics', () => {
         '	bx r0',
       ].join('\n');
 
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.labelCount).toBe(2); // _080AB010, _080AB014
       expect(metrics.instructionCount).toBe(5); // push, ldr, bl, pop, bx
     });
 
     it('does not count bic/bics as branches', () => {
       const asm = ['	bic r0, r1', '	bics r2, r3'].join('\n');
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.branchCount).toBe(0);
       expect(metrics.instructionCount).toBe(2);
     });
 
     it('does not count bx as a branch or jump', () => {
       const asm = '	bx lr';
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.branchCount).toBe(0);
 
       expect(metrics.instructionCount).toBe(1);
@@ -80,19 +80,19 @@ describe('countAsmMetrics', () => {
 
     it('counts bl as an instruction, not a branch', () => {
       const asm = '	bl sub_08001234';
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.branchCount).toBe(0);
       expect(metrics.instructionCount).toBe(1);
     });
 
     it('does not count directives as instructions', () => {
       const asm = ['	.align 2, 0', '	.4byte 0x12345678', '	.word 0xDEADBEEF', '	.hword 0x1234', '	mov r0, #1'].join('\n');
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.instructionCount).toBe(1); // only mov
     });
 
     it('handles empty asmCode', () => {
-      const metrics = countAsmMetrics('', 'arm');
+      const metrics = countAsmMetrics('', 'gba');
       expect(metrics.instructionCount).toBe(0);
       expect(metrics.branchCount).toBe(0);
 
@@ -101,27 +101,27 @@ describe('countAsmMetrics', () => {
 
     it('strips @ comments before parsing', () => {
       const asm = '	mov r0, #1 @ load constant';
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.instructionCount).toBe(1);
     });
 
     it('detects thumb encoding via thumb_func_start', () => {
       const asm = ['	thumb_func_start sub_080AB000', 'sub_080AB000: @ 0x080AB000', '	push {lr}', '	bx lr'].join('\n');
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.armEncoding).toBe('thumb');
       expect(metrics.instructionCount).toBe(2); // push + bx
     });
 
     it('detects arm32 encoding via arm_func_start', () => {
       const asm = ['	arm_func_start IntrMain', 'IntrMain: @ 0x080000FC', '	mov r3, #0x04000000', '	bx lr'].join('\n');
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.armEncoding).toBe('arm32');
       expect(metrics.instructionCount).toBe(2); // mov + bx, not arm_func_start
     });
 
     it('returns undefined armEncoding when no func_start marker is present', () => {
       const asm = ['push {lr}', 'mov r0, #1', 'pop {r0}', 'bx r0'].join('\n');
-      const metrics = countAsmMetrics(asm, 'arm');
+      const metrics = countAsmMetrics(asm, 'gba');
       expect(metrics.armEncoding).toBeUndefined();
     });
   });
@@ -142,7 +142,7 @@ describe('countAsmMetrics', () => {
         '/* 000020 80001020 27BD0030 */   addiu $sp, $sp, 0x30',
       ].join('\n');
 
-      const metrics = countAsmMetrics(asm, 'mips');
+      const metrics = countAsmMetrics(asm, 'n64');
       // addiu, sw, beq, nop, jal, nop, lw, jr, addiu = 9
       expect(metrics.instructionCount).toBe(9);
       expect(metrics.branchCount).toBe(1); // beq
@@ -150,7 +150,7 @@ describe('countAsmMetrics', () => {
     });
 
     it('handles empty asmCode', () => {
-      const metrics = countAsmMetrics('', 'mips');
+      const metrics = countAsmMetrics('', 'n64');
       expect(metrics.instructionCount).toBe(0);
       expect(metrics.branchCount).toBe(0);
 
@@ -159,14 +159,14 @@ describe('countAsmMetrics', () => {
 
     it('counts jr as an instruction', () => {
       const asm = '/* 00001C 8000101C 03E00008 */  jr    $ra';
-      const metrics = countAsmMetrics(asm, 'mips');
+      const metrics = countAsmMetrics(asm, 'n64');
       expect(metrics.instructionCount).toBe(1);
       expect(metrics.branchCount).toBe(0);
     });
 
     it('does not set armEncoding for MIPS', () => {
       const asm = '/* 000000 80001000 27BDFFD0 */  addiu $sp, $sp, -0x30';
-      const metrics = countAsmMetrics(asm, 'mips');
+      const metrics = countAsmMetrics(asm, 'n64');
       expect(metrics.armEncoding).toBeUndefined();
     });
   });

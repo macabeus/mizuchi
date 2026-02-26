@@ -11,18 +11,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 import YAML from 'yaml';
-import { z } from 'zod';
+
+import { promptSettingsSchema } from '~/shared/prompt-builder/prompt-settings.js';
 
 const execAsync = promisify(exec);
-
-/**
- * Schema for per-prompt settings.yaml
- */
-const promptSettingsSchema = z.object({
-  functionName: z.string().describe('Name of the function to decompile'),
-  targetObjectPath: z.string().describe('Path to the target object file for this prompt'),
-  asm: z.string().describe('GAS-formatted assembly for the function'),
-});
 
 /**
  * Prompt information loaded from a prompt folder

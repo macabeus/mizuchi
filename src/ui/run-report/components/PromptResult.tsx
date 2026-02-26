@@ -30,7 +30,7 @@ function formatDuration(ms: number): string {
 }
 
 export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps) {
-  const promptName = result.promptPath.split('/').pop() || result.promptPath;
+  const promptName = result.promptPath.split(/[\\/]/).pop() || result.promptPath;
 
   return (
     <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden border border-slate-700">

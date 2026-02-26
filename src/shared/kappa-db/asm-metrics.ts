@@ -1,4 +1,4 @@
-export type PlatformTarget = 'arm' | 'mips';
+import { PlatformTarget, isArmPlatform, isMipsPlatform } from '~/shared/config';
 
 export type ArmEncoding = 'thumb' | 'arm32';
 
@@ -160,9 +160,14 @@ function countMipsMetrics(asmCode: string): AsmMetrics {
 }
 
 export function countAsmMetrics(asmCode: string, platform: PlatformTarget): AsmMetrics {
-  if (platform === 'arm') {
+  if (isArmPlatform(platform)) {
     return countArmMetrics(asmCode);
   }
 
-  return countMipsMetrics(asmCode);
+  if (isMipsPlatform(platform)) {
+    return countMipsMetrics(asmCode);
+  }
+
+  console.warn(`No ASM metrics implementation for platform ${platform}, defaulting to zeros`);
+  return { instructionCount: 0, branchCount: 0, labelCount: 0 };
 }

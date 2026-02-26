@@ -1434,7 +1434,7 @@ mov eax, 0
       };
       expect(statsSection).toBeDefined();
       // Total input = 100 new + 8000 cache read + 200 cache write = 8,300
-      expect(statsSection.message).toContain('Input tokens: 8,300');
+      expect(statsSection.message).toContain('Input tokens: 8300 (100 new, 8000 cache read, 200 cache write)');
       expect(statsSection.message).toContain('100 new');
       expect(statsSection.message).toContain('8000 cache read');
       expect(statsSection.message).toContain('200 cache write');

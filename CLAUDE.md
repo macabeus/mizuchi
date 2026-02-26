@@ -104,8 +104,8 @@ Each plugin implements the `Plugin<T>` interface from `src/shared/types.ts`:
 
 Configuration is YAML-based (`mizuchi.yaml`):
 
-- `global` section: Pipeline-wide settings (`maxRetries`, `outputDir`, `contextPath`, `promptsDir`, `compilerScript`)
-- `plugins` section: Per-plugin configuration (e.g., `claude-runner.projectPath`, `objdiff.diffSettings`)
+- `global` section: Pipeline-wide settings (`maxRetries`, `outputDir`, `contextPath`, `promptsDir`, `compilerScript`, `projectPath`)
+- `plugins` section: Per-plugin configuration (e.g., `objdiff.diffSettings`)
 
 Plugins validate their config using Zod schemas (e.g., `claudeRunnerConfigSchema`, `objdiffConfigSchema`).
 

@@ -61,7 +61,7 @@ describe('trainDifficultyModel', () => {
       ),
     ];
 
-    const model = trainDifficultyModel(functions, 'arm');
+    const model = trainDifficultyModel(functions, 'gba');
 
     // Instructions coefficient should be positive (more instructions → harder)
     expect(model.coefficients[0]).toBeGreaterThan(0);
@@ -72,7 +72,7 @@ describe('trainDifficultyModel', () => {
   it('falls back to Lewis model when no decompiled functions', () => {
     const functions: DecompFunctionDoc[] = [makeFn('h1', 'mov r0, #1\nbx lr'), makeFn('h2', 'mov r0, #2\nbx lr')];
 
-    const model = trainDifficultyModel(functions, 'arm');
+    const model = trainDifficultyModel(functions, 'gba');
     expect(model.intercept).toBeCloseTo(-0.5155412977000488);
   });
 
@@ -82,7 +82,7 @@ describe('trainDifficultyModel', () => {
       makeFn('e2', 'mov r0, #2\nbx lr', 'int e2() {}'),
     ];
 
-    const model = trainDifficultyModel(functions, 'arm');
+    const model = trainDifficultyModel(functions, 'gba');
     expect(model.intercept).toBeCloseTo(-0.5155412977000488);
   });
 
@@ -92,7 +92,7 @@ describe('trainDifficultyModel', () => {
       makeFn('b', 'mov r0, #1\nmov r1, #2\nmov r2, #3\nmov r3, #4'), // 4 instructions
     ];
 
-    const model = trainDifficultyModel(functions, 'arm');
+    const model = trainDifficultyModel(functions, 'gba');
     // Mean instructions should be 3 (average of 2 and 4)
     expect(model.means[0]).toBeCloseTo(3, 5);
     // Std should be 1 (population std of [2, 4])

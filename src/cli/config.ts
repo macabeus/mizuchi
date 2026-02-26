@@ -61,7 +61,7 @@ export function getDefaultConfig(): PipelineConfig {
   const schema = createPipelineConfigSchema(projectRoot);
 
   // Parse an object with required fields to get all defaults
-  return schema.parse({ getContextScript: '', compilerScript: '' });
+  return schema.parse({ getContextScript: '', compilerScript: '', projectPath: '', mapFilePath: '' });
 }
 
 /**
@@ -96,6 +96,8 @@ export function buildPipelineConfig(
     compilerScript: fileConfig.global?.compilerScript ?? defaults.compilerScript,
     maxRetries: cliOptions.retries ?? fileConfig.global?.maxRetries ?? defaults.maxRetries,
     promptsDir: cliOptions.prompts ?? fileConfig.global?.promptsDir ?? defaults.promptsDir,
+    projectPath: fileConfig.global?.projectPath ?? defaults.projectPath,
+    mapFilePath: fileConfig.global?.mapFilePath ?? defaults.mapFilePath,
     target: fileConfig.global?.target ?? defaults.target,
   };
 

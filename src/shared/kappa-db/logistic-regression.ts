@@ -10,7 +10,9 @@
 // the linear combination), where higher means harder. When the dataset lacks
 // both classes, falls back to hardcoded coefficients from Chris Lewis's
 // Snowboard Kids 2 analysis.
-import { type AsmMetrics, type PlatformTarget, countAsmMetrics } from './asm-metrics';
+import { PlatformTarget } from '~/shared/config';
+
+import { type AsmMetrics, countAsmMetrics } from './asm-metrics';
 import type { DecompFunctionDoc } from './kappa-db';
 
 export interface DifficultyModel {

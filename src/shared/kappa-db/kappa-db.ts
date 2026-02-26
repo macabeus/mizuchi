@@ -1,4 +1,6 @@
-import { type PlatformTarget, countAsmMetrics } from './asm-metrics';
+import { type PlatformTarget, isArmPlatform } from '~/shared/config';
+
+import { countAsmMetrics } from './asm-metrics';
 import {
   type DifficultyModel,
   type DifficultyScore,
@@ -182,8 +184,8 @@ export class KappaDb {
       const scores = new Map<string, DifficultyScore>();
       for (const fn of this.#functions) {
         const metrics = countAsmMetrics(fn.asmCode, this.#platform);
-        // Default decompiled GBA functions to Thumb — agbcc always targets Thumb
-        if (this.#platform === 'arm' && metrics.armEncoding === undefined && fn.cCode) {
+        // Default decompiled functions to Thumb
+        if (isArmPlatform(this.#platform) && metrics.armEncoding === undefined && fn.cCode) {
           metrics.armEncoding = 'thumb';
         }
         const score = applyDifficultyModel(metrics, model);

@@ -59,10 +59,8 @@ global:
   maxRetries: 10
   outputDir: "/custom/output"
   promptsDir: "/custom/prompts"
-
-plugins:
-  claude-runner:
-    projectPath: "/decomp/myproject"
+  projectPath: "/decomp/myproject"
+  mapFilePath: "/decomp/myproject/build/myproject.map"
 `;
       await fs.writeFile(configPath, configContent);
 
@@ -81,10 +79,8 @@ global:
   getContextScript: "cat /custom/context.h"
   compilerScript: "echo test"
   promptsDir: "/custom/prompts"
-
-plugins:
-  claude-runner:
-    projectPath: "/decomp/myproject"
+  projectPath: "/decomp/myproject"
+  mapFilePath: "/decomp/myproject/build/myproject.map"
 `;
       await fs.writeFile(configPath, configContent);
 
@@ -105,11 +101,11 @@ plugins:
           outputDir: '/custom/output',
           compilerScript: 'echo "test"',
           promptsDir: '/custom/prompts',
+          projectPath: '/decomp/myproject',
           target: 'gba',
+          mapFilePath: '/decomp/myproject/build/myproject.map',
         },
-        plugins: {
-          'claude-runner': { projectPath: '/decomp/myproject' },
-        },
+        plugins: {},
       };
 
       const pipelineConfig = buildPipelineConfig(fileConfig, {});
@@ -127,11 +123,11 @@ plugins:
           outputDir: '/custom/output',
           compilerScript: 'echo "test"',
           promptsDir: '/custom/prompts',
+          projectPath: '/decomp/myproject',
           target: 'gba',
+          mapFilePath: '/decomp/myproject/build/myproject.map',
         },
-        plugins: {
-          'claude-runner': { projectPath: '/decomp/myproject' },
-        },
+        plugins: {},
       };
 
       const pipelineConfig = buildPipelineConfig(fileConfig, {

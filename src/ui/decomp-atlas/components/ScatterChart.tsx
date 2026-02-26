@@ -46,6 +46,7 @@ export function ScatterChart({
   onFunctionDeselect,
 }: ScatterChartProps) {
   const db = useKappaDb();
+  const stats = useMemo(() => db.getStats(), [db]);
   const [coordinates, setCoordinates] = useState<number[][] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -482,6 +483,24 @@ export function ScatterChart({
           onEvents={onEvents}
           style={{ height: '100%', width: '100%' }}
         />
+
+        {/* Legend overlay */}
+        <div className="absolute top-2 left-2 bg-slate-900/80 rounded-lg border border-slate-700 px-3 py-2 space-y-1.5">
+          <div className="flex items-center gap-2 text-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-pink-400" />
+            <span className="text-slate-300">Has C code ({stats.decompiledFunctions})</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-white" />
+            <span className="text-slate-300">Assembly only ({stats.asmOnlyFunctions})</span>
+          </div>
+          {selectedPath && (
+            <div className="flex items-center gap-2 text-xs">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+              <span className="text-slate-300">Selected</span>
+            </div>
+          )}
+        </div>
 
         {/* Zoom control buttons */}
         <div className="absolute top-2 right-2 flex flex-col gap-1">

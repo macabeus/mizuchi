@@ -10,7 +10,8 @@ It orchestrates a plugin-based pipeline that can leverage programmatic and AI-po
 
 - ✨ Automatic retries with detailed context on compilation or match failures
 - 🐍 Integration with Claude, [m2c](https://github.com/matt-kempster/m2c), [decomp-permuter](https://github.com/simonlindholm/decomp-permuter), and [objdiff](https://github.com/encounter/objdiff/).
-- 📊 Beautiful UIs to visualize the pipeline result and your decomp project
+- 🗺️ Decomp Atlas, a powerful webapp to browse functions and generate rich prompts in one click
+- 📊 Beautiful Report UI to visualize the pipeline result
 
 <img width="1143" height="1057" alt="image" src="https://github.com/user-attachments/assets/025e6a00-7a6a-4425-9c11-8b86619cd546" />
 
@@ -92,7 +93,7 @@ prompts/
 
 See the [Prompt Folder Structure](#prompt-folder-structure) section for details.
 
-> **Tip**: Use [Kappa](https://github.com/macabeus/kappa) to generate rich prompts automatically.
+> **Tip**: Use the [Decomp Atlas](#decomp-atlas) to browse your project's functions and generate rich prompts from a web app.
 
 3. **Run the benchmark**:
 
@@ -194,6 +195,24 @@ Mizuchi generates three output files:
 | **Compiler**        | Compiles generated C code using a configurable shell script template                                                                    |
 | **Objdiff**         | Compares compiled object files against targets using [objdiff](https://github.com/encounter/objdiff)                                    |
 
+## Decomp Atlas
+
+Decomp Atlas is a web UI for exploring your decompilation project and target the next functions to decompile. It includes a **prompt builder** that generates rich decompilation prompts.
+
+### Starting the server
+
+```bash
+# Build the CLI and UI
+npm run build && npm run build:decomp-atlas
+
+# Start the Decomp Atlas server
+npm start -- atlas -c mizuchi.yaml
+```
+
+The server reads your `mizuchi.yaml` config and serves the Decomp Atlas UI at `http://localhost:3000`.
+
+> Note: Your project must have a `kappa-db.json` file in the root directory for the Decomp Atlas to work. This file is exported from the [Kappa](https://github.com/macabeus/kappa) VS Code extension.
+
 ## Development
 
 ```bash
@@ -221,6 +240,6 @@ npm run dev
 # Run the Run Report UI in development mode
 npm run dev:run-report -- ./benchmark-results-[timestamp].json
 
-# Run the Decomp Atlas in development mode
-npm run dev:decomp-atlas
+# Run the Decomp Atlas API and UI in development mode
+npm run dev:decomp-atlas -- -c mizuchi.yaml
 ```

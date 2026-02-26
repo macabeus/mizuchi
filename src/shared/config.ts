@@ -30,6 +30,14 @@ export const platformTargets = [
 ] as const;
 export type PlatformTarget = (typeof platformTargets)[number];
 
+export const isArmPlatform = (target: PlatformTarget): boolean => {
+  return target === 'gba' || target === 'nds' || target === 'n3ds' || target === 'switch';
+};
+
+export const isMipsPlatform = (target: PlatformTarget): boolean => {
+  return target === 'irix' || target === 'n64' || target === 'ps1' || target === 'ps2' || target === 'psp';
+};
+
 /**
  * Global pipeline configuration schema
  *
@@ -41,6 +49,8 @@ export const pipelineConfigSchema = z.object({
   compilerScript: z.string(),
   getContextScript: z.string(),
   promptsDir: z.string(),
+  projectPath: z.string().describe('Path to the decomp project root'),
+  mapFilePath: z.string().describe('Path to GNU ld map file for resolving function → object file'),
   target: z.enum(platformTargets).default('gba'),
 });
 
