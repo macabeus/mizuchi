@@ -88,27 +88,27 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
                 icon: 'code',
               },
               {
-                id: 'flows',
+                id: 'phases',
                 type: 'divider',
               },
               {
-                id: 'setupFlow',
+                id: 'setupPhase',
                 type: 'button',
-                label: 'Setup Flow',
+                label: 'Setup Phase',
                 icon: 'document',
               },
               {
-                id: 'programmaticFlow',
+                id: 'programmaticPhase',
                 type: 'button',
-                label: 'Programmatic Flow',
+                label: 'Programmatic Phase',
                 icon: 'settings',
-                disabled: !result.programmaticFlow,
-                tooltip: 'Programmatic-flow is not enabled.',
+                disabled: !result.programmaticPhase,
+                tooltip: 'Programmatic phase is not enabled.',
               },
               {
-                id: 'aiPoweredFlow',
+                id: 'aiPoweredPhase',
                 type: 'button',
-                label: 'AI-Powered Flow',
+                label: 'AI-Powered Phase',
                 icon: 'sparkles',
                 disabled: result.attempts.length === 0,
                 tooltip: 'No AI-powered attempts available for this prompt.',
@@ -119,12 +119,12 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
               switch (tab.id) {
                 case 'finalCode':
                   return <BestResultCode result={result} />;
-                case 'setupFlow':
-                  return <AttemptContent attempt={result.setupFlow} />;
-                case 'programmaticFlow':
-                  return <AttemptContent attempt={result.programmaticFlow!} />;
-                case 'aiPoweredFlow':
-                  return <AIPoweredFlowContent result={result} />;
+                case 'setupPhase':
+                  return <AttemptContent attempt={result.setupPhase} />;
+                case 'programmaticPhase':
+                  return <AttemptContent attempt={result.programmaticPhase!} />;
+                case 'aiPoweredPhase':
+                  return <AIPoweredPhaseContent result={result} />;
                 default:
                   return null;
               }
@@ -136,7 +136,7 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
   );
 }
 
-interface AIPoweredFlowContentProps {
+interface AIPoweredPhaseContentProps {
   result: ReportPromptResult;
 }
 
@@ -211,7 +211,7 @@ function buildBackgroundTaskDetails(task: ReportBackgroundTask): ReportPluginRes
   };
 }
 
-function AIPoweredFlowContent({ result }: AIPoweredFlowContentProps) {
+function AIPoweredPhaseContent({ result }: AIPoweredPhaseContentProps) {
   const [selectedTimelineTaskId, setSelectedTimelineTaskId] = useState<string | null>(null);
   const hasTimeline = result.attempts.length > 0 || (result.backgroundTasks && result.backgroundTasks.length > 0);
 

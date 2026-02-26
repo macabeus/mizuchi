@@ -1,7 +1,7 @@
 /**
  * Background Task Coordinator
  *
- * Manages background tasks that run concurrently with the AI-powered flow.
+ * Manages background tasks that run concurrently with the AI-powered phase.
  * Accepts plugins with background capabilities, asks them when to spawn,
  * and tracks results. Plugin-agnostic — the spawn decision and execution
  * logic live in each plugin's BackgroundCapability.
@@ -26,7 +26,7 @@ interface ActiveTask {
 export type BackgroundPlugin = Plugin<any> & { background: BackgroundCapability<any, any> };
 
 /**
- * Coordinates background tasks running alongside the AI-powered flow.
+ * Coordinates background tasks running alongside the AI-powered phase.
  *
  * Emits:
  * - `'success'` (BackgroundTaskResult) — when a background task finds a match.

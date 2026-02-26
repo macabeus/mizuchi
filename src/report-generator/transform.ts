@@ -48,9 +48,9 @@ function transformAttempt(attempt: AttemptResult) {
 export function transformToReport(results: PipelineResults, pluginConfigs: ReportPluginConfigs): RunReport {
   const reportResults: ReportPromptResult[] = results.results.map((promptResult) => {
     const attempts = promptResult.attempts.map(transformAttempt);
-    const setupFlow = transformAttempt(promptResult.setupFlow);
-    const programmaticFlow = promptResult.programmaticFlow
-      ? transformAttempt(promptResult.programmaticFlow)
+    const setupPhase = transformAttempt(promptResult.setupPhase);
+    const programmaticPhase = promptResult.programmaticPhase
+      ? transformAttempt(promptResult.programmaticPhase)
       : undefined;
 
     const backgroundTasks: ReportBackgroundTask[] | undefined = promptResult.backgroundTasks;
@@ -61,8 +61,8 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       success: promptResult.success,
       attempts,
       totalDurationMs: promptResult.totalDurationMs,
-      setupFlow,
-      programmaticFlow,
+      setupPhase,
+      programmaticPhase,
       backgroundTasks: backgroundTasks?.length ? backgroundTasks : undefined,
       matchSource: promptResult.matchSource as ReportMatchSource | undefined,
     };

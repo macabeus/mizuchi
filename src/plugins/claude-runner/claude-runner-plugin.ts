@@ -964,7 +964,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       // Load cache on first execution
       await this.#loadCache();
 
-      // Enhance prompt with context from programmatic-flow if available
+      // Enhance prompt with context from programmatic phase if available
       if (context.m2cContext) {
         promptContent += buildM2cContextSection(context.m2cContext);
       }

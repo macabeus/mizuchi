@@ -5,8 +5,8 @@
  * percentage against a target binary.
  *
  * Operates in two modes from a single config:
- * - Sequential (programmatic-flow): runs via execute() in the m2c → compiler → permuter → objdiff chain
- * - Background (AI-powered flow): runs via the background capability alongside Claude attempts
+ * - Sequential (programmatic phase): runs via execute() in the m2c → compiler → permuter → objdiff chain
+ * - Background (AI-powered phase): runs via the background capability alongside Claude attempts
  */
 import { z } from 'zod';
 
@@ -89,7 +89,7 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterResult> {
 
   /**
    * Background execution capability.
-   * The coordinator calls shouldSpawn() after each AI-powered flow attempt,
+   * The coordinator calls shouldSpawn() after each AI-powered phase attempt,
    * and spawns a background permuter task when the score improves.
    */
   readonly background: BackgroundCapability<PermuterSpawnConfig, DecompPermuterResult> = {

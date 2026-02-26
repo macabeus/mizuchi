@@ -49,7 +49,7 @@ npm run build && npm run build:ui
 
 ### m2c Setup (Optional)
 
-To enable the m2c programmatic-flow phase:
+To enable the m2c programmatic phase:
 
 ```bash
 git submodule update --init vendor/m2c
@@ -58,7 +58,7 @@ git submodule update --init vendor/m2c
 
 ### decomp-permuter Setup (Optional)
 
-To enable decomp-permuter (brute-force mutation matching). Works both in the programmatic-flow phase and as background tasks during the AI-powered flow:
+To enable decomp-permuter (brute-force mutation matching). Works both in the programmatic phase and as background tasks during the AI-powered phase:
 
 ```bash
 git submodule update --init vendor/decomp-permuter
@@ -134,13 +134,13 @@ Mizuchi executes a pipeline of plugins:
 flowchart TD
   A[Prompt Loader] --> |Load prompts from directory| O
 
-  subgraph Setup Flow
+  subgraph Setup Phase
     O[Get Context]
   end
 
   O --> M
 
-  subgraph Programmatic Flow
+  subgraph Programmatic Phase
     M[m2c]
     MC[Compiler]
     MP[decomp-permuter]
@@ -155,7 +155,7 @@ flowchart TD
   MD --> |Match found| E[Success]
   MD --> |No match| B
 
-  subgraph AI-Powered Flow
+  subgraph AI-Powered Phase
     B[Claude Runner]
     C[Compiler]
     D[Objdiff]

@@ -142,10 +142,10 @@ export interface ReportPromptResult {
   success: boolean;
   attempts: ReportAttempt[];
   totalDurationMs: number;
-  /** Result from setup-flow phase (e.g., get-context) */
-  setupFlow: ReportAttempt;
-  /** Result from programmatic-flow phase (e.g., m2c), if one was configured */
-  programmaticFlow?: ReportAttempt;
+  /** Result from setup phase (e.g., get-context) */
+  setupPhase: ReportAttempt;
+  /** Result from programmatic phase (e.g., m2c), if one was configured */
+  programmaticPhase?: ReportAttempt;
   /** Background permuter task results */
   backgroundTasks?: ReportBackgroundTask[];
   /** What found the match (if successful) */

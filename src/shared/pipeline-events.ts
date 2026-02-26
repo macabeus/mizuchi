@@ -114,17 +114,17 @@ export interface PipelineCompleteEvent {
 }
 
 /**
- * Event emitted when the setup-flow phase starts
+ * Event emitted when the setup phase starts
  */
-export interface SetupFlowStartEvent {
-  type: 'setup-flow-start';
+export interface SetupPhaseStartEvent {
+  type: 'setup-phase-start';
 }
 
 /**
- * Event emitted when the programmatic flow phase starts
+ * Event emitted when the programmatic phase starts
  */
-export interface ProgrammaticFlowStartEvent {
-  type: 'programmatic-flow-start';
+export interface ProgrammaticPhaseStartEvent {
+  type: 'programmatic-phase-start';
 }
 
 /**
@@ -153,8 +153,8 @@ export type PipelineEvent =
   | PipelineStartEvent
   | PluginRegisteredEvent
   | PromptStartEvent
-  | SetupFlowStartEvent
-  | ProgrammaticFlowStartEvent
+  | SetupPhaseStartEvent
+  | ProgrammaticPhaseStartEvent
   | AttemptStartEvent
   | PluginExecutionStartEvent
   | PluginExecutionCompleteEvent

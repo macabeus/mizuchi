@@ -20,8 +20,8 @@ import type {
 } from './shared/types.js';
 
 export class PluginManager {
-  #setupFlowPlugins: Plugin<any>[] = [];
-  #programmaticFlowStages: Plugin<any>[][] = [];
+  #setupPhasePlugins: Plugin<any>[] = [];
+  #programmaticPhaseStages: Plugin<any>[][] = [];
   #plugins: Plugin<any>[] = [];
   #config: PipelineConfig;
   #eventHandler?: PipelineEventHandler;
@@ -33,7 +33,7 @@ export class PluginManager {
   }
 
   /**
-   * Set the background task coordinator for running background tasks during the AI-powered flow.
+   * Set the background task coordinator for running background tasks during the AI-powered phase.
    */
   setBackgroundCoordinator(coordinator: BackgroundTaskCoordinator): void {
     this.#backgroundCoordinator = coordinator;
@@ -64,12 +64,12 @@ export class PluginManager {
   }
 
   /**
-   * Register plugins for the programmatic-flow phase as one or more stages.
+   * Register plugins for the programmatic phase as one or more stages.
    * Each stage is an array of plugins run via #runAttempt(). If a stage succeeds,
    * the pipeline short-circuits. If it fails, the next stage runs with accumulated context.
    */
-  registerProgrammaticFlow(...stages: Plugin<any>[][]): this {
-    this.#programmaticFlowStages = stages;
+  registerProgrammaticPhase(...stages: Plugin<any>[][]): this {
+    this.#programmaticPhaseStages = stages;
     for (const plugin of stages.flat()) {
       this.#emit({
         type: 'plugin-registered',
@@ -84,12 +84,12 @@ export class PluginManager {
   }
 
   /**
-   * Register plugins for the setup-flow phase.
-   * These plugins run once per prompt before both programmatic-flow and AI-powered flow.
-   * If a setup-flow plugin fails, the pipeline fails fatally for that prompt.
+   * Register plugins for the setup phase.
+   * These plugins run once per prompt before both programmatic phase and AI-powered phase.
+   * If a setup phase plugin fails, the pipeline fails fatally for that prompt.
    */
-  registerSetupFlow(...plugins: Plugin<any>[]): this {
-    this.#setupFlowPlugins = plugins;
+  registerSetupPhase(...plugins: Plugin<any>[]): this {
+    this.#setupPhasePlugins = plugins;
     for (const plugin of plugins) {
       this.#emit({
         type: 'plugin-registered',
@@ -111,17 +111,17 @@ export class PluginManager {
   }
 
   /**
-   * Get all registered programmatic-flow plugins (flattened across all stages)
+   * Get all registered programmatic phase plugins (flattened across all stages)
    */
-  getProgrammaticFlowPlugins(): readonly Plugin<any>[] {
-    return this.#programmaticFlowStages.flat();
+  getProgrammaticPhasePlugins(): readonly Plugin<any>[] {
+    return this.#programmaticPhaseStages.flat();
   }
 
   /**
-   * Get all registered setup-flow plugins
+   * Get all registered setup phase plugins
    */
-  getSetupFlowPlugins(): readonly Plugin<any>[] {
-    return this.#setupFlowPlugins;
+  getSetupPhasePlugins(): readonly Plugin<any>[] {
+    return this.#setupPhasePlugins;
   }
 
   /**
@@ -151,41 +151,41 @@ export class PluginManager {
       config: this.#config,
     };
 
-    // setup-flow phase (e.g., get-context)
-    this.#emit({ type: 'setup-flow-start' });
+    // Setup phase (e.g., get-context)
+    this.#emit({ type: 'setup-phase-start' });
 
-    const { finalContext: setupFlowContext, ...setupFlowResult } = await this.#runAttempt(
+    const { finalContext: setupPhaseContext, ...setupPhaseResult } = await this.#runAttempt(
       context,
-      this.#setupFlowPlugins,
+      this.#setupPhasePlugins,
     );
 
-    const setupFlow: AttemptResult = setupFlowResult;
+    const setupPhase: AttemptResult = setupPhaseResult;
 
-    if (!setupFlowResult.success) {
-      // setup-flow failure is fatal — no retry
+    if (!setupPhaseResult.success) {
+      // Setup phase failure is fatal — no retry
       return {
         promptPath,
         functionName,
         success: false,
         attempts: [],
         totalDurationMs: Date.now() - startTime,
-        setupFlow,
+        setupPhase,
       };
     }
 
-    // Carry forward context from setup-flow
-    context = { ...context, ...setupFlowContext };
+    // Carry forward context from setup phase
+    context = { ...context, ...setupPhaseContext };
 
-    // Programmatic-flow phase
-    let programmaticFlow: AttemptResult | undefined;
-    if (this.#programmaticFlowStages.length > 0) {
-      this.#emit({ type: 'programmatic-flow-start' });
+    // Programmatic phase
+    let programmaticPhase: AttemptResult | undefined;
+    if (this.#programmaticPhaseStages.length > 0) {
+      this.#emit({ type: 'programmatic-phase-start' });
 
       const allPluginResults: PluginResult<any>[] = [];
       let lastContext = context;
       let stageSucceeded = false;
 
-      for (const stage of this.#programmaticFlowStages) {
+      for (const stage of this.#programmaticPhaseStages) {
         const { finalContext: stageContext, ...stageResult } = await this.#runAttempt(lastContext, stage);
         allPluginResults.push(...stageResult.pluginResults);
         lastContext = stageContext;
@@ -196,7 +196,7 @@ export class PluginManager {
         }
       }
 
-      programmaticFlow = {
+      programmaticPhase = {
         attemptNumber: context.attemptNumber,
         pluginResults: allPluginResults,
         success: stageSucceeded,
@@ -211,16 +211,16 @@ export class PluginManager {
           success: true,
           attempts: [],
           totalDurationMs: Date.now() - startTime,
-          setupFlow,
-          programmaticFlow,
-          matchSource: 'programmatic-flow',
+          setupPhase,
+          programmaticPhase,
+          matchSource: 'programmatic-phase',
         };
       }
 
-      // Carry forward m2cContext from the programmatic-flow
+      // Carry forward m2cContext from the programmatic phase
       context.m2cContext = lastContext.m2cContext;
 
-      // Enrich m2cContext with compiler/objdiff results from the programmatic-flow
+      // Enrich m2cContext with compiler/objdiff results from the programmatic phase
       if (context.m2cContext) {
         const compilerResult = allPluginResults.find((r) => r.pluginId === 'compiler');
         const objdiffResult = allPluginResults.find((r) => r.pluginId === 'objdiff');
@@ -330,8 +330,8 @@ export class PluginManager {
       success,
       attempts,
       totalDurationMs: Date.now() - startTime,
-      setupFlow,
-      programmaticFlow,
+      setupPhase,
+      programmaticPhase,
       backgroundTasks: backgroundTasks?.length ? backgroundTasks : undefined,
       matchSource,
     };
@@ -542,7 +542,7 @@ export class PluginManager {
         }
 
         // Unexpected error — record as failed result and continue with next prompt
-        // TODO: The error is saved in the setup flow, although it could have happened in any plugin.
+        // TODO: The error is saved in the setup phase, although it could have happened in any plugin.
         //       We may want to enhance this later to capture more details about where the error occurred.
         const errorMessage = error instanceof Error ? error.message : String(error);
         results.push({
@@ -551,7 +551,7 @@ export class PluginManager {
           success: false,
           attempts: [],
           totalDurationMs: 0,
-          setupFlow: {
+          setupPhase: {
             attemptNumber: 0,
             pluginResults: [
               {

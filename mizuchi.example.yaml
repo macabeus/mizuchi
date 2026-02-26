@@ -152,23 +152,23 @@ plugins:
       - If stuck, try different approaches (different variable types, control structures, etc.)
 
   # m2c Plugin (optional)
-  # Runs m2c in the programmatic-flow phase before the AI-powered flow.
+  # Runs m2c in the programmatic phase before the AI-powered phase.
   # If m2c produces a match, the pipeline succeeds immediately.
   # Otherwise, the m2c output feeds into Claude Runner as additional context.
   # Requires: scripts/setup-m2c.sh to be run first
   m2c:
-    # Enable or disable m2c programmatic-flow (default: true)
+    # Enable or disable m2c programmatic phase (default: true)
     enable: true
 
   # decomp-permuter Plugin (optional)
   # Brute-forces code mutations to improve match percentage.
-  # If m2c is enabled, it runs in the programmatic-flow phase after m2c.
-  # On the AI-powered flow, it runs in background while Claude makes progress.
+  # If m2c is enabled, it runs in the programmatic phase after m2c.
+  # On the AI-powered phase, it runs in background while Claude makes progress.
   # Requires: scripts/setup-decomp-permuter.sh to be run first
   decomp-permuter:
     # Enable or disable decomp-permuter (default: false)
     enable: true
-    # Maximum iterations on the programmatic-flow (default: 1000)
+    # Maximum iterations on the programmatic phase (default: 1000)
     maxIterations: 1000
     # Timeout in milliseconds per permuter run (default: 120000 = 2 minutes)
     timeoutMs: 120000

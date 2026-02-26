@@ -81,7 +81,7 @@ interface PluginStatus {
  */
 interface ProgressState {
   phase: 'loading' | 'initializing' | 'running' | 'complete' | 'error';
-  currentFlow: 'loading' | 'programmatic-flow' | 'ai-powered-flow';
+  currentPhase: 'loading' | 'programmatic-phase' | 'ai-powered-phase';
   config?: PipelineConfig;
   plugins: PluginInfo[];
   // Current prompt info
@@ -106,7 +106,7 @@ interface ProgressState {
     success: boolean;
     attemptsUsed: number;
   }>;
-  // Best objdiff difference count from AI-powered flow attempts
+  // Best objdiff difference count from AI-powered phase attempts
   bestDifferenceCount?: number;
   // Background tasks (e.g., permuter)
   backgroundTasks: Array<{
@@ -130,7 +130,7 @@ interface ProgressState {
 export default function Index({ options: opts }: Props) {
   const [state, setState] = useState<ProgressState>({
     phase: 'loading',
-    currentFlow: 'loading',
+    currentPhase: 'loading',
     plugins: [],
     pluginStatuses: [],
     completedPrompts: [],
@@ -199,23 +199,23 @@ export default function Index({ options: opts }: Props) {
             })),
           };
 
-        case 'setup-flow-start':
+        case 'setup-phase-start':
           return {
             ...prev,
             pluginStatuses: [],
           };
 
-        case 'programmatic-flow-start':
+        case 'programmatic-phase-start':
           return {
             ...prev,
-            currentFlow: 'programmatic-flow',
+            currentPhase: 'programmatic-phase',
             pluginStatuses: [],
           };
 
         case 'attempt-start':
           return {
             ...prev,
-            currentFlow: 'ai-powered-flow',
+            currentPhase: 'ai-powered-phase',
             currentAttempt: {
               number: event.attemptNumber,
               maxRetries: event.maxRetries,
@@ -238,7 +238,7 @@ export default function Index({ options: opts }: Props) {
               ),
             };
           }
-          // During programmatic-flow phase, add plugin status dynamically
+          // During programmatic phase, add plugin status dynamically
           return {
             ...prev,
             pluginStatuses: [
@@ -396,13 +396,13 @@ export default function Index({ options: opts }: Props) {
               <Text dimColor>Paused</Text>
             ) : (
               <Text color="yellow">
-                <Spinner type="dots" /> {state.currentFlow}
+                <Spinner type="dots" /> {state.currentPhase}
               </Text>
             )}
           </Box>
 
           {/* Current attempt */}
-          {state.currentFlow === 'ai-powered-flow' && state.currentAttempt && (
+          {state.currentPhase === 'ai-powered-phase' && state.currentAttempt && (
             <Box marginBottom={1}>
               <Text>
                 Attempt {state.currentAttempt.number}/{state.currentAttempt.maxRetries}
@@ -417,7 +417,7 @@ export default function Index({ options: opts }: Props) {
             ))}
           </Box>
 
-          {/* Best match from AI-powered flow */}
+          {/* Best match from AI-powered phase */}
           {state.bestDifferenceCount !== undefined && (
             <Box marginTop={1}>
               <Text dimColor>
@@ -772,10 +772,10 @@ async function runPipeline(
     compilerPlugin = new CompilerPlugin(cCompiler);
     const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
 
-    // Register setup flow plugins
-    manager.registerSetupFlow(getContextPlugin);
+    // Register setup phase plugins
+    manager.registerSetupPhase(getContextPlugin);
 
-    // Register plugins for the programmatic-flow
+    // Register plugins for the programmatic phase
     const m2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
     const decompPermuterConfig = getPluginConfigFromFile<DecompPermuterConfig>(
       fileConfig,
@@ -788,10 +788,10 @@ async function runPipeline(
 
       if (decompPermuterConfig.enable) {
         const decompPermuterPlugin = new DecompPermuterPlugin(decompPermuterConfig, cCompiler);
-        manager.registerProgrammaticFlow([m2cPlugin, compilerPlugin, objdiffPlugin], [decompPermuterPlugin]);
+        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, objdiffPlugin], [decompPermuterPlugin]);
         backgroundCoordinator = new BackgroundTaskCoordinator([decompPermuterPlugin], onEvent);
       } else {
-        manager.registerProgrammaticFlow([m2cPlugin, compilerPlugin, objdiffPlugin]);
+        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, objdiffPlugin]);
       }
     }
 
@@ -802,7 +802,7 @@ async function runPipeline(
       manager.setBackgroundCoordinator(backgroundCoordinator);
     }
 
-    // Register plugins for the ai-powered-flow
+    // Register plugins for the ai-powered phase
     manager.register(claudePlugin).register(compilerPlugin).register(objdiffPlugin);
 
     // Run the pipeline

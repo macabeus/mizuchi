@@ -8,7 +8,7 @@ import { CodeBlock } from './CodeBlock';
 const matchSourceLabels: Record<string, { label: string; color: string }> = {
   claude: { label: 'Claude', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   'decomp-permuter': { label: 'Permuter', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-  'programmatic-flow': { label: 'Programmatic', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
+  'programmatic-phase': { label: 'Programmatic', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
 };
 
 interface BestResultProps {
@@ -22,8 +22,8 @@ export function BestResultCode({ result }: BestResultProps) {
   );
   const permuterBestCode = permuterSuccess?.data.bestCode;
 
-  // Consider both programmatic and AI-powered flows
-  const allAttempts = [...(result.programmaticFlow ? [result.programmaticFlow] : []), ...result.attempts];
+  // Consider both programmatic and AI-powered phases
+  const allAttempts = [...(result.programmaticPhase ? [result.programmaticPhase] : []), ...result.attempts];
 
   const bestAttempt = allAttempts.reduce<ReportAttempt | null>((best, attempt) => {
     if (
@@ -67,7 +67,7 @@ export function BestResultCode({ result }: BestResultProps) {
     );
   }
 
-  // Try claude-runner first, then m2c for programmatic-flow attempts
+  // Try claude-runner first, then m2c for programmatic phase attempts
   const bestAttemptCode =
     bestAttempt &&
     (getPluginResult(bestAttempt, 'claude-runner')?.data?.generatedCode ||

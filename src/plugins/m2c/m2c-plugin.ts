@@ -2,7 +2,7 @@
  * m2c Plugin
  *
  * Generates initial C decompilation using m2c.
- * Runs in the programmatic-flow phase before the AI-powered flow.
+ * Runs in the programmatic phase before the AI-powered phase.
  */
 import { z } from 'zod';
 
@@ -105,7 +105,7 @@ export class M2cPlugin implements Plugin<M2cPluginResult> {
 
       const generatedCode = m2cResult.code!;
 
-      // Set context for downstream plugins (Compiler) and for Claude Runner (if programmatic-flow fails)
+      // Set context for downstream plugins (Compiler) and for Claude Runner (if programmatic phase fails)
       const updatedContext: PipelineContext = {
         ...context,
         generatedCode,

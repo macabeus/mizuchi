@@ -3,7 +3,7 @@
  *
  * Executes a user-provided shell script (`getContextScript`) to generate
  * context content (e.g., type definitions) for the compilation pipeline.
- * Runs in the setup-flow phase before both programmatic-flow and AI-powered flow.
+ * Runs in the setup phase before both programmatic phase and AI-powered phase.
  */
 import { execSync } from 'child_process';
 import fs from 'fs/promises';

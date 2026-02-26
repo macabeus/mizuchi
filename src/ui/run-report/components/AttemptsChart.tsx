@@ -50,9 +50,9 @@ interface AttemptsChartProps {
 export function AttemptsChart({ result }: AttemptsChartProps) {
   const data: ChartDatum[] = [];
 
-  // Include programmatic-flow data point if available
-  if (result.programmaticFlow) {
-    const objdiffPluginResult = getPluginResult(result.programmaticFlow, 'objdiff');
+  // Include programmatic phase data point if available
+  if (result.programmaticPhase) {
+    const objdiffPluginResult = getPluginResult(result.programmaticPhase, 'objdiff');
     if (objdiffPluginResult?.data?.differenceCount !== undefined) {
       data.push({
         x: 'm2c',

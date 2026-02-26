@@ -79,7 +79,7 @@ export interface PipelineContext {
   previousAttempts?: Array<Partial<PluginResultMap>>;
   /** Configuration options */
   config: PipelineConfig;
-  /** Context from m2c programmatic-flow phase, available to Claude Runner on first attempt */
+  /** Context from m2c programmatic phase, available to Claude Runner on first attempt */
   m2cContext?: {
     generatedCode: string;
     compilationError?: string;
@@ -242,7 +242,7 @@ export interface Plugin<TPluginResult> {
   /**
    * Optional background execution capability.
    * When present, the BackgroundTaskCoordinator will call shouldSpawn() after each
-   * attempt and run background tasks alongside the AI-powered flow.
+   * attempt and run background tasks alongside the AI-powered phase.
    */
   background?: BackgroundCapability<any, any>;
 }
@@ -282,11 +282,11 @@ export interface PipelineRunResult {
   functionName: string;
   success: boolean;
   totalDurationMs: number;
-  /** Result from setup-flow phase (e.g., get-context) */
-  setupFlow: AttemptResult;
-  /** Result from programmatic-flow (e.g., m2c), if one was configured */
-  programmaticFlow?: AttemptResult;
-  /** Results for every attempt from the AI-powered flow */
+  /** Result from setup phase (e.g., get-context) */
+  setupPhase: AttemptResult;
+  /** Result from programmatic phase (e.g., m2c), if one was configured */
+  programmaticPhase?: AttemptResult;
+  /** Results for every attempt from the AI-powered phase */
   attempts: AttemptResult[];
   /** Results from background permuter tasks */
   backgroundTasks?: BackgroundTaskResult[];
