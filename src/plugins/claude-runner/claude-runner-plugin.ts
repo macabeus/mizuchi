@@ -389,6 +389,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #config: ClaudeRunnerConfig;
   #feedbackPrompt?: string;
   #stallDetected = false;
+  #softTimeoutTriggered = false;
   #lastStallAttemptIndex = -1;
   #queryFactory: QueryFactory;
   #cache: ConversationCache | null = null;
@@ -945,9 +946,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         throw error;
       }
 
-      // If no session was established (API never responded), throw the full timeout error
+      // If no session was established (API never responded), fail fast with actual elapsed time
       if (!this.#sessionId) {
-        throw new QueryTimeoutError({ timeoutMs: this.#config.timeoutMs, mode: 'hard' });
+        throw new QueryTimeoutError({ timeoutMs: softConfig.softTimeoutMs, mode: 'hard' });
       }
 
       // Resume the session with the soft timeout prompt
@@ -975,6 +976,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         { role: 'assistant', content: hasToolCalls ? contentBlocks : text },
       );
 
+      this.#softTimeoutTriggered = true;
       return { response: text, fromCache: false, softTimeoutTriggered: true };
     }
   }
@@ -994,6 +996,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     if (context.attemptNumber === 1) {
       this.#feedbackPrompt = undefined;
       this.#stallDetected = false;
+      this.#softTimeoutTriggered = false;
     }
 
     if (this.#feedbackPrompt) {
@@ -1208,7 +1211,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             fromCache: false,
             generatedCode: '',
             stallDetected: this.#stallDetected,
-            softTimeoutTriggered: false,
+            softTimeoutTriggered: this.#softTimeoutTriggered,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
           },
         },

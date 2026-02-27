@@ -2603,7 +2603,7 @@ mov eax, 0
       const { result } = await plugin.execute(context);
 
       expect(result.status).toBe('failure');
-      expect(result.error).toContain('timed out after 500ms');
+      expect(result.error).toContain('timed out after 50ms');
       // Should NOT have made a second query call
       expect(mockFactory).toHaveBeenCalledTimes(1);
     });
