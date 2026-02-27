@@ -161,6 +161,30 @@ glabel BitwiseAnd
 }`);
     });
 
+    it('decompiles thumb_func_start assembly with UAL mnemonics', async () => {
+      // SA3-style assembly: thumb_func_start + UAL mnemonics (movs, adds)
+      // m2c requires .syntax unified for these — the wrapper prepends it automatically
+      const gasAssembly = `	thumb_func_start ThumbAdd
+ThumbAdd: @ 0x08000000
+	push {r4, lr}
+	movs r4, r0
+	adds r0, r4, r1
+	pop {r4}
+	pop {r1}
+	bx r1
+`;
+
+      const result = await m2c.decompile({
+        asmContent: gasAssembly,
+        functionName: 'ThumbAdd',
+        target: 'arm',
+        contextPath,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.code).toContain('ThumbAdd');
+    });
+
     it('returns error for invalid assembly', async () => {
       const invalidAsm = `.text
 glabel InvalidFunc

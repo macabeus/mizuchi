@@ -55,7 +55,8 @@ export class M2c {
     const asmFile = path.join(tmpDir, `${options.functionName}.s`);
 
     try {
-      await fs.writeFile(asmFile, options.asmContent, 'utf-8');
+      const asmContent = this.#preprocessAssembly(options.asmContent, options.target);
+      await fs.writeFile(asmFile, asmContent, 'utf-8');
 
       const args = [
         path.join(this.#m2cDir, 'm2c.py'),
@@ -93,6 +94,21 @@ export class M2c {
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
+  }
+
+  /**
+   * Preprocess assembly before passing to m2c.
+   */
+  #preprocessAssembly(asmContent: string, target: M2cOptions['target']): string {
+    // For ARM targets, m2c requires `.syntax unified` to correctly parse UAL
+    // Thumb mnemonics (e.g. `movs`, `adds`) inside `thumb_func_start` blocks.
+    // Without it, m2c rejects these instructions as ambiguous pre-UAL syntax.
+    const isArmTarget = target === 'arm' || target === 'gba';
+    if (isArmTarget && asmContent.includes('thumb_func_start')) {
+      return `.syntax unified\n${asmContent}`;
+    }
+
+    return asmContent;
   }
 
   #exec(command: string, args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
