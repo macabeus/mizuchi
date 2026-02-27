@@ -14,6 +14,7 @@ import {
   ClaudeRunnerPlugin,
   type ClaudeRunnerResult,
   type QueryFactory,
+  claudeRunnerConfigSchema,
 } from './claude-runner-plugin.js';
 
 const TEST_SESSION_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -477,7 +478,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2;', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 2;',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -516,7 +522,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 2; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -599,7 +610,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 1; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -623,7 +639,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 2; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -693,7 +714,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 1; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -717,7 +743,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 2; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 2; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -770,7 +801,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 99', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 99',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -839,7 +875,7 @@ void movePoint(Point* p) {
             status: 'failure' as const,
             durationMs: 100,
             error: 'Could not extract C code from response',
-            data: { generatedCode: undefined, fromCache: false, stallDetected: false },
+            data: { generatedCode: undefined, fromCache: false, stallDetected: false, softTimeoutTriggered: false },
           },
         },
       ];
@@ -882,7 +918,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 1; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -908,7 +949,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -1220,7 +1266,12 @@ void movePoint(Point* p) {
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 1; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -1910,7 +1961,7 @@ mov eax, 0
             pluginName: 'Claude Runner',
             status: 'success',
             durationMs: 100,
-            data: { generatedCode: cCode, fromCache: false, stallDetected: false },
+            data: { generatedCode: cCode, fromCache: false, stallDetected: false, softTimeoutTriggered: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -2006,7 +2057,12 @@ mov eax, 0
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
+            data: {
+              generatedCode: 'int foo(void) { return 1; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
           },
           compiler: {
             pluginId: 'compiler',
@@ -2123,7 +2179,7 @@ mov eax, 0
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: cCode, fromCache: false, stallDetected: false },
+            data: { generatedCode: cCode, fromCache: false, stallDetected: false, softTimeoutTriggered: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -2234,7 +2290,7 @@ mov eax, 0
             pluginName: 'Claude Runner',
             status: 'success' as const,
             durationMs: 100,
-            data: { generatedCode: cCode, fromCache: false, stallDetected: false },
+            data: { generatedCode: cCode, fromCache: false, stallDetected: false, softTimeoutTriggered: false },
           },
           compiler: {
             pluginId: 'compiler',
@@ -2258,6 +2314,463 @@ mov eax, 0
         cacheReadInputTokens: 5000,
         cacheCreationInputTokens: 0,
       });
+    });
+  });
+
+  describe('soft timeout', () => {
+    const cCode = 'int foo(void) { return 1; }';
+    const softTimeoutPrompt = 'Submit your best code NOW.';
+
+    /**
+     * Creates a query factory for soft timeout tests.
+     *
+     * Phase 1 (initial query): emits a system init message (to establish sessionId),
+     * then blocks forever until close() is called — simulating a soft timeout.
+     *
+     * Phase 2 (resumed query): returns the given response immediately with token usage.
+     */
+    function createSoftTimeoutQueryFactory(options: {
+      phase2Response: string;
+      phase2Usage?: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_input_tokens: number;
+        cache_creation_input_tokens: number;
+      };
+      /** If true, phase 1 does NOT emit a system init message (no sessionId) */
+      noSessionId?: boolean;
+    }) {
+      let callCount = 0;
+      const factory = vi.fn((_prompt: string, _options: { model?: string; resume?: string; effort?: string }) => {
+        callCount++;
+
+        if (callCount === 1) {
+          // Phase 1: emit system init, then hang forever
+          let rejectPending: ((reason?: unknown) => void) | null = null;
+          let yieldedInit = false;
+
+          return {
+            [Symbol.asyncIterator]: () => {
+              const gen = {
+                next: () => {
+                  if (!yieldedInit && !options.noSessionId) {
+                    yieldedInit = true;
+                    return Promise.resolve({
+                      done: false as const,
+                      value: {
+                        type: 'system',
+                        subtype: 'init',
+                        session_id: TEST_SESSION_ID,
+                      } as SDKMessage,
+                    });
+                  }
+                  // Block forever — will be resolved when close() rejects the pending iterator
+                  return new Promise<IteratorResult<SDKMessage>>((_, reject) => {
+                    rejectPending = reject;
+                  });
+                },
+                return: () => Promise.resolve({ done: true as const, value: undefined }),
+                throw: (err: unknown) => Promise.reject(err),
+                [Symbol.asyncIterator]: () => gen,
+              };
+              return gen;
+            },
+            close: vi.fn(() => {
+              rejectPending?.(new Error('Query closed'));
+            }),
+          };
+        }
+
+        // Phase 2: resumed query returns response immediately
+        const usage = options.phase2Usage ?? {
+          input_tokens: 80,
+          output_tokens: 30,
+          cache_read_input_tokens: 4000,
+          cache_creation_input_tokens: 100,
+        };
+
+        return {
+          [Symbol.asyncIterator]: () =>
+            (async function* () {
+              yield {
+                type: 'assistant',
+                session_id: TEST_SESSION_ID,
+                message: {
+                  id: `msg-phase2-${callCount}`,
+                  content: [{ type: 'text', text: options.phase2Response }],
+                },
+              } as SDKMessage;
+              yield {
+                type: 'result',
+                subtype: 'success',
+                session_id: TEST_SESSION_ID,
+                is_error: false,
+                usage,
+              } as unknown as SDKMessage;
+            })(),
+          close: vi.fn(),
+        };
+      });
+
+      return factory as unknown as QueryFactory;
+    }
+
+    it('does not trigger soft timeout when softTimeout is not configured', async () => {
+      const response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.softTimeoutTriggered).toBe(false);
+    });
+
+    it('resumes with soft timeout prompt when phase 1 times out', async () => {
+      const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createSoftTimeoutQueryFactory({ phase2Response });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          timeoutMs: 500,
+          softTimeout: {
+            softTimeoutMs: 50,
+            prompt: softTimeoutPrompt,
+          },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.softTimeoutTriggered).toBe(true);
+      expect(result.data?.generatedCode).toBe(cCode);
+      expect(result.data?.fromCache).toBe(false);
+
+      // Verify the resumed query was called with the soft timeout prompt and resume
+      expect(mockFactory).toHaveBeenCalledTimes(2);
+      const secondCall = (mockFactory as ReturnType<typeof vi.fn>).mock.calls[1];
+      expect(secondCall[0]).toBe(softTimeoutPrompt);
+      expect(secondCall[1].resume).toBe(TEST_SESSION_ID);
+    });
+
+    it('throws full timeout error when phase 1 times out and sessionId is null', async () => {
+      const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createSoftTimeoutQueryFactory({ phase2Response, noSessionId: true });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          timeoutMs: 500,
+          softTimeout: {
+            softTimeoutMs: 50,
+            prompt: softTimeoutPrompt,
+          },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('failure');
+      expect(result.error).toContain('timed out after 500ms');
+      // Should NOT have made a second query call
+      expect(mockFactory).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes configured model and effort to the resumed query', async () => {
+      const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createSoftTimeoutQueryFactory({ phase2Response });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          timeoutMs: 500,
+          softTimeout: {
+            softTimeoutMs: 50,
+            prompt: softTimeoutPrompt,
+            model: 'claude-haiku-4-5-20251001',
+            effort: 'low',
+          },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+
+      const secondCall = (mockFactory as ReturnType<typeof vi.fn>).mock.calls[1];
+      expect(secondCall[1].model).toBe('claude-haiku-4-5-20251001');
+      expect(secondCall[1].effort).toBe('low');
+    });
+
+    it('inherits parent model when softTimeout.model is not set', async () => {
+      const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createSoftTimeoutQueryFactory({ phase2Response });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          model: 'claude-opus-4-6',
+          timeoutMs: 500,
+          softTimeout: {
+            softTimeoutMs: 50,
+            prompt: softTimeoutPrompt,
+          },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      await plugin.execute(context);
+
+      const secondCall = (mockFactory as ReturnType<typeof vi.fn>).mock.calls[1];
+      expect(secondCall[1].model).toBe('claude-opus-4-6');
+    });
+
+    it('accumulates token usage across both phases', async () => {
+      const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createSoftTimeoutQueryFactory({
+        phase2Response,
+        phase2Usage: {
+          input_tokens: 200,
+          output_tokens: 100,
+          cache_read_input_tokens: 6000,
+          cache_creation_input_tokens: 300,
+        },
+      });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          timeoutMs: 500,
+          softTimeout: {
+            softTimeoutMs: 50,
+            prompt: softTimeoutPrompt,
+          },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      // Phase 1 produced no result message (timed out before it), so tokens come from phase 2 only
+      expect(result.data?.tokenUsage).toEqual({
+        inputTokens: 200,
+        outputTokens: 100,
+        cacheReadInputTokens: 6000,
+        cacheCreationInputTokens: 300,
+      });
+    });
+
+    it('works on follow-up query (retry attempt)', async () => {
+      // First attempt: normal success with the standard mock
+      const initialResponse = `\`\`\`c\n${cCode}\n\`\`\``;
+
+      // We need a custom factory that:
+      // Call 1: normal initial query (succeeds)
+      // Call 2: follow-up that hangs (soft timeout fires)
+      // Call 3: resumed follow-up that succeeds
+      let callCount = 0;
+      const mockFactory = vi.fn((_prompt: string, _options: { model?: string; resume?: string; effort?: string }) => {
+        callCount++;
+
+        if (callCount === 1) {
+          // Initial query: returns code successfully
+          return {
+            [Symbol.asyncIterator]: () =>
+              (async function* () {
+                yield {
+                  type: 'system',
+                  subtype: 'init',
+                  session_id: TEST_SESSION_ID,
+                } as SDKMessage;
+                yield {
+                  type: 'assistant',
+                  session_id: TEST_SESSION_ID,
+                  message: { id: 'msg-1', content: [{ type: 'text', text: initialResponse }] },
+                } as SDKMessage;
+                yield {
+                  type: 'result',
+                  subtype: 'success',
+                  session_id: TEST_SESSION_ID,
+                  is_error: false,
+                  usage: {
+                    input_tokens: 100,
+                    output_tokens: 50,
+                    cache_read_input_tokens: 8000,
+                    cache_creation_input_tokens: 200,
+                  },
+                } as unknown as SDKMessage;
+              })(),
+            close: vi.fn(),
+          };
+        }
+
+        if (callCount === 2) {
+          // Follow-up query: hangs forever (soft timeout)
+          let rejectPending: ((reason?: unknown) => void) | null = null;
+          return {
+            [Symbol.asyncIterator]: () => {
+              const gen = {
+                next: () =>
+                  new Promise<IteratorResult<SDKMessage>>((_, reject) => {
+                    rejectPending = reject;
+                  }),
+                return: () => Promise.resolve({ done: true as const, value: undefined }),
+                throw: (err: unknown) => Promise.reject(err),
+                [Symbol.asyncIterator]: () => gen,
+              };
+              return gen;
+            },
+            close: vi.fn(() => {
+              rejectPending?.(new Error('Query closed'));
+            }),
+          };
+        }
+
+        // Call 3: resumed soft timeout query
+        const recoveryResponse = `\`\`\`c\nint foo(void) { return 42; }\n\`\`\``;
+        return {
+          [Symbol.asyncIterator]: () =>
+            (async function* () {
+              yield {
+                type: 'assistant',
+                session_id: TEST_SESSION_ID,
+                message: { id: 'msg-3', content: [{ type: 'text', text: recoveryResponse }] },
+              } as SDKMessage;
+              yield {
+                type: 'result',
+                subtype: 'success',
+                session_id: TEST_SESSION_ID,
+                is_error: false,
+                usage: {
+                  input_tokens: 80,
+                  output_tokens: 30,
+                  cache_read_input_tokens: 4000,
+                  cache_creation_input_tokens: 100,
+                },
+              } as unknown as SDKMessage;
+            })(),
+          close: vi.fn(),
+        };
+      }) as unknown as QueryFactory;
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          timeoutMs: 500,
+          softTimeout: {
+            softTimeoutMs: 50,
+            prompt: softTimeoutPrompt,
+          },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      // Attempt 1: normal success
+      const { result: result1 } = await executeAndAdvance(plugin, context);
+      expect(result1.status).toBe('success');
+      expect(result1.data?.softTimeoutTriggered).toBe(false);
+
+      // Prepare retry
+      plugin.prepareRetry!(context, [
+        {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success' as const,
+            durationMs: 100,
+            data: { generatedCode: cCode, fromCache: false, stallDetected: false, softTimeoutTriggered: false },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'failure' as const,
+            durationMs: 50,
+            error: 'compilation error',
+            output: 'compilation error',
+          },
+        },
+      ]);
+
+      // Attempt 2: follow-up that soft-times out and recovers
+      const { result: result2 } = await plugin.execute(context);
+      expect(result2.status).toBe('success');
+      expect(result2.data?.softTimeoutTriggered).toBe(true);
+      expect(result2.data?.generatedCode).toBe('int foo(void) { return 42; }');
+    });
+
+    it('rejects softTimeoutMs >= timeoutMs in schema validation', () => {
+      const result = claudeRunnerConfigSchema.safeParse({
+        ...defaultPluginConfig,
+        timeoutMs: 500,
+        softTimeout: {
+          softTimeoutMs: 500,
+          prompt: softTimeoutPrompt,
+        },
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].path).toContain('softTimeoutMs');
+      }
+
+      // Also test greater than
+      const result2 = claudeRunnerConfigSchema.safeParse({
+        ...defaultPluginConfig,
+        timeoutMs: 500,
+        softTimeout: {
+          softTimeoutMs: 600,
+          prompt: softTimeoutPrompt,
+        },
+      });
+      expect(result2.success).toBe(false);
+    });
+
+    it('accepts valid softTimeout configuration in schema', () => {
+      const result = claudeRunnerConfigSchema.safeParse({
+        ...defaultPluginConfig,
+        timeoutMs: 500,
+        softTimeout: {
+          softTimeoutMs: 200,
+          prompt: softTimeoutPrompt,
+        },
+      });
+      expect(result.success).toBe(true);
     });
   });
 });

@@ -822,6 +822,7 @@ async function runPipeline(
       claudeRunner: {
         stallThreshold: claudeRunnerConfig.stallThreshold,
         model: claudeRunnerConfig.model ?? 'claude-sonnet-4-6',
+        softTimeout: claudeRunnerConfig.softTimeout,
       },
       compiler: {
         compilerScript: pipelineConfig.compilerScript,

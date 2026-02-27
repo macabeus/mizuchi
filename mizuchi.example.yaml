@@ -71,8 +71,22 @@ plugins:
   # Uses Claude Agent SDK to generate C code from assembly prompts
   # Responses are automatically cached to avoid redundant API calls
   claude-runner:
-    # Timeout in milliseconds for Claude requests (default: 300000 = 5 minutes)
-    timeoutMs: 300000
+    # Timeout in milliseconds for Claude requests (default: 600000 = 10 minutes)
+    timeoutMs: 600000
+
+    # Soft timeout: gives Claude a chance to submit its best code before the hard timeout kills the request.
+    # When softTimeoutMs elapses, the current query is closed and a new "submit now" prompt is sent
+    # with the remaining time budget (timeoutMs - softTimeoutMs). If no session was established
+    # (API never responded), falls through to the normal hard timeout error.
+    softTimeout:
+      # Time in milliseconds before the soft timeout fires (must be < timeoutMs)
+      softTimeoutMs: 420000
+      # Prompt sent to Claude when the soft timeout fires
+      prompt: 'You are running out of time. Submit your best C code now in a ```c block. Do not explain, do not use tools, just output the code.'
+      # Optional: override model for the resumed query (defaults to the parent model)
+      # model: claude-haiku-4-5-20251001
+      # Optional: override effort level for the resumed query
+      # effort: low
 
     # Path to cache file for Claude responses (default: claude-cache.json in output directory)
     # cachePath: ./claude-cache.json

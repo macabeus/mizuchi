@@ -19,6 +19,12 @@ export interface ReportPluginConfigs {
   claudeRunner: {
     stallThreshold: number;
     model: string;
+    softTimeout?: {
+      softTimeoutMs: number;
+      prompt: string;
+      model?: string;
+      effort?: string;
+    };
   };
   compiler: {
     compilerScript: string;
@@ -79,6 +85,7 @@ export function transformToReport(results: PipelineResults, pluginConfigs: Repor
       getContextScript: results.config.getContextScript,
       target: results.config.target,
       model: pluginConfigs.claudeRunner.model,
+      softTimeout: pluginConfigs.claudeRunner.softTimeout,
     },
     results: reportResults,
     summary: results.summary,

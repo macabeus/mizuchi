@@ -94,18 +94,13 @@ export function Summary({ summary, config }: SummaryProps) {
           Configuration
         </h3>
         <div className="space-y-4 text-sm">
-          {/* Basic config row */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* Pipeline section */}
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pipeline</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex items-center gap-2">
               <span className="text-slate-400">Target:</span>
               <code className="bg-slate-700/50 px-2 py-1 rounded-md text-emerald-400 font-mono text-xs uppercase">
                 {config.target}
-              </code>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400">Model:</span>
-              <code className="bg-slate-700/50 px-2 py-1 rounded-md text-violet-400 font-mono text-xs">
-                {config.model}
               </code>
             </div>
             <div className="flex items-center gap-2">
@@ -118,15 +113,11 @@ export function Summary({ summary, config }: SummaryProps) {
               <span className="text-slate-400">Max Retries:</span>
               <span className="text-white font-semibold">{config.maxRetries}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400">Stall Threshold:</span>
-              <span className="text-white font-semibold">{config.stallThreshold}</span>
-            </div>
           </div>
 
           {/* Get Context Script */}
           {config.getContextScript && (
-            <div className="border-t border-slate-700 pt-4">
+            <div>
               <details className="group">
                 <summary className="cursor-pointer text-slate-400 hover:text-slate-300 flex items-center gap-2">
                   <span className="group-open:rotate-90 transition-transform">▶</span>
@@ -138,7 +129,7 @@ export function Summary({ summary, config }: SummaryProps) {
           )}
 
           {/* Compiler Script */}
-          <div className="border-t border-slate-700 pt-4">
+          <div>
             <details className="group">
               <summary className="cursor-pointer text-slate-400 hover:text-slate-300 flex items-center gap-2">
                 <span className="group-open:rotate-90 transition-transform">▶</span>
@@ -147,6 +138,53 @@ export function Summary({ summary, config }: SummaryProps) {
               <CodeBlock language="shell" code={config.compilerScript} />
             </details>
           </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-700" />
+
+          {/* Claude Runner section */}
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Claude Runner</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Model:</span>
+              <code className="bg-slate-700/50 px-2 py-1 rounded-md text-violet-400 font-mono text-xs">
+                {config.model}
+              </code>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Stall Threshold:</span>
+              <span className="text-white font-semibold">{config.stallThreshold}</span>
+            </div>
+            {config.softTimeout && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-slate-400">Soft Timeout:</span>
+                <span className="text-white font-semibold">{formatDuration(config.softTimeout.softTimeoutMs)}</span>
+                {config.softTimeout.model && (
+                  <code className="bg-slate-700/50 px-2 py-0.5 rounded-md text-violet-400 font-mono text-xs">
+                    {config.softTimeout.model}
+                  </code>
+                )}
+                {config.softTimeout.effort && (
+                  <code className="bg-slate-700/50 px-2 py-0.5 rounded-md text-amber-400 font-mono text-xs">
+                    {config.softTimeout.effort}
+                  </code>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Soft Timeout Prompt */}
+          {config.softTimeout && (
+            <div>
+              <details className="group">
+                <summary className="cursor-pointer text-slate-400 hover:text-slate-300 flex items-center gap-2">
+                  <span className="group-open:rotate-90 transition-transform">▶</span>
+                  Soft Timeout Prompt
+                </summary>
+                <CodeBlock language="markdown" code={config.softTimeout.prompt} />
+              </details>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -174,6 +174,12 @@ export interface ReportConfig {
   getContextScript: string;
   target: string;
   model: string;
+  softTimeout?: {
+    softTimeoutMs: number;
+    prompt: string;
+    model?: string;
+    effort?: string;
+  };
 }
 
 /**
