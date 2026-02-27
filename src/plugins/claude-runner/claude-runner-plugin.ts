@@ -944,11 +944,27 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     }
   }
 
+  /**
+   * Compute per-attempt token usage by subtracting the snapshot taken at
+   * the start of the attempt from the current cumulative totals.
+   */
+  #getAttemptTokenUsage(snapshot: NonNullable<ClaudeRunnerResult['tokenUsage']>) {
+    return {
+      inputTokens: this.#tokenUsage.inputTokens - snapshot.inputTokens,
+      outputTokens: this.#tokenUsage.outputTokens - snapshot.outputTokens,
+      cacheReadInputTokens: this.#tokenUsage.cacheReadInputTokens - snapshot.cacheReadInputTokens,
+      cacheCreationInputTokens: this.#tokenUsage.cacheCreationInputTokens - snapshot.cacheCreationInputTokens,
+    };
+  }
+
   async execute(context: PipelineContext): Promise<{
     result: PluginResult<ClaudeRunnerResult>;
     context: PipelineContext;
   }> {
     const startTime = Date.now();
+
+    // Snapshot cumulative token usage before this attempt so we can compute the delta
+    const tokenUsageBeforeAttempt = { ...this.#tokenUsage };
 
     // Reset tool call counter for this turn
     this.#toolCallCount = 0;
@@ -1002,7 +1018,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               fromCache,
               generatedCode: '',
               stallDetected: this.#stallDetected,
-              tokenUsage: { ...this.#tokenUsage },
+              tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             },
           },
           context,
@@ -1026,7 +1042,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               promptSent: promptUsed,
               fromCache,
               stallDetected: this.#stallDetected,
-              tokenUsage: { ...this.#tokenUsage },
+              tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             },
           },
           context: { ...context, generatedCode: code },
@@ -1049,7 +1065,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             codeLength: code.length,
             fromCache,
             stallDetected: this.#stallDetected,
-            tokenUsage: { ...this.#tokenUsage },
+            tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
           },
         },
         context: { ...context, generatedCode: code },
@@ -1071,7 +1087,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             fromCache: false,
             generatedCode: '',
             stallDetected: this.#stallDetected,
-            tokenUsage: { ...this.#tokenUsage },
+            tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
           },
         },
         context,

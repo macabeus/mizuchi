@@ -1950,4 +1950,314 @@ mov eax, 0
       expect(result.data?.generatedCode).toContain('funcN1');
     });
   });
+
+  describe('token usage accounting', () => {
+    it('reports per-attempt token usage for a single successful attempt', async () => {
+      const response = '```c\nint foo(void) { return 1; }\n```';
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.tokenUsage).toEqual({
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadInputTokens: 8000,
+        cacheCreationInputTokens: 200,
+      });
+    });
+
+    it('reports per-attempt token usage on retry (not cumulative)', async () => {
+      const response1 = '```c\nint foo(void) { return 1; }\n```';
+      const response2 = '```c\nint foo(void) { return 2; }\n```';
+      const mockFactory = createMockQueryFactory([response1, response2]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      // Attempt 1: succeeds
+      const { result: result1 } = await executeAndAdvance(plugin, context);
+      expect(result1.status).toBe('success');
+      expect(result1.data?.tokenUsage).toEqual({
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadInputTokens: 8000,
+        cacheCreationInputTokens: 200,
+      });
+
+      // Prepare retry
+      const previousAttempts: Array<Partial<PluginResultMap>> = [
+        {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success' as const,
+            durationMs: 100,
+            data: { generatedCode: 'int foo(void) { return 1; }', fromCache: false, stallDetected: false },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'failure' as const,
+            durationMs: 50,
+            error: 'compilation error',
+            output: 'compilation error',
+          },
+        },
+      ];
+      plugin.prepareRetry!(context, previousAttempts);
+
+      // Attempt 2: succeeds
+      const { result: result2 } = await plugin.execute(context);
+      expect(result2.status).toBe('success');
+
+      // Token usage should be per-attempt, not cumulative (100+100=200)
+      expect(result2.data?.tokenUsage).toEqual({
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadInputTokens: 8000,
+        cacheCreationInputTokens: 200,
+      });
+    });
+
+    it('reports zero token usage when attempt times out with no API response', async () => {
+      const cCode = 'int foo(void) { return 1; }';
+      const successResponse = `\`\`\`c\n${cCode}\n\`\`\``;
+
+      // Custom query factory: first call succeeds, second call hangs (simulates timeout)
+      let callCount = 0;
+      const mockFactory = vi.fn((_prompt: string, _options: { model?: string; resume?: string }) => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: normal success
+          return {
+            [Symbol.asyncIterator]: () =>
+              (async function* () {
+                yield {
+                  type: 'system',
+                  subtype: 'init',
+                  session_id: TEST_SESSION_ID,
+                } as SDKMessage;
+                yield {
+                  type: 'assistant',
+                  session_id: TEST_SESSION_ID,
+                  message: { id: 'msg-1', content: [{ type: 'text', text: successResponse }] },
+                } as SDKMessage;
+                yield {
+                  type: 'result',
+                  subtype: 'success',
+                  session_id: TEST_SESSION_ID,
+                  is_error: false,
+                  usage: {
+                    input_tokens: 500,
+                    output_tokens: 200,
+                    cache_read_input_tokens: 10000,
+                    cache_creation_input_tokens: 1000,
+                  },
+                } as unknown as SDKMessage;
+              })(),
+            close: vi.fn(),
+          };
+        }
+
+        // Second call: hangs forever (will be aborted by timeout)
+        // When close() is called, we reject the pending next() so the for-await loop exits.
+        let rejectPending: ((reason?: unknown) => void) | null = null;
+        return {
+          [Symbol.asyncIterator]: () => {
+            const gen = {
+              next: () =>
+                new Promise<IteratorResult<SDKMessage>>((_, reject) => {
+                  rejectPending = reject;
+                }),
+              return: () => Promise.resolve({ done: true as const, value: undefined }),
+              throw: (err: unknown) => Promise.reject(err),
+              [Symbol.asyncIterator]: () => gen,
+            };
+            return gen;
+          },
+          close: vi.fn(() => {
+            // Simulate SDK behavior: rejecting the pending iterator causes the for-await to exit
+            rejectPending?.(new Error('Query closed'));
+          }),
+        };
+      }) as unknown as QueryFactory;
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: { ...defaultPluginConfig, timeoutMs: 100 }, // Short timeout
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      // Attempt 1: succeeds with known token usage
+      const { result: result1 } = await executeAndAdvance(plugin, context);
+      expect(result1.status).toBe('success');
+      expect(result1.data?.tokenUsage).toEqual({
+        inputTokens: 500,
+        outputTokens: 200,
+        cacheReadInputTokens: 10000,
+        cacheCreationInputTokens: 1000,
+      });
+
+      // Prepare retry
+      const previousAttempts: Array<Partial<PluginResultMap>> = [
+        {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success' as const,
+            durationMs: 100,
+            data: { generatedCode: cCode, fromCache: false, stallDetected: false },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'failure' as const,
+            durationMs: 50,
+            error: 'compilation error',
+            output: 'compilation error',
+          },
+        },
+      ];
+      plugin.prepareRetry!(context, previousAttempts);
+
+      // Attempt 2: times out — no SDK response at all
+      const { result: result2 } = await plugin.execute(context);
+      expect(result2.status).toBe('failure');
+      expect(result2.error).toContain('timed out');
+
+      // Token usage must NOT be the same as attempt 1's usage.
+      // Since no API response was received, per-attempt tokens should be zero.
+      expect(result2.data?.tokenUsage).toEqual({
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      });
+    });
+
+    it('reports zero token usage when SDK returns an error (no result message)', async () => {
+      const cCode = 'int foo(void) { return 1; }';
+      const successResponse = `\`\`\`c\n${cCode}\n\`\`\``;
+
+      // Custom query factory: first call succeeds, second call errors without a result message
+      let callCount = 0;
+      const mockFactory = vi.fn((_prompt: string, _options: { model?: string; resume?: string }) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            [Symbol.asyncIterator]: () =>
+              (async function* () {
+                yield {
+                  type: 'system',
+                  subtype: 'init',
+                  session_id: TEST_SESSION_ID,
+                } as SDKMessage;
+                yield {
+                  type: 'assistant',
+                  session_id: TEST_SESSION_ID,
+                  message: { id: 'msg-1', content: [{ type: 'text', text: successResponse }] },
+                } as SDKMessage;
+                yield {
+                  type: 'result',
+                  subtype: 'success',
+                  session_id: TEST_SESSION_ID,
+                  is_error: false,
+                  usage: {
+                    input_tokens: 500,
+                    output_tokens: 200,
+                    cache_read_input_tokens: 10000,
+                    cache_creation_input_tokens: 1000,
+                  },
+                } as unknown as SDKMessage;
+              })(),
+            close: vi.fn(),
+          };
+        }
+
+        // Second call: error result with usage data
+        return {
+          [Symbol.asyncIterator]: () =>
+            (async function* () {
+              yield {
+                type: 'result',
+                subtype: 'error_during_execution',
+                session_id: TEST_SESSION_ID,
+                is_error: true,
+                errors: ['Internal server error'],
+                usage: {
+                  input_tokens: 50,
+                  output_tokens: 0,
+                  cache_read_input_tokens: 5000,
+                  cache_creation_input_tokens: 0,
+                },
+              } as unknown as SDKMessage;
+            })(),
+          close: vi.fn(),
+        };
+      }) as unknown as QueryFactory;
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      // Attempt 1: succeeds
+      const { result: result1 } = await executeAndAdvance(plugin, context);
+      expect(result1.status).toBe('success');
+
+      // Prepare retry
+      plugin.prepareRetry!(context, [
+        {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success' as const,
+            durationMs: 100,
+            data: { generatedCode: cCode, fromCache: false, stallDetected: false },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'failure' as const,
+            durationMs: 50,
+            error: 'compilation error',
+            output: 'compilation error',
+          },
+        },
+      ]);
+
+      // Attempt 2: SDK error with its own usage data
+      const { result: result2 } = await plugin.execute(context);
+      expect(result2.status).toBe('failure');
+
+      // Should report only the tokens from this attempt (the error response had usage data)
+      expect(result2.data?.tokenUsage).toEqual({
+        inputTokens: 50,
+        outputTokens: 0,
+        cacheReadInputTokens: 5000,
+        cacheCreationInputTokens: 0,
+      });
+    });
+  });
 });
