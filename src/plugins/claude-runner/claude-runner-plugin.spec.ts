@@ -2467,6 +2467,119 @@ mov eax, 0
       expect(secondCall[1].resume).toBe(TEST_SESSION_ID);
     });
 
+    it('resumes when close() causes graceful iterator exit instead of throwing', async () => {
+      // This test reproduces the real SDK behaviour: calling close() on a query
+      // causes the async iterator to return {done: true} rather than rejecting.
+      // Without the fix in #runQueryWithAbort, the partial response would be
+      // returned as a normal result with softTimeoutTriggered: false.
+      const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
+      let callCount = 0;
+
+      const mockFactory = vi.fn((_prompt: string, _options: { model?: string; resume?: string }) => {
+        callCount++;
+
+        if (callCount === 1) {
+          // Phase 1: emit system init + partial assistant text, then hang.
+          // On close(), resolve the pending next() with {done: true} (graceful exit).
+          let resolvePending: ((v: IteratorResult<SDKMessage>) => void) | null = null;
+          let yieldedInit = false;
+          let yieldedPartial = false;
+
+          return {
+            [Symbol.asyncIterator]: () => {
+              const gen = {
+                next: () => {
+                  if (!yieldedInit) {
+                    yieldedInit = true;
+                    return Promise.resolve({
+                      done: false as const,
+                      value: { type: 'system', subtype: 'init', session_id: TEST_SESSION_ID } as SDKMessage,
+                    });
+                  }
+                  if (!yieldedPartial) {
+                    yieldedPartial = true;
+                    return Promise.resolve({
+                      done: false as const,
+                      value: {
+                        type: 'assistant',
+                        session_id: TEST_SESSION_ID,
+                        message: {
+                          id: 'msg-partial',
+                          content: [{ type: 'text', text: 'Let me analyze the assembly...' }],
+                        },
+                      } as SDKMessage,
+                    });
+                  }
+                  // Block until close() resolves with done: true (graceful exit)
+                  return new Promise<IteratorResult<SDKMessage>>((resolve) => {
+                    resolvePending = resolve;
+                  });
+                },
+                return: () => Promise.resolve({ done: true as const, value: undefined }),
+                throw: (err: unknown) => Promise.reject(err),
+                [Symbol.asyncIterator]: () => gen,
+              };
+              return gen;
+            },
+            close: vi.fn(() => {
+              // Graceful exit: resolve with done instead of rejecting
+              resolvePending?.({ done: true, value: undefined });
+            }),
+          };
+        }
+
+        // Phase 2: resumed query returns code
+        return {
+          [Symbol.asyncIterator]: () =>
+            (async function* () {
+              yield {
+                type: 'assistant',
+                session_id: TEST_SESSION_ID,
+                message: { id: 'msg-phase2', content: [{ type: 'text', text: phase2Response }] },
+              } as SDKMessage;
+              yield {
+                type: 'result',
+                subtype: 'success',
+                session_id: TEST_SESSION_ID,
+                is_error: false,
+                usage: {
+                  input_tokens: 80,
+                  output_tokens: 30,
+                  cache_read_input_tokens: 4000,
+                  cache_creation_input_tokens: 100,
+                },
+              } as unknown as SDKMessage;
+            })(),
+          close: vi.fn(),
+        };
+      });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          timeoutMs: 500,
+          softTimeout: { softTimeoutMs: 50, prompt: softTimeoutPrompt },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory as unknown as QueryFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.softTimeoutTriggered).toBe(true);
+      expect(result.data?.generatedCode).toBe(cCode);
+
+      // Must have made 2 calls: initial + resumed
+      expect(mockFactory).toHaveBeenCalledTimes(2);
+      const secondCall = mockFactory.mock.calls[1];
+      expect(secondCall[0]).toBe(softTimeoutPrompt);
+      expect(secondCall[1].resume).toBe(TEST_SESSION_ID);
+    });
+
     it('throws full timeout error when phase 1 times out and sessionId is null', async () => {
       const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
       const mockFactory = createSoftTimeoutQueryFactory({ phase2Response, noSessionId: true });

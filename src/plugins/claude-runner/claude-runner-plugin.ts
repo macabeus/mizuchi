@@ -749,7 +749,17 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     this.#externalAbortSignal?.addEventListener('abort', abortAndClose);
 
     try {
-      return await work();
+      const result = await work();
+
+      // The timeout may have fired and closed the query mid-stream,
+      // but the SDK async iterator exits gracefully ({done: true}) rather
+      // than throwing.  Detect this so #runWithSoftTimeout can resume
+      // the conversation with the "submit now" prompt.
+      if (abortController.signal.aborted) {
+        throw new QueryTimeoutError({ timeoutMs: effectiveTimeout, mode: timeoutMode });
+      }
+
+      return result;
     } catch (error) {
       if (this.#externalAbortSignal?.aborted) {
         throw new QueryAbortedError();
