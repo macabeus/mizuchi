@@ -131,13 +131,15 @@ function createMockQueryFactory(options: MockQueryFactoryOptions | string[]): Qu
         subtype: 'success',
         session_id: TEST_SESSION_ID,
         is_error: false,
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 8000,
-          cache_creation_input_tokens: 200,
+        modelUsage: {
+          'claude-sonnet-4-20250514': {
+            inputTokens: 100,
+            outputTokens: 50,
+            cacheReadInputTokens: 8000,
+            cacheCreationInputTokens: 200,
+            costUSD: 0.003,
+          },
         },
-        total_cost_usd: 0.003,
       } as unknown as SDKResultSuccess;
     }
 
@@ -1503,6 +1505,97 @@ mov eax, 0
       expect(statsSection.message).toContain('Output tokens: 50');
       expect(statsSection.message).toContain('Cost: $0.0030');
     });
+
+    it('returns stats section with per-model breakdown when multiple models are used', async () => {
+      const response = '```c\nint foo(void) { return 1; }\n```';
+
+      const mockFactory = vi.fn((_prompt: string, _options: { model?: string; resume?: string }) => {
+        const gen = async function* () {
+          yield {
+            type: 'system',
+            subtype: 'init',
+            session_id: TEST_SESSION_ID,
+          } as SDKMessage;
+          yield {
+            type: 'assistant',
+            session_id: TEST_SESSION_ID,
+            message: { id: 'msg-1', content: [{ type: 'text', text: response }] },
+          } as SDKMessage;
+          yield {
+            type: 'result',
+            subtype: 'success',
+            session_id: TEST_SESSION_ID,
+            is_error: false,
+            modelUsage: {
+              'claude-sonnet-4-6': {
+                inputTokens: 100,
+                outputTokens: 50,
+                cacheReadInputTokens: 8000,
+                cacheCreationInputTokens: 200,
+                costUSD: 0.003,
+              },
+              'claude-haiku-4-5': {
+                inputTokens: 40,
+                outputTokens: 20,
+                cacheReadInputTokens: 3000,
+                cacheCreationInputTokens: 80,
+                costUSD: 0.0005,
+              },
+            },
+          } as unknown as SDKMessage;
+        };
+
+        return {
+          [Symbol.asyncIterator]: () => gen(),
+          close: vi.fn(),
+        } as any;
+      }) as unknown as QueryFactory;
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+      expect(result.data?.tokenUsage).toEqual({
+        'claude-sonnet-4-6': {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 8000,
+          cacheCreationInputTokens: 200,
+          costUsd: 0.003,
+        },
+        'claude-haiku-4-5': {
+          inputTokens: 40,
+          outputTokens: 20,
+          cacheReadInputTokens: 3000,
+          cacheCreationInputTokens: 80,
+          costUsd: 0.0005,
+        },
+      });
+
+      const sections = plugin.getReportSections!(result, context);
+      const statsSection = sections.find((s) => s.type === 'message' && s.title === 'Stats') as PluginReportSection & {
+        type: 'message';
+      };
+      expect(statsSection).toBeDefined();
+
+      // Sonnet section
+      expect(statsSection.message).toContain('**claude-sonnet-4-6**');
+      expect(statsSection.message).toContain('Input tokens: 8300 (100 new, 8000 cache read, 200 cache write)');
+      expect(statsSection.message).toContain('Output tokens: 50');
+      expect(statsSection.message).toContain('Cost: $0.0030');
+
+      // Haiku section
+      expect(statsSection.message).toContain('**claude-haiku-4-5**');
+      expect(statsSection.message).toContain('Input tokens: 3120 (40 new, 3000 cache read, 80 cache write)');
+      expect(statsSection.message).toContain('Output tokens: 20');
+      expect(statsSection.message).toContain('Cost: $0.0005');
+    });
   });
 
   describe('compile_and_view_assembly tool', () => {
@@ -2021,11 +2114,13 @@ mov eax, 0
 
       expect(result.status).toBe('success');
       expect(result.data?.tokenUsage).toEqual({
-        inputTokens: 100,
-        outputTokens: 50,
-        cacheReadInputTokens: 8000,
-        cacheCreationInputTokens: 200,
-        costUsd: 0.003,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 8000,
+          cacheCreationInputTokens: 200,
+          costUsd: 0.003,
+        },
       });
     });
 
@@ -2046,11 +2141,13 @@ mov eax, 0
       const { result: result1 } = await executeAndAdvance(plugin, context);
       expect(result1.status).toBe('success');
       expect(result1.data?.tokenUsage).toEqual({
-        inputTokens: 100,
-        outputTokens: 50,
-        cacheReadInputTokens: 8000,
-        cacheCreationInputTokens: 200,
-        costUsd: 0.003,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 8000,
+          cacheCreationInputTokens: 200,
+          costUsd: 0.003,
+        },
       });
 
       // Prepare retry
@@ -2086,11 +2183,13 @@ mov eax, 0
 
       // Token usage should be per-attempt, not cumulative (100+100=200)
       expect(result2.data?.tokenUsage).toEqual({
-        inputTokens: 100,
-        outputTokens: 50,
-        cacheReadInputTokens: 8000,
-        cacheCreationInputTokens: 200,
-        costUsd: 0.003,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 8000,
+          cacheCreationInputTokens: 200,
+          costUsd: 0.003,
+        },
       });
     });
 
@@ -2114,11 +2213,13 @@ mov eax, 0
       const { result: resultA } = await plugin.execute(contextA);
       expect(resultA.status).toBe('success');
       expect(resultA.data?.tokenUsage).toEqual({
-        inputTokens: 100,
-        outputTokens: 50,
-        cacheReadInputTokens: 8000,
-        cacheCreationInputTokens: 200,
-        costUsd: 0.003,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 8000,
+          cacheCreationInputTokens: 200,
+          costUsd: 0.003,
+        },
       });
 
       // Function B, attempt 1 (new function resets state)
@@ -2129,11 +2230,13 @@ mov eax, 0
 
       // Token usage for function B must be non-negative and reflect only this attempt
       expect(resultB.data?.tokenUsage).toEqual({
-        inputTokens: 100,
-        outputTokens: 50,
-        cacheReadInputTokens: 8000,
-        cacheCreationInputTokens: 200,
-        costUsd: 0.003,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 8000,
+          cacheCreationInputTokens: 200,
+          costUsd: 0.003,
+        },
       });
     });
 
@@ -2165,13 +2268,15 @@ mov eax, 0
                   subtype: 'success',
                   session_id: TEST_SESSION_ID,
                   is_error: false,
-                  usage: {
-                    input_tokens: 500,
-                    output_tokens: 200,
-                    cache_read_input_tokens: 10000,
-                    cache_creation_input_tokens: 1000,
+                  modelUsage: {
+                    'claude-sonnet-4-20250514': {
+                      inputTokens: 500,
+                      outputTokens: 200,
+                      cacheReadInputTokens: 10000,
+                      cacheCreationInputTokens: 1000,
+                      costUSD: 0.015,
+                    },
                   },
-                  total_cost_usd: 0.015,
                 } as unknown as SDKMessage;
               })(),
             close: vi.fn(),
@@ -2214,11 +2319,13 @@ mov eax, 0
       const { result: result1 } = await executeAndAdvance(plugin, context);
       expect(result1.status).toBe('success');
       expect(result1.data?.tokenUsage).toEqual({
-        inputTokens: 500,
-        outputTokens: 200,
-        cacheReadInputTokens: 10000,
-        cacheCreationInputTokens: 1000,
-        costUsd: 0.015,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 500,
+          outputTokens: 200,
+          cacheReadInputTokens: 10000,
+          cacheCreationInputTokens: 1000,
+          costUsd: 0.015,
+        },
       });
 
       // Prepare retry
@@ -2251,11 +2358,13 @@ mov eax, 0
       // Token usage must NOT be the same as attempt 1's usage.
       // Since no API response was received, per-attempt tokens should be zero.
       expect(result2.data?.tokenUsage).toEqual({
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-        costUsd: 0,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          costUsd: 0,
+        },
       });
     });
 
@@ -2286,13 +2395,15 @@ mov eax, 0
                   subtype: 'success',
                   session_id: TEST_SESSION_ID,
                   is_error: false,
-                  usage: {
-                    input_tokens: 500,
-                    output_tokens: 200,
-                    cache_read_input_tokens: 10000,
-                    cache_creation_input_tokens: 1000,
+                  modelUsage: {
+                    'claude-sonnet-4-20250514': {
+                      inputTokens: 500,
+                      outputTokens: 200,
+                      cacheReadInputTokens: 10000,
+                      cacheCreationInputTokens: 1000,
+                      costUSD: 0.015,
+                    },
                   },
-                  total_cost_usd: 0.015,
                 } as unknown as SDKMessage;
               })(),
             close: vi.fn(),
@@ -2309,13 +2420,15 @@ mov eax, 0
                 session_id: TEST_SESSION_ID,
                 is_error: true,
                 errors: ['Internal server error'],
-                usage: {
-                  input_tokens: 50,
-                  output_tokens: 0,
-                  cache_read_input_tokens: 5000,
-                  cache_creation_input_tokens: 0,
+                modelUsage: {
+                  'claude-sonnet-4-20250514': {
+                    inputTokens: 50,
+                    outputTokens: 0,
+                    cacheReadInputTokens: 5000,
+                    cacheCreationInputTokens: 0,
+                    costUSD: 0.001,
+                  },
                 },
-                total_cost_usd: 0.001,
               } as unknown as SDKMessage;
             })(),
           close: vi.fn(),
@@ -2362,11 +2475,13 @@ mov eax, 0
 
       // Should report only the tokens from this attempt (the error response had usage data)
       expect(result2.data?.tokenUsage).toEqual({
-        inputTokens: 50,
-        outputTokens: 0,
-        cacheReadInputTokens: 5000,
-        cacheCreationInputTokens: 0,
-        costUsd: expect.closeTo(0.001, 10),
+        'claude-sonnet-4-20250514': {
+          inputTokens: 50,
+          outputTokens: 0,
+          cacheReadInputTokens: 5000,
+          cacheCreationInputTokens: 0,
+          costUsd: expect.closeTo(0.001, 10),
+        },
       });
     });
   });
@@ -2385,13 +2500,16 @@ mov eax, 0
      */
     function createSoftTimeoutQueryFactory(options: {
       phase2Response: string;
-      phase2Usage?: {
-        input_tokens: number;
-        output_tokens: number;
-        cache_read_input_tokens: number;
-        cache_creation_input_tokens: number;
-      };
-      phase2CostUsd?: number;
+      phase2ModelUsage?: Record<
+        string,
+        {
+          inputTokens: number;
+          outputTokens: number;
+          cacheReadInputTokens: number;
+          cacheCreationInputTokens: number;
+          costUSD: number;
+        }
+      >;
       /** If true, phase 1 does NOT emit a system init message (no sessionId) */
       noSessionId?: boolean;
     }) {
@@ -2437,11 +2555,14 @@ mov eax, 0
         }
 
         // Phase 2: resumed query returns response immediately
-        const usage = options.phase2Usage ?? {
-          input_tokens: 80,
-          output_tokens: 30,
-          cache_read_input_tokens: 4000,
-          cache_creation_input_tokens: 100,
+        const modelUsage = options.phase2ModelUsage ?? {
+          'claude-sonnet-4-20250514': {
+            inputTokens: 80,
+            outputTokens: 30,
+            cacheReadInputTokens: 4000,
+            cacheCreationInputTokens: 100,
+            costUSD: 0.002,
+          },
         };
 
         return {
@@ -2460,8 +2581,7 @@ mov eax, 0
                 subtype: 'success',
                 session_id: TEST_SESSION_ID,
                 is_error: false,
-                usage,
-                total_cost_usd: options.phase2CostUsd ?? 0.002,
+                modelUsage,
               } as unknown as SDKMessage;
             })(),
           close: vi.fn(),
@@ -2598,11 +2718,14 @@ mov eax, 0
                 subtype: 'success',
                 session_id: TEST_SESSION_ID,
                 is_error: false,
-                usage: {
-                  input_tokens: 80,
-                  output_tokens: 30,
-                  cache_read_input_tokens: 4000,
-                  cache_creation_input_tokens: 100,
+                modelUsage: {
+                  'claude-sonnet-4-20250514': {
+                    inputTokens: 80,
+                    outputTokens: 30,
+                    cacheReadInputTokens: 4000,
+                    cacheCreationInputTokens: 100,
+                    costUSD: 0.002,
+                  },
                 },
               } as unknown as SDKMessage;
             })(),
@@ -2726,11 +2849,14 @@ mov eax, 0
       const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
       const mockFactory = createSoftTimeoutQueryFactory({
         phase2Response,
-        phase2Usage: {
-          input_tokens: 200,
-          output_tokens: 100,
-          cache_read_input_tokens: 6000,
-          cache_creation_input_tokens: 300,
+        phase2ModelUsage: {
+          'claude-sonnet-4-20250514': {
+            inputTokens: 200,
+            outputTokens: 100,
+            cacheReadInputTokens: 6000,
+            cacheCreationInputTokens: 300,
+            costUSD: 0.002,
+          },
         },
       });
 
@@ -2754,11 +2880,13 @@ mov eax, 0
 
       // Phase 1 produced no result message (timed out before it), so tokens come from phase 2 only
       expect(result.data?.tokenUsage).toEqual({
-        inputTokens: 200,
-        outputTokens: 100,
-        cacheReadInputTokens: 6000,
-        cacheCreationInputTokens: 300,
-        costUsd: 0.002,
+        'claude-sonnet-4-20250514': {
+          inputTokens: 200,
+          outputTokens: 100,
+          cacheReadInputTokens: 6000,
+          cacheCreationInputTokens: 300,
+          costUsd: 0.002,
+        },
       });
     });
 
@@ -2794,11 +2922,14 @@ mov eax, 0
                   subtype: 'success',
                   session_id: TEST_SESSION_ID,
                   is_error: false,
-                  usage: {
-                    input_tokens: 100,
-                    output_tokens: 50,
-                    cache_read_input_tokens: 8000,
-                    cache_creation_input_tokens: 200,
+                  modelUsage: {
+                    'claude-sonnet-4-20250514': {
+                      inputTokens: 100,
+                      outputTokens: 50,
+                      cacheReadInputTokens: 8000,
+                      cacheCreationInputTokens: 200,
+                      costUSD: 0.003,
+                    },
                   },
                 } as unknown as SDKMessage;
               })(),
@@ -2843,11 +2974,14 @@ mov eax, 0
                 subtype: 'success',
                 session_id: TEST_SESSION_ID,
                 is_error: false,
-                usage: {
-                  input_tokens: 80,
-                  output_tokens: 30,
-                  cache_read_input_tokens: 4000,
-                  cache_creation_input_tokens: 100,
+                modelUsage: {
+                  'claude-sonnet-4-20250514': {
+                    inputTokens: 80,
+                    outputTokens: 30,
+                    cacheReadInputTokens: 4000,
+                    cacheCreationInputTokens: 100,
+                    costUSD: 0.002,
+                  },
                 },
               } as unknown as SDKMessage;
             })(),

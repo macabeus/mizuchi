@@ -73,13 +73,16 @@ interface SDKMessage {
   subtype?: string;
   errors?: string[];
   error?: SDKAssistantMessageError;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    cache_read_input_tokens?: number;
-    cache_creation_input_tokens?: number;
-  };
-  total_cost_usd?: number;
+  modelUsage?: Record<
+    string,
+    {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+      costUSD: number;
+    }
+  >;
 }
 
 /**
@@ -354,6 +357,16 @@ function validateCCode(code: string): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
+export type ModelTokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  costUsd: number;
+};
+
+export type TokenUsageMap = { [model: string]: ModelTokenUsage };
+
 /**
  * Claude Runner Plugin result data
  */
@@ -365,13 +378,7 @@ export interface ClaudeRunnerResult {
   fromCache: boolean;
   stallDetected: boolean;
   softTimeoutTriggered: boolean;
-  tokenUsage?: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadInputTokens: number;
-    cacheCreationInputTokens: number;
-    costUsd: number;
-  };
+  tokenUsage?: TokenUsageMap;
 }
 
 /**
@@ -410,8 +417,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   // Tool call counter (resets each retry iteration)
   #toolCallCount = 0;
 
-  // Cumulative token usage across all queries for this pipeline run
-  #tokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUsd: 0 };
+  // Cumulative token usage across all queries for this pipeline run, keyed by model
+  #tokenUsage: TokenUsageMap = {};
 
   // External abort signal (e.g., from background permuter success)
   #externalAbortSignal?: AbortSignal;
@@ -702,14 +709,23 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           }
         }
       } else if (msg.type === 'result') {
-        // Accumulate token usage from result messages
-        if (msg.usage) {
-          this.#tokenUsage.inputTokens += msg.usage.input_tokens;
-          this.#tokenUsage.outputTokens += msg.usage.output_tokens;
-          this.#tokenUsage.cacheReadInputTokens += msg.usage.cache_read_input_tokens ?? 0;
-          this.#tokenUsage.cacheCreationInputTokens += msg.usage.cache_creation_input_tokens ?? 0;
+        // Accumulate token usage from modelUsage (cumulative across all API roundtrips)
+        if (msg.modelUsage) {
+          for (const [model, mu] of Object.entries(msg.modelUsage)) {
+            const entry = (this.#tokenUsage[model] ??= {
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              costUsd: 0,
+            });
+            entry.inputTokens += mu.inputTokens;
+            entry.outputTokens += mu.outputTokens;
+            entry.cacheReadInputTokens += mu.cacheReadInputTokens;
+            entry.cacheCreationInputTokens += mu.cacheCreationInputTokens;
+            entry.costUsd += mu.costUSD;
+          }
         }
-        this.#tokenUsage.costUsd += msg.total_cost_usd ?? 0;
 
         if (msg.subtype && msg.subtype !== 'success') {
           const errors = msg.errors ? msg.errors.join(', ') : 'Unknown error';
@@ -1076,14 +1092,23 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
    * Compute per-attempt token usage by subtracting the snapshot taken at
    * the start of the attempt from the current cumulative totals.
    */
-  #getAttemptTokenUsage(snapshot: NonNullable<ClaudeRunnerResult['tokenUsage']>) {
-    return {
-      inputTokens: this.#tokenUsage.inputTokens - snapshot.inputTokens,
-      outputTokens: this.#tokenUsage.outputTokens - snapshot.outputTokens,
-      cacheReadInputTokens: this.#tokenUsage.cacheReadInputTokens - snapshot.cacheReadInputTokens,
-      cacheCreationInputTokens: this.#tokenUsage.cacheCreationInputTokens - snapshot.cacheCreationInputTokens,
-      costUsd: this.#tokenUsage.costUsd - snapshot.costUsd,
-    };
+  #getAttemptTokenUsage(snapshot: TokenUsageMap): TokenUsageMap {
+    const result: TokenUsageMap = {};
+    for (const [model, current] of Object.entries(this.#tokenUsage)) {
+      const prev = snapshot[model];
+      if (!prev) {
+        result[model] = { ...current };
+      } else {
+        result[model] = {
+          inputTokens: current.inputTokens - prev.inputTokens,
+          outputTokens: current.outputTokens - prev.outputTokens,
+          cacheReadInputTokens: current.cacheReadInputTokens - prev.cacheReadInputTokens,
+          cacheCreationInputTokens: current.cacheCreationInputTokens - prev.cacheCreationInputTokens,
+          costUsd: current.costUsd - prev.costUsd,
+        };
+      }
+    }
+    return result;
   }
 
   async execute(context: PipelineContext): Promise<{
@@ -1097,17 +1122,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     // before/after delta calculations must be zeroed here to avoid stale
     // cross-function data leaking into the snapshot.
     if (context.attemptNumber === 1) {
-      this.#tokenUsage = {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-        costUsd: 0,
-      };
+      this.#tokenUsage = {};
     }
 
     // Snapshot cumulative token usage before this attempt so we can compute the delta
-    const tokenUsageBeforeAttempt = { ...this.#tokenUsage };
+    const tokenUsageBeforeAttempt = Object.fromEntries(
+      Object.entries(this.#tokenUsage).map(([model, usage]) => [model, { ...usage }]),
+    );
 
     // Reset tool call counter for this turn
     this.#toolCallCount = 0;
@@ -1346,17 +1367,20 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
     // Add stats section with token usage
     if (result.data?.tokenUsage) {
-      const { inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, costUsd } =
-        result.data.tokenUsage;
-      const totalInputTokens = inputTokens + cacheReadInputTokens + cacheCreationInputTokens;
+      const lines: string[] = [];
+      for (const [model, usage] of Object.entries(result.data.tokenUsage)) {
+        const totalInputTokens = usage.inputTokens + usage.cacheReadInputTokens + usage.cacheCreationInputTokens;
+        lines.push(
+          `**${model}**`,
+          `  Input tokens: ${totalInputTokens} (${usage.inputTokens} new, ${usage.cacheReadInputTokens} cache read, ${usage.cacheCreationInputTokens} cache write)`,
+          `  Output tokens: ${usage.outputTokens}`,
+          `  Cost: $${usage.costUsd.toFixed(4)}`,
+        );
+      }
       sections.push({
         type: 'message',
         title: 'Stats',
-        message: [
-          `Input tokens: ${totalInputTokens} (${inputTokens} new, ${cacheReadInputTokens} cache read, ${cacheCreationInputTokens} cache write)`,
-          `Output tokens: ${outputTokens}`,
-          `Cost: $${costUsd.toFixed(4)}`,
-        ].join('\n'),
+        message: lines.join('\n'),
       });
     }
 
