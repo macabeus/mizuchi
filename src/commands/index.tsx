@@ -40,6 +40,7 @@ import type { CliPrompt, CliPromptChoice } from '~/shared/cli-prompt.js';
 import { PipelineConfig } from '~/shared/config';
 import { Objdiff } from '~/shared/objdiff.js';
 import type { PipelineEvent, PluginInfo } from '~/shared/pipeline-events.js';
+import { installSdkErrorHandlers } from '~/shared/sdk-error-handlers.js';
 import type { PipelineResults } from '~/shared/types.js';
 
 export const options = z.object({
@@ -650,19 +651,7 @@ async function runPipeline(
   setState: React.Dispatch<React.SetStateAction<ProgressState>>,
   cliPrompt: CliPrompt,
 ): Promise<void> {
-  // Work around a race condition in the Claude Agent SDK where
-  // handleControlRequest (called without await) tries to write to a
-  // closed transport after the Claude Code subprocess exits, producing
-  // an unhandled promise rejection that crashes Node.js.
-  // See https://github.com/anthropics/claude-agent-sdk-typescript/issues/148
-  process.on('unhandledRejection', (reason: unknown) => {
-    if (reason instanceof Error && reason.message === 'ProcessTransport is not ready for writing') {
-      return;
-    }
-    // Preserve default crash behavior for any other unhandled rejection
-    // (throw inside this handler triggers uncaughtException → process exits)
-    throw reason;
-  });
+  installSdkErrorHandlers();
 
   let claudePlugin: ClaudeRunnerPlugin | undefined;
   let compilerPlugin: CompilerPlugin | undefined;
