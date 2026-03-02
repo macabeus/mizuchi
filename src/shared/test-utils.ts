@@ -19,6 +19,7 @@ export const defaultTestPipelineConfig: PipelineConfig = {
   projectPath: '/test/project',
   target: 'gba',
   mapFilePath: '/test/project/mapfile.map',
+  nonMatchingAsmFolders: [],
 };
 
 /**

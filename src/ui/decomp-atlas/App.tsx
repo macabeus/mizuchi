@@ -1,12 +1,12 @@
-import { KappaDb } from '@shared/kappa-db/kappa-db';
+import { MizuchiDb } from '@shared/mizuchi-db/mizuchi-db';
 import { useEffect, useState } from 'react';
 
-import { KappaDbProvider } from './KappaDbContext';
+import { MizuchiDbProvider } from './MizuchiDbContext';
 import { apiClient } from './api-client';
 import { Main } from './components/Main';
 
 export function App() {
-  const [db, setDb] = useState<KappaDb | null>(null);
+  const [db, setDb] = useState<MizuchiDb | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,7 +28,7 @@ export function App() {
           return;
         }
 
-        setDb(KappaDb.fromDump(json.data, json.platform));
+        setDb(MizuchiDb.fromDump(json.data));
       } catch (err) {
         setError(`Failed to load project: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -70,8 +70,8 @@ export function App() {
   const projectName = window.__MIZUCHI_CONFIG__?.projectPath.split(/[\\/]/).pop() || 'Unknown Project';
 
   return (
-    <KappaDbProvider db={db}>
+    <MizuchiDbProvider db={db}>
       <Main projectName={projectName} />
-    </KappaDbProvider>
+    </MizuchiDbProvider>
   );
 }

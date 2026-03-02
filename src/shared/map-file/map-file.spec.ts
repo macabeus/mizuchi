@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { parseMapFile } from './map-file.js';
+import { parseMapFile, resolveObjectPathFromSourceFile } from './map-file.js';
 
 describe('parseMapFile', () => {
   it('parses SA3-style map with ARM symbols', () => {
@@ -82,5 +85,40 @@ describe('parseMapFile', () => {
     // stray_symbol after *fill* should NOT be associated with first.o
     expect(result.has('stray_symbol')).toBe(false);
     expect(result.get('second_func')).toBe('asm/second.o');
+  });
+});
+
+describe('resolveObjectPathFromSourceFile', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mizuchi-test-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('resolves .c to .o in the same directory', async () => {
+    // Create src/core.o alongside src/core.c
+    await fs.mkdir(path.join(tmpDir, 'src'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, 'src', 'core.o'), '');
+
+    const result = await resolveObjectPathFromSourceFile('src/core.c', tmpDir);
+    expect(result).toBe(path.join(tmpDir, 'src', 'core.o'));
+  });
+
+  it('resolves .c to .o under build/ directory', async () => {
+    // Create build/src/core.o (no src/core.o alongside source)
+    await fs.mkdir(path.join(tmpDir, 'build', 'src'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, 'build', 'src', 'core.o'), '');
+
+    const result = await resolveObjectPathFromSourceFile('src/core.c', tmpDir);
+    expect(result).toBe(path.join(tmpDir, 'build', 'src', 'core.o'));
+  });
+
+  it('returns null when no .o file is found', async () => {
+    const result = await resolveObjectPathFromSourceFile('src/missing.c', tmpDir);
+    expect(result).toBeNull();
   });
 });

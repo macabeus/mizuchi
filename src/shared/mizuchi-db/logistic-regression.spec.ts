@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DecompFunctionDoc } from './kappa-db';
 import { type DifficultyModel, applyDifficultyModel, trainDifficultyModel } from './logistic-regression';
+import type { DecompFunctionDoc } from './mizuchi-db';
 
 function makeFn(id: string, asmCode: string, cCode?: string): DecompFunctionDoc {
   return {

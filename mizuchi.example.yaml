@@ -56,6 +56,11 @@ global:
   # Supported values: gba, nds, n3ds, n64, gc, wii, ps1, ps2, psp, win32, switch, android_x86, irix, saturn, dreamcast
   target: gba
 
+  # Directories containing non-matching assembly files (relative to projectPath)
+  # Used by the `index-codebase` command to discover undecompiled functions
+  nonMatchingAsmFolders:
+    - asm
+
 # Plugin-specific configurations
 # Each plugin receives only its own section along with the global config
 plugins:
@@ -208,6 +213,8 @@ plugins:
 #       -O2 -G0 -mips2 \
 #       -c "{{cFilePath}}" -o "{{objFilePath}}"
 #   target: n64
+#   nonMatchingAsmFolders:
+#     - asm/nonmatchfuncs
 #
 # plugins:
 #   objdiff:

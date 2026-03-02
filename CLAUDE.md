@@ -21,11 +21,11 @@ npm run build:decomp-atlas     # Build the Decomp Atlas UI
 npm run build:ui               # Build all UIs
 
 # Run the pipeline
-npm start                      # Uses mizuchi.yaml in current directory
-npm start -- -c path/to/config.yaml
+npm start -- run               # Uses mizuchi.yaml in current directory
+npm start -- run -c path/to/config.yaml
 
 # Development
-npm run dev                    # Run CLI directly with tsx
+npm run dev -- run             # Run pipeline directly with tsx
 npm run dev:run-report -- ./run-results-*.json  # Run Run Report dev server
 npm run dev:decomp-atlas       # Run Decomp Atlas dev server
 
@@ -56,16 +56,16 @@ The pipeline generates HTML reports automatically using this UI via `src/report-
 
 ### Decomp Atlas UI (`src/ui/decomp-atlas/`)
 
-Loads a `kappa-db.json` file (exported from the Kappa VS Code extension) and visualizes the decompilation project state:
+Loads a `mizuchi-db.json` file and visualizes the decompilation project state:
 
 - **Embeddings scatter chart** — UMAP dimensionality reduction of function embeddings, rendered with Apache ECharts (canvas renderer for 14k+ points, native wheel zoom + drag pan via `dataZoom`). Points colored by decompilation status (pink = has C code, white = assembly only).
 - **File tree sidebar** — browse and filter functions by source path
-- **Vector similarity** — `KappaDb` class (`src/shared/kappa-db.ts`) provides brute-force cosine similarity search over normalized embeddings
+- **Vector similarity** — `MizuchiDb` class (`src/shared/mizuchi-db/mizuchi-db.ts`) provides brute-force cosine similarity search over normalized embeddings
 
 Usage:
 
 - **Build**: `npm run build:decomp-atlas` — produces a standalone `index.html`
-- **Dev**: `npm run dev:decomp-atlas` — starts a Vite dev server on port 5173; drag-and-drop a `kappa-db.json` file to explore
+- **Dev**: `npm run dev:decomp-atlas` — starts a Vite dev server on port 5173; drag-and-drop a `mizuchi-db.json` file to explore
 
 ## Architecture
 
@@ -98,7 +98,7 @@ Each plugin implements the `Plugin<T>` interface from `src/shared/types.ts`:
 
 - **ObjdiffService** (`src/shared/objdiff/`) - Singleton service for objdiff-wasm operations (parsing object files, extracting assembly, comparing symbols). Used by both ObjdiffPlugin and the Claude Runner's MCP tool.
 - **CCompiler** (`src/shared/c-compiler/`) - Executes a shell script template (`compilerScript`) to compile C code to object files
-- **KappaDb** (`src/shared/kappa-db.ts`) - Pure TypeScript loader for `kappa-db.json` dumps with brute-force vector similarity search
+- **MizuchiDb** (`src/shared/mizuchi-db/mizuchi-db.ts`) - Pure TypeScript loader for `mizuchi-db.json` dumps with brute-force vector similarity search
 
 ### Configuration
 

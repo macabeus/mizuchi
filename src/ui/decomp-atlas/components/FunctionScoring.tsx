@@ -1,6 +1,6 @@
-import type { AsmMetrics } from '@shared/kappa-db/asm-metrics';
-import type { DecompFunctionDoc } from '@shared/kappa-db/kappa-db';
-import type { DifficultyModel, DifficultyTier } from '@shared/kappa-db/logistic-regression';
+import type { AsmMetrics } from '@shared/mizuchi-db/asm-metrics';
+import type { DifficultyModel, DifficultyTier } from '@shared/mizuchi-db/logistic-regression';
+import type { DecompFunctionDoc } from '@shared/mizuchi-db/mizuchi-db';
 import { CollapsiblePanel } from '@ui-shared/components/CollapsiblePanel';
 import type { Column } from '@ui-shared/components/Table';
 import { Table } from '@ui-shared/components/Table';
@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 
 import { isArmPlatform } from '~/shared/config';
 
-import { useKappaDb } from '../KappaDbContext';
+import { useMizuchiDb } from '../MizuchiDbContext';
 
 interface FunctionScoringProps {
   selectedFunctionId: string | null;
@@ -95,7 +95,7 @@ type FunctionRow = {
 };
 
 export function FunctionScoring({ selectedFunctionId, onFunctionSelect }: FunctionScoringProps) {
-  const db = useKappaDb();
+  const db = useMizuchiDb();
   const scores = useMemo(() => db.getDifficultyScores(), [db]);
   const { tiers, thresholds } = useMemo(() => db.getDifficultyTiers(), [db]);
   const model = useMemo(() => db.difficultyModel, [db]);

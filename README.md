@@ -98,7 +98,7 @@ See the [Prompt Folder Structure](#prompt-folder-structure) section for details.
 3. **Run the pipelines**:
 
 ```bash
-npm start
+npm start -- run
 ```
 
 ## Prompt Folder Structure
@@ -206,12 +206,60 @@ Decomp Atlas is a web UI for exploring your decompilation project and target the
 npm run build && npm run build:decomp-atlas
 
 # Start the Decomp Atlas server
-npm start -- atlas -c mizuchi.yaml
+npm start -- atlas --config mizuchi.yaml
 ```
 
 The server reads your `mizuchi.yaml` config and serves the Decomp Atlas UI at `http://localhost:3000`.
 
-> Note: Your project must have a `kappa-db.json` file in the root directory for the Decomp Atlas to work. This file is exported from the [Kappa](https://github.com/macabeus/kappa) VS Code extension.
+> Note: Your project must have a `mizuchi-db.json` file in the root directory for the Decomp Atlas to work. Generate it with `mizuchi index-codebase` (see below).
+
+### Indexing Your Codebase
+
+The `index-codebase` command scans your decompilation project and generates a `mizuchi-db.json` file containing all discovered functions, their assembly, C source (if decompiled), call graphs, and vector embeddings.
+
+**1. Configure your `mizuchi.yaml`:**
+
+Add `nonMatchingAsmFolders` to the `global` section listing directories that contain non-matching assembly files (relative to `projectPath`):
+
+```yaml
+global:
+  projectPath: /path/to/decomp/project
+  mapFilePath: /path/to/project.map
+  target: gba # or n64, ps1, etc.
+  nonMatchingAsmFolders:
+    - asm/non_matching
+    - asm
+```
+
+**2. Run the indexer:**
+
+```bash
+# Build first (if not already done)
+npm run build
+
+# Index the codebase
+npm start -- index-codebase --config mizuchi.yaml
+
+# Or in development mode
+npm run dev -- index-codebase --config mizuchi.yaml
+```
+
+The indexer performs three phases:
+
+1. **Scan matched functions** — finds C function definitions via ast-grep, resolves each to its compiled `.o` file using the map file, and extracts assembly via objdiff
+2. **Scan unmatched functions** — reads `.s`/`.S`/`.asm` files from `nonMatchingAsmFolders` and parses function boundaries
+3. **Compute embeddings** — generates vector embeddings using [jina-embeddings-v2-base-code](https://huggingface.co/jinaai/jina-embeddings-v2-base-code) via a Python subprocess with MPS GPU acceleration (Apple Silicon) or CPU fallback
+
+**Options:**
+
+| Flag                    | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `-c, --config`          | Path to `mizuchi.yaml` (defaults to `./mizuchi.yaml`)    |
+| `-s, --skip-embeddings` | Skip embedding generation (useful for quick re-indexing) |
+
+**Incremental indexing:** Re-running the command only recomputes embeddings for new or changed functions. Unchanged functions preserve their existing embeddings.
+
+**Python requirements for embeddings:** Python 3.10+ is required. On first run, the indexer automatically creates a virtual environment at `~/.cache/mizuchi/python-venv/` and installs `torch` and `transformers` (~2-3 GB). The model weights are cached at `~/.cache/huggingface/`. Use `--skip-embeddings` to skip this entirely.
 
 ## Development
 
@@ -234,12 +282,12 @@ npm run lint
 # Format code
 npm run format
 
-# Run in development mode
-npm run dev
+# Run the pipeline in development mode
+npm run dev -- run
 
 # Run the Run Report UI in development mode
 npm run dev:run-report -- ./run-results-[timestamp].json
 
 # Run the Decomp Atlas API and UI in development mode
-npm run dev:decomp-atlas -- -c mizuchi.yaml
+npm run dev:decomp-atlas -- --config mizuchi.yaml
 ```

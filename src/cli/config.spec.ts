@@ -61,6 +61,8 @@ global:
   promptsDir: "/custom/prompts"
   projectPath: "/decomp/myproject"
   mapFilePath: "/decomp/myproject/build/myproject.map"
+  nonMatchingAsmFolders:
+    - asm
 `;
       await fs.writeFile(configPath, configContent);
 
@@ -81,6 +83,8 @@ global:
   promptsDir: "/custom/prompts"
   projectPath: "/decomp/myproject"
   mapFilePath: "/decomp/myproject/build/myproject.map"
+  nonMatchingAsmFolders:
+    - asm
 `;
       await fs.writeFile(configPath, configContent);
 
@@ -104,6 +108,7 @@ global:
           projectPath: '/decomp/myproject',
           target: 'gba',
           mapFilePath: '/decomp/myproject/build/myproject.map',
+          nonMatchingAsmFolders: [],
         },
         plugins: {},
       };
@@ -126,6 +131,7 @@ global:
           projectPath: '/decomp/myproject',
           target: 'gba',
           mapFilePath: '/decomp/myproject/build/myproject.map',
+          nonMatchingAsmFolders: [],
         },
         plugins: {},
       };

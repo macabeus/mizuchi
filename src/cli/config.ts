@@ -61,7 +61,13 @@ export function getDefaultConfig(): PipelineConfig {
   const schema = createPipelineConfigSchema(projectRoot);
 
   // Parse an object with required fields to get all defaults
-  return schema.parse({ getContextScript: '', compilerScript: '', projectPath: '', mapFilePath: '' });
+  return schema.parse({
+    getContextScript: '',
+    compilerScript: '',
+    projectPath: '',
+    mapFilePath: '',
+    nonMatchingAsmFolders: [],
+  });
 }
 
 /**
@@ -99,6 +105,7 @@ export function buildPipelineConfig(
     projectPath: fileConfig.global?.projectPath ?? defaults.projectPath,
     mapFilePath: fileConfig.global?.mapFilePath ?? defaults.mapFilePath,
     target: fileConfig.global?.target ?? defaults.target,
+    nonMatchingAsmFolders: fileConfig.global?.nonMatchingAsmFolders ?? defaults.nonMatchingAsmFolders,
   };
 
   return pipelineConfig;

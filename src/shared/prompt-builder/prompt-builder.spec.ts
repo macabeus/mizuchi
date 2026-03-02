@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { KappaDb, KappaDbDump } from '~/shared/kappa-db/kappa-db.js';
+import { MIZUCHI_DB_VERSION, MizuchiDb, MizuchiDbDump } from '~/shared/mizuchi-db/mizuchi-db.js';
 
 import { craftPrompt } from './craft-prompt.js';
 import { createDecompilePrompt } from './prompt-builder.js';
@@ -173,8 +173,11 @@ describe('createDecompilePrompt', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  function createTestDb(overrides: Partial<KappaDbDump> = {}): KappaDb {
-    const dump: KappaDbDump = {
+  function createTestDb(overrides: Partial<MizuchiDbDump> = {}): MizuchiDb {
+    const dump: MizuchiDbDump = {
+      version: MIZUCHI_DB_VERSION,
+      platform: 'gba',
+      indexMetadata: {},
       decompFunctions: [
         {
           id: 'id:TargetFunc',
@@ -208,7 +211,7 @@ describe('createDecompilePrompt', () => {
       ...overrides,
     };
 
-    return KappaDb.fromDump(dump, 'gba');
+    return MizuchiDb.fromDump(dump);
   }
 
   it('generates a prompt for a target function', async () => {

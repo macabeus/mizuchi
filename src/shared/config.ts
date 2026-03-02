@@ -52,6 +52,9 @@ export const pipelineConfigSchema = z.object({
   projectPath: z.string().describe('Path to the decomp project root'),
   mapFilePath: z.string().describe('Path to GNU ld map file for resolving function → object file'),
   target: z.enum(platformTargets).default('gba'),
+  nonMatchingAsmFolders: z
+    .array(z.string())
+    .describe('Directories containing non-matching assembly files (relative to projectPath)'),
 });
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;

@@ -1,8 +1,8 @@
-import type { DecompFunctionDoc, KappaDb } from '@shared/kappa-db/kappa-db';
+import type { DecompFunctionDoc, MizuchiDb } from '@shared/mizuchi-db/mizuchi-db';
 import { Icon } from '@ui-shared/components/Icon';
 import { useMemo, useState } from 'react';
 
-import { useKappaDb } from '../KappaDbContext';
+import { useMizuchiDb } from '../MizuchiDbContext';
 
 interface SidebarProps {
   selectedPath: string | null;
@@ -21,7 +21,7 @@ interface TreeNode {
   functions: DecompFunctionDoc[];
 }
 
-function buildFileTree(db: KappaDb): TreeNode {
+function buildFileTree(db: MizuchiDb): TreeNode {
   const root: TreeNode = {
     name: '',
     path: '',
@@ -183,7 +183,7 @@ function TreeNodeComponent({
 }
 
 export function Sidebar({ selectedPath, onPathSelect, selectedFunctionId, onFunctionSelect }: SidebarProps) {
-  const db = useKappaDb();
+  const db = useMizuchiDb();
   const tree = useMemo(() => buildFileTree(db), [db]);
   const sortedChildren = useMemo(
     () =>

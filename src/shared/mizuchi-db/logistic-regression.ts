@@ -1,6 +1,6 @@
 // Logistic regression for estimating decompilation difficulty.
 //
-// Trains a binary classifier on each loaded kappa-db dataset using assembly
+// Trains a binary classifier on each loaded mizuchi-db dataset using assembly
 // metrics (instruction count, branch count, label count) as features. Functions
 // that already have C code are labeled 0 (presumably easier), functions without
 // are labeled 1 (presumably harder). The model learns per-dataset coefficients
@@ -13,7 +13,7 @@
 import { PlatformTarget } from '~/shared/config';
 
 import { type AsmMetrics, countAsmMetrics } from './asm-metrics';
-import type { DecompFunctionDoc } from './kappa-db';
+import type { DecompFunctionDoc } from './mizuchi-db';
 
 export interface DifficultyModel {
   means: [number, number, number];

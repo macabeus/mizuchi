@@ -3,7 +3,7 @@ import type { IconName } from '@ui-shared/components/Icon';
 import { Tabs } from '@ui-shared/components/Tabs';
 import { useCallback, useState } from 'react';
 
-import { useKappaDb } from '../KappaDbContext';
+import { useMizuchiDb } from '../MizuchiDbContext';
 import { FunctionDetails } from './FunctionDetails';
 import { FunctionScoring } from './FunctionScoring';
 import { PromptBuilder } from './PromptBuilder';
@@ -21,7 +21,7 @@ interface MainProps {
 }
 
 export function Main({ projectName }: MainProps) {
-  const db = useKappaDb();
+  const db = useMizuchiDb();
   const stats = db.getStats();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedFunctionId, setSelectedFunctionId] = useState<string | null>(null);
