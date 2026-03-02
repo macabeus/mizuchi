@@ -8,8 +8,8 @@ import YAML from 'yaml';
 import { z } from 'zod';
 
 import type { ConfigFile } from '~/shared/config.js';
-import { KappaDb, type KappaDbDump } from '~/shared/kappa-db/kappa-db.js';
-import { parseMapFile } from '~/shared/map-file/map-file.js';
+import { parseMapFile, resolveObjectPath } from '~/shared/map-file/map-file.js';
+import { MizuchiDb, type MizuchiDbDump } from '~/shared/mizuchi-db/mizuchi-db.js';
 import { stripTrailingAsmLines } from '~/shared/prompt-builder/craft-prompt.js';
 import { createDecompilePrompt } from '~/shared/prompt-builder/prompt-builder.js';
 import type { PromptSettings } from '~/shared/prompt-builder/prompt-settings.js';
@@ -17,45 +17,9 @@ import type { PromptSettings } from '~/shared/prompt-builder/prompt-settings.js'
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Resolve a function name to an absolute object file path using the symbol map.
- *
- * The map file paths are relative to the linker's working directory, which may
- * differ from the project root. We try the direct path first (works for AF-style
- * projects), then glob under `<projectPath>/build/` for the .o filename (handles
- * SA3-style where the linker runs from a build subdirectory).
- */
-async function resolveObjectPath(
-  functionName: string,
-  projectPath: string,
-  symbolMap: Map<string, string>,
-): Promise<string | null> {
-  const relativePath = symbolMap.get(functionName);
-  if (!relativePath) {
-    return null;
-  }
-
-  // Try direct join (works when map paths are relative to project root)
-  const directPath = path.join(projectPath, relativePath);
-  try {
-    await fs.access(directPath);
-    return directPath;
-  } catch {
-    // Not found at direct path — try globbing under build/
-  }
-
-  const fileName = path.basename(relativePath);
-  const buildDir = path.join(projectPath, 'build');
-  for await (const match of fs.glob(`**/${fileName}`, { cwd: buildDir })) {
-    return path.join(buildDir, match);
-  }
-
-  return null;
-}
-
 export function createAtlasServer({ fileConfig, configPath }: { fileConfig: ConfigFile; configPath: string }) {
   // Cached state after load-project
-  let cachedDb: KappaDb | null = null;
+  let cachedDb: MizuchiDb | null = null;
   let cachedProjectPath: string | null = null;
   let cachedSymbolMap: Map<string, string> | null = null;
 
@@ -68,17 +32,17 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
     .post('/api/loadProject', zValidator('json', z.object({ projectPath: z.string() })), async (c) => {
       const { projectPath } = c.req.valid('json');
 
-      const kappaDbPath = path.join(projectPath, 'kappa-db.json');
+      const mizuchiDbPath = path.join(projectPath, 'mizuchi-db.json');
 
       let raw: string;
       try {
-        raw = await fs.readFile(kappaDbPath, 'utf-8');
+        raw = await fs.readFile(mizuchiDbPath, 'utf-8');
       } catch {
-        return c.json({ error: `kappa-db.json not found at ${kappaDbPath}` }, 404);
+        return c.json({ error: `mizuchi-db.json not found at ${mizuchiDbPath}` }, 404);
       }
 
-      const dump: KappaDbDump = JSON.parse(raw);
-      cachedDb = KappaDb.fromDump(dump, platform);
+      const dump: MizuchiDbDump = JSON.parse(raw);
+      cachedDb = MizuchiDb.fromDump(dump);
       cachedProjectPath = projectPath;
 
       // Parse map file if configured

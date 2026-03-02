@@ -20,12 +20,19 @@ export type DecompFunctionDoc = {
   callsFunctions: string[];
 };
 
-export interface KappaDbDump {
+export const MIZUCHI_DB_VERSION = 1;
+
+export interface MizuchiDbDump {
+  version: number;
+  platform: PlatformTarget;
   decompFunctions: DecompFunctionDoc[];
   vectors: Array<{ id: string; embedding: number[] }>;
+  indexMetadata: {
+    contentHashes?: Record<string, string>;
+  };
 }
 
-export interface KappaDbStats {
+export interface MizuchiDbStats {
   totalFunctions: number;
   decompiledFunctions: number;
   asmOnlyFunctions: number;
@@ -38,7 +45,7 @@ export interface SimilarResult {
   similarity: number;
 }
 
-export class KappaDb {
+export class MizuchiDb {
   readonly #functions: DecompFunctionDoc[];
   readonly #functionById: Map<string, DecompFunctionDoc>;
   readonly #vectorIds: string[];
@@ -51,7 +58,7 @@ export class KappaDb {
   #difficultyScoresCache: ReadonlyMap<string, DifficultyScore> | null = null;
   #difficultyTiersCache: DifficultyTiers | null = null;
 
-  /** @internal Use `KappaDb.fromDump()` instead. */
+  /** @internal Use `MizuchiDb.fromDump()` instead. */
   constructor(
     functions: DecompFunctionDoc[],
     vectorIds: string[],
@@ -67,8 +74,9 @@ export class KappaDb {
     this.#platform = platform;
   }
 
-  static fromDump(data: KappaDbDump, platform: PlatformTarget): KappaDb {
+  static fromDump(data: MizuchiDbDump): MizuchiDb {
     const functions = data.decompFunctions;
+    const platform = data.platform;
     const vectorIds: string[] = [];
     const dimension = data.vectors.length > 0 ? data.vectors[0].embedding.length : 0;
 
@@ -95,7 +103,7 @@ export class KappaDb {
       }
     }
 
-    return new KappaDb(functions, vectorIds, normalizedVectors, dimension, platform);
+    return new MizuchiDb(functions, vectorIds, normalizedVectors, dimension, platform);
   }
 
   get platform(): PlatformTarget {
@@ -161,7 +169,7 @@ export class KappaDb {
     return result;
   }
 
-  getStats(): KappaDbStats {
+  getStats(): MizuchiDbStats {
     let decompiledFunctions = 0;
     for (const fn of this.#functions) {
       if (fn.cCode) {

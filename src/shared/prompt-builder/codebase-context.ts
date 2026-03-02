@@ -1,6 +1,6 @@
 import { SgNode, findInFiles } from '@ast-grep/napi';
 
-import type { KappaDb } from '~/shared/kappa-db/kappa-db.js';
+import type { MizuchiDb } from '~/shared/mizuchi-db/mizuchi-db.js';
 
 import { getFirstParentWithKind, registerClangLanguage } from './ast-grep-utils.js';
 
@@ -136,7 +136,11 @@ async function getCodebaseContext(
   return result;
 }
 
-export async function getFuncContext(db: KappaDb, functionId: string, projectPath: string): Promise<DecompFuncContext> {
+export async function getFuncContext(
+  db: MizuchiDb,
+  functionId: string,
+  projectPath: string,
+): Promise<DecompFuncContext> {
   const func = db.getFunctionById(functionId);
   if (!func) {
     throw new Error(`Function not found: ${functionId}`);

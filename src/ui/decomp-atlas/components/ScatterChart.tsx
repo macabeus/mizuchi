@@ -1,4 +1,4 @@
-import type { DecompFunctionDoc } from '@shared/kappa-db/kappa-db';
+import type { DecompFunctionDoc } from '@shared/mizuchi-db/mizuchi-db';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import { LinesChart as EChartsLinesChart, ScatterChart as EChartsScatterChart } from 'echarts/charts';
 import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components';
@@ -6,7 +6,7 @@ import * as echarts from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { useKappaDb } from '../KappaDbContext';
+import { useMizuchiDb } from '../MizuchiDbContext';
 
 echarts.use([
   EChartsScatterChart,
@@ -45,7 +45,7 @@ export function ScatterChart({
   onFunctionSelect,
   onFunctionDeselect,
 }: ScatterChartProps) {
-  const db = useKappaDb();
+  const db = useMizuchiDb();
   const stats = useMemo(() => db.getStats(), [db]);
   const [coordinates, setCoordinates] = useState<number[][] | null>(null);
   const [isLoading, setIsLoading] = useState(true);

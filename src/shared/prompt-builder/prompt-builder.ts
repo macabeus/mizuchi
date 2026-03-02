@@ -1,11 +1,11 @@
 import type { PlatformTarget } from '~/shared/config.js';
-import type { KappaDb } from '~/shared/kappa-db/kappa-db.js';
+import type { MizuchiDb } from '~/shared/mizuchi-db/mizuchi-db.js';
 
 import { getFuncContext } from './codebase-context.js';
 import { craftPrompt } from './craft-prompt.js';
 
 export async function createDecompilePrompt(params: {
-  db: KappaDb;
+  db: MizuchiDb;
   functionId: string;
   projectPath: string;
   platform: PlatformTarget;

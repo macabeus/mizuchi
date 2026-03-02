@@ -5,7 +5,7 @@ import type { SamplingCFunction } from './codebase-context.js';
 /**
  * Strip lines that appear after the assembly function body.
  *
- * Kappa-db asm snippets sometimes include trailing section-separator comments
+ * Assembly snippets sometimes include trailing section-separator comments
  * (e.g. `@ --- End of Character Select ---`) and blank lines that are not part
  * of the function. This walks backwards from the end and removes any line that
  * is empty or comment-only, stopping at the last real assembly content
@@ -15,8 +15,6 @@ import type { SamplingCFunction } from './codebase-context.js';
  *   ARM  → `@`
  *   MIPS → `#`
  *   General → `//`, `;`
- *
- * TODO: Strip these lines while writing them at KappaDB instead of in the prompt builder
  */
 const ASM_COMMENT_ONLY_RE = /^(@|#|\/\/|;)/;
 

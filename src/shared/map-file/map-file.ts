@@ -5,6 +5,8 @@
  * object file paths by scanning `.text` section headers and the symbol
  * entries that follow them.
  */
+import fs from 'fs/promises';
+import path from 'path';
 
 const SECTION_HEADER_RE = /^\s*\.text\s+0x[\da-f]+\s+0x[\da-f]+\s+(\S+\.o)/i;
 const SYMBOL_RE = /^\s+0x[\da-f]+\s+(\S+)$/;
@@ -41,4 +43,76 @@ export function parseMapFile(content: string): Map<string, string> {
   }
 
   return result;
+}
+
+/**
+ * Resolve a function name to an absolute object file path using the symbol map.
+ *
+ * The map file paths are relative to the linker's working directory, which may
+ * differ from the project root. We try the direct path first (works for AF-style
+ * projects), then glob under `<projectPath>/build/` for the .o filename (handles
+ * SA3-style where the linker runs from a build subdirectory).
+ */
+export async function resolveObjectPath(
+  functionName: string,
+  projectPath: string,
+  symbolMap: Map<string, string>,
+): Promise<string | null> {
+  const relativePath = symbolMap.get(functionName);
+  if (!relativePath) {
+    return null;
+  }
+
+  // Try direct join (works when map paths are relative to project root)
+  const directPath = path.join(projectPath, relativePath);
+  try {
+    await fs.access(directPath);
+    return directPath;
+  } catch {
+    // Not found at direct path — try globbing under build/
+  }
+
+  const fileName = path.basename(relativePath);
+  const buildDir = path.join(projectPath, 'build');
+  for await (const match of fs.glob(`**/${fileName}`, { cwd: buildDir })) {
+    return path.join(buildDir, match);
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a C source file path to an absolute object file path.
+ *
+ * Used as a fallback when a function name isn't in the symbol map
+ * (e.g., static functions that the linker doesn't export).
+ * Tries replacing .c → .o and looking for the file directly or under build/.
+ */
+export async function resolveObjectPathFromSourceFile(
+  cModulePath: string,
+  projectPath: string,
+): Promise<string | null> {
+  const objRelativePath = cModulePath.replace(/\.c$/, '.o');
+
+  // Try direct path (same directory structure as source)
+  const directPath = path.join(projectPath, objRelativePath);
+  try {
+    await fs.access(directPath);
+    return directPath;
+  } catch {
+    // Not found — try under build/
+  }
+
+  // Glob for the .o filename under build/
+  const fileName = path.basename(objRelativePath);
+  const buildDir = path.join(projectPath, 'build');
+  try {
+    for await (const match of fs.glob(`**/${fileName}`, { cwd: buildDir })) {
+      return path.join(buildDir, match);
+    }
+  } catch {
+    // build/ doesn't exist or isn't accessible
+  }
+
+  return null;
 }

@@ -2,7 +2,7 @@ import { CodeBlock } from '@ui-shared/components/CodeBlock';
 import { Icon } from '@ui-shared/components/Icon';
 import { useCallback, useEffect, useState } from 'react';
 
-import { useKappaDb } from '../KappaDbContext';
+import { useMizuchiDb } from '../MizuchiDbContext';
 import { apiClient } from '../api-client';
 
 interface PromptBuilderProps {
@@ -10,7 +10,7 @@ interface PromptBuilderProps {
 }
 
 export function PromptBuilder({ selectedFunctionId }: PromptBuilderProps) {
-  const db = useKappaDb();
+  const db = useMizuchiDb();
   const [prompt, setPrompt] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);

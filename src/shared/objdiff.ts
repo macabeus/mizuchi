@@ -263,11 +263,11 @@ export class Objdiff {
           break;
 
         case 'line':
-          lineText += text.val.toString(10);
+          // C source line numbers from DWARF debug info — skip them
           break;
 
         case 'address':
-          lineText += text.val.toString(16) + ':';
+          // Track address for label generation but don't emit as prefix
           address = text.val.toString(16);
           break;
 

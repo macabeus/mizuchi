@@ -2,7 +2,7 @@ import { CodeBlock } from '@ui-shared/components/CodeBlock';
 import { Icon } from '@ui-shared/components/Icon';
 import { WithTooltip } from '@ui-shared/components/WithTooltip';
 
-import { useKappaDb } from '../KappaDbContext';
+import { useMizuchiDb } from '../MizuchiDbContext';
 
 interface FunctionDetailsProps {
   functionId: string;
@@ -54,7 +54,7 @@ function FunctionPill({ name, onClick, disabled }: { name: string; onClick?: () 
 }
 
 export function FunctionDetails({ functionId, onFunctionSelect, onClose }: FunctionDetailsProps) {
-  const db = useKappaDb();
+  const db = useMizuchiDb();
   const fn = db.getFunctionById(functionId);
   if (!fn) {
     return null;
