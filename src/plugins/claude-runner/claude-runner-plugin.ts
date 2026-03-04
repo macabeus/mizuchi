@@ -83,6 +83,9 @@ interface SDKMessage {
       costUSD: number;
     }
   >;
+  duration_ms?: number;
+  duration_api_ms?: number;
+  num_turns?: number;
 }
 
 /**
@@ -368,6 +371,15 @@ export type ModelTokenUsage = {
 export type TokenUsageMap = { [model: string]: ModelTokenUsage };
 
 /**
+ * Per-query timing from the Claude Agent SDK
+ */
+export type QueryTiming = {
+  durationMs: number;
+  durationApiMs: number;
+  numTurns: number;
+};
+
+/**
  * Claude Runner Plugin result data
  */
 export interface ClaudeRunnerResult {
@@ -379,6 +391,7 @@ export interface ClaudeRunnerResult {
   stallDetected: boolean;
   softTimeoutTriggered: boolean;
   tokenUsage?: TokenUsageMap;
+  queryTiming?: QueryTiming;
 }
 
 /**
@@ -419,6 +432,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
   // Cumulative token usage across all queries for this pipeline run, keyed by model
   #tokenUsage: TokenUsageMap = {};
+
+  // Cumulative query timing across all queries for this pipeline run
+  #queryTiming: QueryTiming = { durationMs: 0, durationApiMs: 0, numTurns: 0 };
 
   // External abort signal (e.g., from background permuter success)
   #externalAbortSignal?: AbortSignal;
@@ -725,6 +741,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             entry.cacheCreationInputTokens += mu.cacheCreationInputTokens;
             entry.costUsd += mu.costUSD;
           }
+        }
+
+        // Accumulate timing from result message
+        if (msg.duration_api_ms !== undefined) {
+          this.#queryTiming.durationApiMs += msg.duration_api_ms;
+          this.#queryTiming.durationMs += msg.duration_ms ?? 0;
+          this.#queryTiming.numTurns += msg.num_turns ?? 0;
         }
 
         if (msg.subtype && msg.subtype !== 'success') {
@@ -1088,6 +1111,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     }
   }
 
+  #getAttemptQueryTiming(snapshot: QueryTiming): QueryTiming {
+    return {
+      durationMs: this.#queryTiming.durationMs - snapshot.durationMs,
+      durationApiMs: this.#queryTiming.durationApiMs - snapshot.durationApiMs,
+      numTurns: this.#queryTiming.numTurns - snapshot.numTurns,
+    };
+  }
+
   /**
    * Compute per-attempt token usage by subtracting the snapshot taken at
    * the start of the attempt from the current cumulative totals.
@@ -1123,12 +1154,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     // cross-function data leaking into the snapshot.
     if (context.attemptNumber === 1) {
       this.#tokenUsage = {};
+      this.#queryTiming = { durationMs: 0, durationApiMs: 0, numTurns: 0 };
     }
 
     // Snapshot cumulative token usage before this attempt so we can compute the delta
     const tokenUsageBeforeAttempt = Object.fromEntries(
       Object.entries(this.#tokenUsage).map(([model, usage]) => [model, { ...usage }]),
     );
+    const timingBeforeAttempt = { ...this.#queryTiming };
 
     // Reset tool call counter for this turn
     this.#toolCallCount = 0;
@@ -1184,6 +1217,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               stallDetected: this.#stallDetected,
               softTimeoutTriggered,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
+              queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             },
           },
           context,
@@ -1209,6 +1243,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               stallDetected: this.#stallDetected,
               softTimeoutTriggered,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
+              queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             },
           },
           context: { ...context, generatedCode: code },
@@ -1233,6 +1268,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             stallDetected: this.#stallDetected,
             softTimeoutTriggered,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
+            queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
           },
         },
         context: { ...context, generatedCode: code },
@@ -1256,6 +1292,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             stallDetected: this.#stallDetected,
             softTimeoutTriggered: this.#softTimeoutTriggered,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
+            queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
           },
         },
         context,
@@ -1377,6 +1414,18 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           `  Cost: $${usage.costUsd.toFixed(4)}`,
         );
       }
+      if (result.data.tokenUsage && result.data?.queryTiming) {
+        const qt = result.data.queryTiming;
+        const totalOutputTokens = Object.values(result.data.tokenUsage).reduce((s, u) => s + u.outputTokens, 0);
+        const throughput = qt.durationApiMs > 0 ? (totalOutputTokens / (qt.durationApiMs / 1000)).toFixed(1) : 'N/A';
+        lines.push(
+          '',
+          `**Timing**`,
+          `  API time: ${(qt.durationApiMs / 1000).toFixed(1)}s (wall: ${(qt.durationMs / 1000).toFixed(1)}s) across ${qt.numTurns} turns`,
+          `  Throughput: ${throughput} output tokens/sec`,
+        );
+      }
+
       sections.push({
         type: 'message',
         title: 'Stats',

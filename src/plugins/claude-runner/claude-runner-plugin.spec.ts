@@ -131,6 +131,9 @@ function createMockQueryFactory(options: MockQueryFactoryOptions | string[]): Qu
         subtype: 'success',
         session_id: TEST_SESSION_ID,
         is_error: false,
+        duration_ms: 5000,
+        duration_api_ms: 4500,
+        num_turns: 1,
         modelUsage: {
           'claude-sonnet-4-20250514': {
             inputTokens: 100,
@@ -1526,6 +1529,9 @@ mov eax, 0
             subtype: 'success',
             session_id: TEST_SESSION_ID,
             is_error: false,
+            duration_ms: 8000,
+            duration_api_ms: 7200,
+            num_turns: 3,
             modelUsage: {
               'claude-sonnet-4-6': {
                 inputTokens: 100,
@@ -1595,6 +1601,11 @@ mov eax, 0
       expect(statsSection.message).toContain('Input tokens: 3120 (40 new, 3000 cache read, 80 cache write)');
       expect(statsSection.message).toContain('Output tokens: 20');
       expect(statsSection.message).toContain('Cost: $0.0005');
+
+      // Timing section — total output tokens = 50 + 20 = 70, API time = 7.2s → 70/7.2 ≈ 9.7 tok/s
+      expect(statsSection.message).toContain('**Timing**');
+      expect(statsSection.message).toContain('API time: 7.2s (wall: 8.0s) across 3 turns');
+      expect(statsSection.message).toContain('Throughput: 9.7 output tokens/sec');
     });
   });
 
@@ -2121,6 +2132,85 @@ mov eax, 0
           cacheCreationInputTokens: 200,
           costUsd: 0.003,
         },
+      });
+    });
+
+    it('reports queryTiming from SDK result messages', async () => {
+      const response = '```c\nint foo(void) { return 1; }\n```';
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.queryTiming).toEqual({
+        durationMs: 5000,
+        durationApiMs: 4500,
+        numTurns: 1,
+      });
+    });
+
+    it('reports per-attempt queryTiming on retry (not cumulative)', async () => {
+      const response1 = '```c\nint foo(void) { return 1; }\n```';
+      const response2 = '```c\nint foo(void) { return 2; }\n```';
+      const mockFactory = createMockQueryFactory([response1, response2]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      // Attempt 1
+      const { result: result1 } = await executeAndAdvance(plugin, context);
+      expect(result1.data?.queryTiming).toEqual({
+        durationMs: 5000,
+        durationApiMs: 4500,
+        numTurns: 1,
+      });
+
+      // Prepare retry
+      const previousAttempts: Array<Partial<PluginResultMap>> = [
+        {
+          'claude-runner': {
+            pluginId: 'claude-runner',
+            pluginName: 'Claude Runner',
+            status: 'success' as const,
+            durationMs: 100,
+            data: {
+              generatedCode: 'int foo(void) { return 1; }',
+              fromCache: false,
+              stallDetected: false,
+              softTimeoutTriggered: false,
+            },
+          },
+          compiler: {
+            pluginId: 'compiler',
+            pluginName: 'Compiler',
+            status: 'failure' as const,
+            durationMs: 50,
+            error: 'compilation error',
+            output: 'compilation error',
+          },
+        },
+      ];
+      plugin.prepareRetry!(context, previousAttempts);
+
+      // Attempt 2: timing should be per-attempt, not cumulative
+      const { result: result2 } = await plugin.execute(context);
+      expect(result2.data?.queryTiming).toEqual({
+        durationMs: 5000,
+        durationApiMs: 4500,
+        numTurns: 1,
       });
     });
 
