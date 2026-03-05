@@ -25,6 +25,7 @@ import type {
   PluginReportSection,
   PluginResult,
   PluginResultMap,
+  PluginStatusData,
 } from '~/shared/types.js';
 
 import { QueryAbortedError, QueryTimeoutError } from './errors.js';
@@ -164,6 +165,38 @@ export type ClaudeRunnerConfig = z.infer<typeof claudeRunnerConfigSchema>;
 const DEFAULT_CACHE_PATH = 'claude-cache.json';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const CACHE_VERSION = 2;
+
+function formatMs(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Build a short label for a tool call, including a relevant argument snippet.
+ * e.g. "Read config.yaml", "Grep 'functionName'", "compile_and_view_assembly"
+ */
+function formatToolLabel(name: string, input: Record<string, unknown>): string {
+  // Strip MCP server prefix (e.g. "mcp__mizuchi__compile_and_view_assembly" → "compile_and_view_assembly")
+  const shortName = name.replace(/^mcp__[^_]+__/, '');
+
+  // Pick the most informative argument based on tool name
+  let detail: string | undefined;
+  if (input.file_path) {
+    // Read, Edit, Write — show filename
+    detail = String(input.file_path).split('/').pop();
+  } else if (input.pattern && typeof input.pattern === 'string') {
+    // Grep, Glob — show pattern
+    detail = input.pattern.length > 30 ? input.pattern.slice(0, 27) + '...' : input.pattern;
+  } else if (input.command && typeof input.command === 'string') {
+    // Bash — show first part of command
+    const cmd = input.command.trim();
+    detail = cmd.length > 30 ? cmd.slice(0, 27) + '...' : cmd;
+  }
+
+  return detail ? `${shortName} ${detail}` : shortName;
+}
 
 /**
  * Hash a prompt to create a cache key
@@ -439,6 +472,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   // External abort signal (e.g., from background permuter success)
   #externalAbortSignal?: AbortSignal;
 
+  // Status callback for live UI updates
+  #statusCallback?: (status: PluginStatusData) => void;
+  #executeStartTime = 0;
+  #statusTimerId?: ReturnType<typeof setInterval>;
+  #lastStatusText = '';
+  #lastStatusBlocks: ContentBlock[] = [];
+
   // MCP tool dependencies
   #currentContextContent = '';
   #cCompiler: CCompiler;
@@ -501,6 +541,87 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
    */
   setForegroundAbortSignal(signal: AbortSignal): void {
     this.#externalAbortSignal = signal;
+  }
+
+  setStatusCallback(callback: (status: PluginStatusData) => void): void {
+    this.#statusCallback = callback;
+  }
+
+  #emitStatus(currentText?: string, blocks?: ContentBlock[]): void {
+    // Update stored state when new data is provided
+    if (currentText !== undefined) {
+      this.#lastStatusText = currentText;
+    }
+    if (blocks !== undefined) {
+      this.#lastStatusBlocks = blocks;
+    }
+
+    const text = this.#lastStatusText;
+    const blks = this.#lastStatusBlocks;
+    const logLines: string[] = [];
+
+    // Collect last 3 tool calls to show activity during tool-heavy phases
+    const recentToolsUses = blks.filter((b) => b.type === 'tool_use').slice(-3);
+    for (const toolsUse of recentToolsUses) {
+      const hasResult = blks.some((b) => b.type === 'tool_result' && b.tool_use_id === toolsUse.id);
+      const bullet = hasResult ? '✓' : '▸';
+
+      const toolLabel = formatToolLabel(toolsUse.name, toolsUse.input);
+
+      logLines.push(`${bullet} ${toolLabel}`);
+    }
+
+    // Show last lines of Claude's streaming text (fill remaining slots, prefer text over tools)
+    if (text) {
+      const textLines = text.split('\n').filter((l) => l.trim());
+      const recent = textLines.slice(-3);
+
+      // Replace tool lines with text lines when text is available
+      const toolLinesToKeep = Math.max(0, 3 - recent.length);
+      logLines.splice(0, logLines.length - toolLinesToKeep);
+
+      for (const line of recent) {
+        logLines.push(line.length > 80 ? line.slice(0, 77) + '...' : line);
+      }
+    }
+
+    const stats: PluginStatusData['stats'] = [];
+
+    stats.push({
+      label: 'tool calls',
+      value: `${this.#toolCallCount}/${this.#config.toolCallLimit}`,
+    });
+
+    const elapsed = Date.now() - this.#executeStartTime;
+    const softMs = this.#config.softTimeout?.softTimeoutMs;
+    const hardMs = this.#config.timeoutMs;
+
+    let timeValue = formatMs(elapsed);
+    if (softMs) {
+      timeValue += ` / ${formatMs(softMs)} soft`;
+    }
+    timeValue += ` / ${formatMs(hardMs)} hard`;
+
+    stats.push({ label: '', value: timeValue });
+
+    this.#statusCallback?.({ logLines, stats });
+  }
+
+  #startStatusTimer(): void {
+    this.#stopStatusTimer();
+    this.#lastStatusText = '';
+    this.#lastStatusBlocks = [];
+    this.#emitStatus();
+    this.#statusTimerId = setInterval(() => {
+      this.#emitStatus();
+    }, 1000);
+  }
+
+  #stopStatusTimer(): void {
+    if (this.#statusTimerId) {
+      clearInterval(this.#statusTimerId);
+      this.#statusTimerId = undefined;
+    }
   }
 
   /**
@@ -724,7 +845,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             });
           }
         }
-      } else if (msg.type === 'result') {
+      }
+
+      // Emit live status update after processing each message
+      if (this.#statusCallback) {
+        this.#emitStatus(responseText, contentBlocks);
+      }
+
+      if (msg.type === 'result') {
         // Accumulate token usage from modelUsage (cumulative across all API roundtrips)
         if (msg.modelUsage) {
           for (const [model, mu] of Object.entries(msg.modelUsage)) {
@@ -1147,6 +1275,10 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     context: PipelineContext;
   }> {
     const startTime = Date.now();
+    this.#executeStartTime = startTime;
+    this.#toolCallCount = 0;
+
+    this.#startStatusTimer();
 
     // Reset per-function counters before snapshotting. #resetState() runs
     // later (inside #executeQuery()), so any counter that participates in
@@ -1168,6 +1300,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
     let { promptContent } = context;
     if (!promptContent) {
+      this.#stopStatusTimer();
       return {
         result: {
           pluginId: this.id,
@@ -1297,6 +1430,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         },
         context,
       };
+    } finally {
+      this.#stopStatusTimer();
     }
   }
 

@@ -378,10 +378,23 @@ export class PluginManager {
         pluginName: plugin.name,
       });
 
+      // Wire status callback so the plugin can emit structured status data
+      plugin.setStatusCallback?.((status) => {
+        this.#emit({
+          type: 'plugin-status-update',
+          pluginId: plugin.id,
+          logLines: status.logLines ?? [],
+          stats: status.stats ?? [],
+        });
+      });
+
       const pluginStartTime = Date.now();
 
       try {
         const { result, context: updatedContext } = await plugin.execute(currentContext);
+
+        // Clear status lines after plugin completes
+        this.#emit({ type: 'plugin-status-update', pluginId: plugin.id, logLines: [], stats: [] });
 
         // Generate report sections if the plugin supports it
         if (plugin.getReportSections) {
@@ -405,6 +418,9 @@ export class PluginManager {
           shouldStop = true;
         }
       } catch (error) {
+        // Clear status lines on error
+        this.#emit({ type: 'plugin-status-update', pluginId: plugin.id, logLines: [], stats: [] });
+
         // PipelineAbortError must propagate immediately for graceful shutdown
         if (error instanceof PipelineAbortError) {
           throw error;

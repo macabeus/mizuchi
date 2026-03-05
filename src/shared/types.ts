@@ -194,6 +194,24 @@ export interface BackgroundCapability<TConfig = unknown, TResult = unknown> {
 }
 
 /**
+ * A single stat displayed in the status bar. Rendered as "value label" pairs separated by ·
+ */
+export interface StatusStat {
+  label: string;
+  value: string;
+}
+
+/**
+ * Structured status data emitted by plugins during execution.
+ */
+export interface PluginStatusData {
+  /** Tail log lines (streaming output). UI shows last 3 lines dimmed. */
+  logLines?: string[];
+  /** Stats displayed as a single summary line. */
+  stats?: StatusStat[];
+}
+
+/**
  * Plugin interface that all plugins must implement
  */
 export interface Plugin<TPluginResult> {
@@ -238,6 +256,13 @@ export interface Plugin<TPluginResult> {
    * abort promptly when this signal fires.
    */
   setForegroundAbortSignal?(signal: AbortSignal): void;
+
+  /**
+   * Receive a callback for emitting structured status data while the plugin executes.
+   * Called by the PluginManager before each attempt. The plugin calls the callback
+   * with structured status data (log lines + stats) whenever its status changes.
+   */
+  setStatusCallback?(callback: (status: PluginStatusData) => void): void;
 
   /**
    * Optional background execution capability.

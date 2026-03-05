@@ -5,6 +5,7 @@
  * Used by the UI layer to render progress updates.
  */
 import { PipelineConfig } from './config';
+import type { StatusStat } from './types';
 
 /**
  * Plugin information for display
@@ -147,6 +148,16 @@ export interface BackgroundTaskCompleteEvent {
 }
 
 /**
+ * Event emitted when a plugin updates its live status lines
+ */
+export interface PluginStatusUpdateEvent {
+  type: 'plugin-status-update';
+  pluginId: string;
+  logLines: string[];
+  stats: StatusStat[];
+}
+
+/**
  * Union type of all pipeline events
  */
 export type PipelineEvent =
@@ -162,7 +173,8 @@ export type PipelineEvent =
   | PromptCompleteEvent
   | PipelineCompleteEvent
   | BackgroundTaskStartEvent
-  | BackgroundTaskCompleteEvent;
+  | BackgroundTaskCompleteEvent
+  | PluginStatusUpdateEvent;
 
 /**
  * Event handler callback type

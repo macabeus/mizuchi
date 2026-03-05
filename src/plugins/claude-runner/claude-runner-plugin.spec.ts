@@ -7,7 +7,13 @@ import type { CliPrompt } from '~/shared/cli-prompt.js';
 import { PipelineAbortError } from '~/shared/errors.js';
 import { Objdiff } from '~/shared/objdiff.js';
 import { createTestContext, defaultTestPipelineConfig } from '~/shared/test-utils.js';
-import type { PipelineContext, PluginReportSection, PluginResult, PluginResultMap } from '~/shared/types.js';
+import type {
+  PipelineContext,
+  PluginReportSection,
+  PluginResult,
+  PluginResultMap,
+  PluginStatusData,
+} from '~/shared/types.js';
 
 import {
   type ClaudeRunnerConfig,
@@ -3165,6 +3171,165 @@ mov eax, 0
         },
       });
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('status callback', () => {
+    it('emits structured status with tool call indicator and text lines', async () => {
+      const cCode = `\`\`\`c\nvoid sub_8068748(void) {}\n\`\`\``;
+
+      // Custom mock that emits: tool_use → tool_result → text with code
+      const factory = vi.fn((_prompt: string, _options: any) => {
+        async function* generateMessages(): AsyncGenerator<SDKMessage> {
+          yield {
+            type: 'system',
+            subtype: 'init',
+            session_id: TEST_SESSION_ID,
+          } as SDKMessage;
+
+          // Turn 1: assistant emits a tool_use (no text)
+          yield {
+            type: 'assistant',
+            session_id: TEST_SESSION_ID,
+            message: {
+              id: 'msg-1',
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'compile_and_view_assembly',
+                  input: { c_code: 'void f() {}' },
+                },
+              ],
+            },
+          } as SDKMessage;
+
+          // Turn 2: user returns tool result
+          yield {
+            type: 'user',
+            session_id: TEST_SESSION_ID,
+            message: {
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: 'tool-1',
+                  content: 'compiled OK',
+                },
+              ],
+            },
+          } as SDKMessage;
+
+          // Turn 3: assistant emits text with code
+          yield {
+            type: 'assistant',
+            session_id: TEST_SESSION_ID,
+            message: {
+              id: 'msg-2',
+              content: [
+                {
+                  type: 'text',
+                  text: `Looking at the assembly, here is the function:\n${cCode}`,
+                },
+              ],
+            },
+          } as SDKMessage;
+
+          yield {
+            type: 'result',
+            subtype: 'success',
+            session_id: TEST_SESSION_ID,
+            is_error: false,
+            duration_ms: 5000,
+            duration_api_ms: 4500,
+            num_turns: 3,
+            modelUsage: {
+              'claude-sonnet-4-20250514': {
+                inputTokens: 100,
+                outputTokens: 50,
+                cacheReadInputTokens: 0,
+                cacheCreationInputTokens: 0,
+                costUSD: 0.003,
+              },
+            },
+          } as unknown as SDKResultSuccess;
+        }
+
+        return {
+          [Symbol.asyncIterator]: () => generateMessages(),
+          close: vi.fn(),
+        } as any;
+      });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: factory,
+      });
+
+      const statusUpdates: PluginStatusData[] = [];
+      plugin.setStatusCallback((status) => {
+        statusUpdates.push(structuredClone(status));
+      });
+
+      const context = createTestContext();
+      await plugin.execute(context);
+
+      // Should have received multiple status updates
+      expect(statusUpdates.length).toBeGreaterThanOrEqual(3);
+
+      // All updates should have stats (tool calls + time)
+      for (const update of statusUpdates) {
+        expect(update.stats).toBeDefined();
+        expect(update.stats!.length).toBeGreaterThanOrEqual(2);
+        expect(update.stats![0].label).toBe('tool calls');
+      }
+
+      // After tool_use (before tool_result): should show "▸ compile_and_view_assembly..."
+      const toolInFlightUpdate = statusUpdates.find((u) =>
+        u.logLines?.some((l) => l.includes('▸ compile_and_view_assembly')),
+      );
+      expect(toolInFlightUpdate).toBeDefined();
+
+      // After tool_result (before next text): should show "✓ compile_and_view_assembly"
+      const toolCompletedUpdate = statusUpdates.find((u) =>
+        u.logLines?.some((l) => l.includes('✓ compile_and_view_assembly')),
+      );
+      expect(toolCompletedUpdate).toBeDefined();
+
+      // After text response: should show text lines from the response
+      const textUpdate = statusUpdates.find((u) => u.logLines?.some((l) => l.includes('sub_8068748')));
+      expect(textUpdate).toBeDefined();
+    });
+
+    it('emits initial status immediately with stats bar', async () => {
+      const mockFactory = createMockQueryFactory(['```c\nvoid sub_8068748(void) {}\n```']);
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+
+      const statusUpdates: PluginStatusData[] = [];
+      plugin.setStatusCallback((status) => {
+        statusUpdates.push(structuredClone(status));
+      });
+
+      const context = createTestContext();
+      await plugin.execute(context);
+
+      // First update should be the initial emit (before any SDK messages)
+      expect(statusUpdates.length).toBeGreaterThanOrEqual(1);
+      const first = statusUpdates[0]!;
+      expect(first.stats).toBeDefined();
+      expect(first.stats![0].value).toBe('0/7');
+      expect(first.stats![0].label).toBe('tool calls');
+      // No log lines initially
+      expect(first.logLines?.length ?? 0).toBe(0);
     });
   });
 });
