@@ -41,7 +41,7 @@ import { PipelineConfig } from '~/shared/config';
 import { Objdiff } from '~/shared/objdiff.js';
 import type { PipelineEvent, PluginInfo } from '~/shared/pipeline-events.js';
 import { installSdkErrorHandlers } from '~/shared/sdk-error-handlers.js';
-import type { PipelineResults } from '~/shared/types.js';
+import type { PipelineResults, StatusStat } from '~/shared/types.js';
 
 export const options = z.object({
   config: z
@@ -75,6 +75,8 @@ interface PluginStatus {
   status: 'pending' | 'running' | 'success' | 'failure' | 'skipped';
   error?: string;
   durationMs?: number;
+  logLines: string[];
+  stats: StatusStat[];
 }
 
 /**
@@ -197,6 +199,8 @@ export default function Index({ options: opts }: Props) {
               id: p.id,
               name: p.name,
               status: 'pending' as const,
+              logLines: [],
+              stats: [],
             })),
           };
 
@@ -226,6 +230,8 @@ export default function Index({ options: opts }: Props) {
               id: p.id,
               name: p.name,
               status: 'pending' as const,
+              logLines: [],
+              stats: [],
             })),
           };
 
@@ -244,7 +250,7 @@ export default function Index({ options: opts }: Props) {
             ...prev,
             pluginStatuses: [
               ...prev.pluginStatuses,
-              { id: event.pluginId, name: event.pluginName, status: 'running' as const },
+              { id: event.pluginId, name: event.pluginName, status: 'running' as const, logLines: [], stats: [] },
             ],
           };
         }
@@ -259,6 +265,22 @@ export default function Index({ options: opts }: Props) {
                     status: event.status as 'success' | 'failure' | 'skipped',
                     error: event.error,
                     durationMs: event.durationMs,
+                    logLines: [],
+                    stats: [],
+                  }
+                : p,
+            ),
+          };
+
+        case 'plugin-status-update':
+          return {
+            ...prev,
+            pluginStatuses: prev.pluginStatuses.map((p) =>
+              p.id === event.pluginId
+                ? {
+                    ...p,
+                    logLines: event.logLines,
+                    stats: event.stats,
                   }
                 : p,
             ),
@@ -414,7 +436,25 @@ export default function Index({ options: opts }: Props) {
           {/* Plugin statuses */}
           <Box flexDirection="column" marginLeft={2}>
             {state.pluginStatuses.map((plugin) => (
-              <PluginStatusLine key={plugin.id} plugin={plugin} spinnersPaused={!!state.activePrompt} />
+              <Box key={plugin.id} flexDirection="column">
+                <PluginStatusLine plugin={plugin} spinnersPaused={!!state.activePrompt} />
+
+                {plugin.stats.length > 0 && (
+                  <Box marginLeft={4}>
+                    <Text dimColor>{plugin.stats.map((s) => `${s.value} ${s.label}`).join('  ·  ')}</Text>
+                  </Box>
+                )}
+
+                {plugin.logLines.length > 0 && (
+                  <Box flexDirection="column" marginLeft={4}>
+                    {plugin.logLines.slice(-3).map((line, i) => (
+                      <Text key={i} dimColor>
+                        {line}
+                      </Text>
+                    ))}
+                  </Box>
+                )}
+              </Box>
             ))}
           </Box>
 
