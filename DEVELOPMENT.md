@@ -39,11 +39,13 @@ When running the pipeline in development mode (`npm run dev -- run`), Node.js ma
 MaxPerformanceEntryBufferExceededWarning: 1000001 measure entries
 ```
 
-**Cause:** In dev mode, `tsx` does not set `NODE_ENV=production`, so `react-reconciler` (used by [Ink](https://github.com/vadimdemedes/ink) for the terminal UI) loads its development build. The development build calls `performance.measure()` on every React render cycle for DevTools profiling. Over long pipeline runs, these entries accumulate in Node.js's global performance entry buffer until they exceed the 1M entry limit.
+**Cause:** `react-reconciler` (used by [Ink](https://github.com/vadimdemedes/ink) for the terminal UI) checks `process.env.NODE_ENV` at require-time to decide which build to load. The development build calls `performance.measure()` on every React render cycle for DevTools profiling — with the Spinner component re-rendering every 80ms, this accumulates over 1M entries during long pipeline runs.
 
-This profiling is intended for browser DevTools and serves no purpose in a headless CLI pipeline.
+The production build (`npm start`) sets `NODE_ENV=production`, which loads `react-reconciler.production.js` — this build has zero `performance.measure()` calls and no buffer accumulation.
 
-**Recommendation:** For long pipeline runs, use the production build:
+In dev mode (`npm run dev`), `NODE_ENV` is not set, so the development build loads by default. This is fine for short test runs but will trigger the warning on multi-hour runs.
+
+**Recommendation:** For long pipeline runs, always use the production build:
 
 ```bash
 npm run build

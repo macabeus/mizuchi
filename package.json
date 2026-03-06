@@ -14,7 +14,7 @@
     "build:ui": "npm run build:run-report && npm run build:decomp-atlas",
     "dev:run-report": "tsx src/ui/run-report/dev-server.ts",
     "dev:decomp-atlas": "tsx src/ui/decomp-atlas/dev-server.ts",
-    "start": "node dist/cli.js",
+    "start": "NODE_ENV=production node dist/cli.js",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "check-types": "tsc --noEmit && tsc --noEmit -p src/ui/run-report/tsconfig.json && tsc --noEmit -p src/ui/decomp-atlas/tsconfig.json",
