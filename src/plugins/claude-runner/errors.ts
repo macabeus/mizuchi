@@ -20,6 +20,19 @@ export class QueryTimeoutError extends Error {
 }
 
 /**
+ * Thrown when no API response arrives within the connect timeout window.
+ */
+export class QueryConnectTimeoutError extends Error {
+  readonly connectTimeoutMs: number;
+
+  constructor({ connectTimeoutMs }: { connectTimeoutMs: number }) {
+    super(`Claude connect timeout: no API response within ${connectTimeoutMs}ms`);
+    this.name = 'QueryConnectTimeoutError';
+    this.connectTimeoutMs = connectTimeoutMs;
+  }
+}
+
+/**
  * Thrown when a query is aborted by an external signal
  * (e.g., background plugin found a perfect match).
  */

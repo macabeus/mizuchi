@@ -162,6 +162,10 @@ export function Summary({ summary, config }: SummaryProps) {
               <span className="text-slate-400">Stall Threshold:</span>
               <span className="text-white font-semibold">{config.stallThreshold}</span>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Connect Timeout:</span>
+              <span className="text-white font-semibold">{formatDuration(config.connectTimeoutMs)}</span>
+            </div>
             {config.softTimeout && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-slate-400">Soft Timeout:</span>

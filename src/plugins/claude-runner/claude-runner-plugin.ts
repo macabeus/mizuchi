@@ -28,7 +28,7 @@ import type {
   PluginStatusData,
 } from '~/shared/types.js';
 
-import { QueryAbortedError, QueryTimeoutError } from './errors.js';
+import { QueryAbortedError, QueryConnectTimeoutError, QueryTimeoutError } from './errors.js';
 
 /**
  * Query interface from the SDK
@@ -145,6 +145,11 @@ export const claudeRunnerConfigSchema = z
       .positive()
       .default(7)
       .describe('Maximum number of compile_and_view_assembly tool calls allowed per retry iteration'),
+    connectTimeoutMs: z
+      .number()
+      .positive()
+      .default(60_000)
+      .describe('Connect timeout: abort if no API response arrives within this window (ms)'),
     softTimeout: z
       .object({
         softTimeoutMs: z.number().positive(),
@@ -162,6 +167,10 @@ export const claudeRunnerConfigSchema = z
   .refine((config) => !config.softTimeout || config.softTimeout.softTimeoutMs < config.timeoutMs, {
     message: 'softTimeout.softTimeoutMs must be less than timeoutMs',
     path: ['softTimeout', 'softTimeoutMs'],
+  })
+  .refine((config) => config.connectTimeoutMs < config.timeoutMs, {
+    message: 'connectTimeoutMs must be less than timeoutMs',
+    path: ['connectTimeoutMs'],
   });
 
 export type ClaudeRunnerConfig = z.infer<typeof claudeRunnerConfigSchema>;
@@ -427,6 +436,7 @@ export interface ClaudeRunnerResult {
   fromCache: boolean;
   stallDetected: boolean;
   softTimeoutTriggered: boolean;
+  connectTimedOut: boolean;
   tokenUsage?: TokenUsageMap;
   queryTiming?: QueryTiming;
   /** Captured stderr from the Claude Code subprocess, if any */
@@ -451,6 +461,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #feedbackPrompt?: string;
   #stallDetected = false;
   #softTimeoutTriggered = false;
+  #connectTimedOut = false;
   #lastStallAttemptIndex = -1;
   #queryFactory: QueryFactory;
   #cache: ConversationCache | null = null;
@@ -491,6 +502,10 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #objdiff: Objdiff;
   #mcpServer: McpServer;
   #cliPrompt?: CliPrompt;
+
+  // Connect timer clear callback — set by #runQueryWithAbort, called from #collectResponse
+  // on the first substantive (assistant/user) message to disable connect timeout
+  #clearConnectTimer: (() => void) | null = null;
 
   // Captured stderr from the Claude Code subprocess (reset per query)
   #stderrChunks: string[] = [];
@@ -610,6 +625,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const hardMs = this.#config.timeoutMs;
 
     let timeValue = formatMs(elapsed);
+    if (this.#clearConnectTimer) {
+      timeValue += ` / ${formatMs(this.#config.connectTimeoutMs)} connect`;
+    }
     if (softMs) {
       timeValue += ` / ${formatMs(softMs)} soft`;
     }
@@ -825,6 +843,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         if (msg.type === 'system' && msg.session_id) {
           this.#sessionId = msg.session_id;
         } else if (msg.type === 'assistant') {
+          // First substantive message — API is responsive, disable connect timeout
+          this.#clearConnectTimer?.();
           // Track error type from assistant messages (e.g., 'rate_limit', 'billing_error')
           if (msg.error) {
             lastAssistantError = msg.error;
@@ -849,7 +869,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             }
           }
         } else if (msg.type === 'user' && msg.message?.content) {
-          // Tool results come as user messages
+          // Tool results come as user messages — also confirms API is responsive, disable connect timeout
+          this.#clearConnectTimer?.();
           for (const block of msg.message.content) {
             if (block.type === 'tool_result' && 'tool_use_id' in block && 'content' in block) {
               contentBlocks.push({
@@ -929,11 +950,15 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
    */
   async #runQueryWithAbort<T>(
     work: () => Promise<T>,
-    options?: { timeoutMs?: number; timeoutMode?: 'soft' | 'hard' },
+    options?: { timeoutMs?: number; timeoutMode?: 'soft' | 'hard'; disableConnectTimeout?: boolean },
   ): Promise<T> {
     const effectiveTimeout = options?.timeoutMs ?? this.#config.timeoutMs;
     const timeoutMode = options?.timeoutMode ?? 'hard';
+    const connectTimeoutMs = this.#config.connectTimeoutMs;
+    const useConnectTimeout = !options?.disableConnectTimeout && connectTimeoutMs < effectiveTimeout;
+
     const abortController = new AbortController();
+    let connectTimerTriggered = false;
     const abortAndClose = () => {
       abortController.abort();
       if (this.#currentQuery) {
@@ -943,30 +968,60 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     };
 
     const timeoutId = setTimeout(abortAndClose, effectiveTimeout);
+
+    // Connect timeout: a one-shot timer that fires if no substantive SDK message
+    // (assistant/user) arrives within connectTimeoutMs of the query start.
+    // Once the first such message arrives, #collectResponse clears the timer —
+    // the API is responsive and regular soft/hard timeouts handle the rest.
+    let connectTimerId: ReturnType<typeof setTimeout> | undefined;
+    if (useConnectTimeout) {
+      connectTimerId = setTimeout(() => {
+        connectTimerTriggered = true;
+        abortAndClose();
+      }, connectTimeoutMs);
+
+      this.#clearConnectTimer = () => {
+        if (connectTimerId !== undefined) {
+          clearTimeout(connectTimerId);
+          connectTimerId = undefined;
+        }
+        this.#clearConnectTimer = null;
+      };
+    }
+
     this.#externalAbortSignal?.addEventListener('abort', abortAndClose);
 
     try {
       const result = await work();
 
-      // The timeout may have fired and closed the query mid-stream,
-      // but the SDK async iterator exits gracefully ({done: true}) rather
-      // than throwing.  Detect this so #runWithSoftTimeout can resume
-      // the conversation with the "submit now" prompt.
       if (abortController.signal.aborted) {
+        if (connectTimerTriggered) {
+          throw new QueryConnectTimeoutError({ connectTimeoutMs });
+        }
         throw new QueryTimeoutError({ timeoutMs: effectiveTimeout, mode: timeoutMode });
       }
 
       return result;
     } catch (error) {
+      if (error instanceof QueryConnectTimeoutError) {
+        throw error;
+      }
       if (this.#externalAbortSignal?.aborted) {
         throw new QueryAbortedError();
       }
       if (abortController.signal.aborted) {
+        if (connectTimerTriggered) {
+          throw new QueryConnectTimeoutError({ connectTimeoutMs });
+        }
         throw new QueryTimeoutError({ timeoutMs: effectiveTimeout, mode: timeoutMode });
       }
       throw error;
     } finally {
       clearTimeout(timeoutId);
+      if (connectTimerId !== undefined) {
+        clearTimeout(connectTimerId);
+      }
+      this.#clearConnectTimer = null;
       this.#externalAbortSignal?.removeEventListener('abort', abortAndClose);
       if (this.#currentQuery) {
         this.#currentQuery.close();
@@ -1143,6 +1198,10 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       const result = await runQuery({ timeoutMs: softConfig.softTimeoutMs, timeoutMode: 'soft' });
       return { ...result, softTimeoutTriggered: false };
     } catch (error) {
+      // Connect timeout errors bypass soft timeout recovery — propagate immediately
+      if (error instanceof QueryConnectTimeoutError) {
+        throw error;
+      }
       // Only intercept soft timeout errors
       if (!(error instanceof QueryTimeoutError) || error.mode !== 'soft') {
         throw error;
@@ -1168,7 +1227,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         async () => {
           return this.#collectResponse(activeQuery);
         },
-        { timeoutMs: remainingMs, timeoutMode: 'hard' },
+        { timeoutMs: remainingMs, timeoutMode: 'hard', disableConnectTimeout: true },
       );
 
       // Append soft timeout prompt + response to conversation history
@@ -1199,6 +1258,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       this.#feedbackPrompt = undefined;
       this.#stallDetected = false;
       this.#softTimeoutTriggered = false;
+      this.#connectTimedOut = false;
     }
 
     if (this.#feedbackPrompt) {
@@ -1305,6 +1365,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const startTime = Date.now();
     this.#executeStartTime = startTime;
     this.#toolCallCount = 0;
+    this.#connectTimedOut = false;
 
     this.#startStatusTimer();
 
@@ -1377,6 +1438,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               generatedCode: '',
               stallDetected: this.#stallDetected,
               softTimeoutTriggered,
+              connectTimedOut: this.#connectTimedOut,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
               queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             },
@@ -1403,6 +1465,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               fromCache,
               stallDetected: this.#stallDetected,
               softTimeoutTriggered,
+              connectTimedOut: this.#connectTimedOut,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
               queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             },
@@ -1428,6 +1491,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             fromCache,
             stallDetected: this.#stallDetected,
             softTimeoutTriggered,
+            connectTimedOut: this.#connectTimedOut,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
           },
@@ -1438,6 +1502,11 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       // PipelineAbortError must propagate to PluginManager for graceful shutdown
       if (error instanceof PipelineAbortError) {
         throw error;
+      }
+
+      // Connect timeout: flag for prepareRetry to start a fresh conversation
+      if (error instanceof QueryConnectTimeoutError) {
+        this.#connectTimedOut = true;
       }
 
       let errorMessage = error instanceof Error ? error.message : String(error);
@@ -1458,6 +1527,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             generatedCode: '',
             stallDetected: this.#stallDetected,
             softTimeoutTriggered: this.#softTimeoutTriggered,
+            connectTimedOut: this.#connectTimedOut,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             subprocessStderr: stderr || undefined,
@@ -1483,6 +1553,17 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const objdiffResult = lastAttempt.objdiff;
 
     if (!claudeResult) {
+      return context;
+    }
+
+    // Connect timed out: skip feedback prompt so next attempt starts a fresh conversation.
+    // Also invalidate any cache entry from the timed-out attempt so the retry doesn't replay it.
+    if (claudeResult.data?.connectTimedOut) {
+      this.#feedbackPrompt = undefined;
+      if (this.#initialPromptHash && this.#cache) {
+        delete this.#cache.conversations[this.#initialPromptHash];
+        this.#cacheModified = true;
+      }
       return context;
     }
 

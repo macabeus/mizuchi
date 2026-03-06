@@ -18,6 +18,7 @@ import type {
 export interface ReportPluginConfigs {
   claudeRunner: {
     stallThreshold: number;
+    connectTimeoutMs: number;
     model: string;
     softTimeout?: {
       softTimeoutMs: number;
@@ -85,6 +86,7 @@ export function transformToReport(
       promptsDir: results.config.promptsDir,
       maxRetries: results.config.maxRetries,
       stallThreshold: pluginConfigs.claudeRunner.stallThreshold,
+      connectTimeoutMs: pluginConfigs.claudeRunner.connectTimeoutMs,
       compilerScript: pluginConfigs.compiler.compilerScript,
       getContextScript: results.config.getContextScript,
       target: results.config.target,
