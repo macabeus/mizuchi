@@ -79,11 +79,12 @@ plugins:
     # Timeout in milliseconds for Claude requests (default: 600000 = 10 minutes)
     timeoutMs: 600000
 
-    # Connect timeout in milliseconds (default: 60000 = 1 minute)
+    # TTFT (Time To First Token) timeout in milliseconds (default: 180000 = 3 minutes)
     # If no API response arrives within this window at the start of a query, the attempt
     # is aborted early and retried with a fresh conversation. Only active until the first
-    # substantive message arrives; after that, soft/hard timeouts take over.
-    connectTimeoutMs: 60000
+    # substantive message arrives; after that, soft/hard timeouts begin with their full budgets
+    # (the TTFT wait time does NOT count against the soft/hard timeout budgets).
+    ttftTimeoutMs: 180000
 
     # Soft timeout: gives Claude a chance to submit its best code before the hard timeout kills the request.
     # When softTimeoutMs elapses, the current query is closed and a new "submit now" prompt is sent

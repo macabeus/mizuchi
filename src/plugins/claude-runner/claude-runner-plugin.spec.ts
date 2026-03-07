@@ -162,7 +162,7 @@ function createMockQueryFactory(options: MockQueryFactoryOptions | string[]): Qu
 }
 
 const defaultPluginConfig: ClaudeRunnerConfig = {
-  connectTimeoutMs: 60000,
+  ttftTimeoutMs: 180000,
   timeoutMs: 300000,
   systemPrompt: '{{promptContent}}',
   kickoffMessage: 'Decompile the function.',
@@ -497,7 +497,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -542,7 +543,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -631,7 +633,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -661,7 +664,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -737,7 +741,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -767,7 +772,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -826,7 +832,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -901,7 +908,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
         },
@@ -950,7 +958,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -982,7 +991,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -1300,7 +1310,8 @@ void movePoint(Point* p) {
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -2096,7 +2107,8 @@ mov eax, 0
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -2221,7 +2233,8 @@ mov eax, 0
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -2284,7 +2297,8 @@ mov eax, 0
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -2429,7 +2443,7 @@ mov eax, 0
       }) as unknown as QueryFactory;
 
       const plugin = new ClaudeRunnerPlugin({
-        config: { ...defaultPluginConfig, timeoutMs: 100 }, // Short timeout
+        config: { ...defaultPluginConfig, ttftTimeoutMs: 50, timeoutMs: 100 }, // Short timeouts
         pipelineConfig: defaultTestPipelineConfig,
         cCompiler: testCCompiler,
         objdiff: testObjdiff,
@@ -2463,7 +2477,8 @@ mov eax, 0
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -2481,7 +2496,7 @@ mov eax, 0
       // Attempt 2: times out — no SDK response at all
       const { result: result2 } = await plugin.execute(context);
       expect(result2.status).toBe('failure');
-      expect(result2.error).toContain('timed out');
+      expect(result2.error).toContain('TTFT timeout');
 
       // Token usage must NOT be the same as attempt 1's usage.
       // Since no API response was received, per-attempt tokens should be zero.
@@ -2589,7 +2604,8 @@ mov eax, 0
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -2652,9 +2668,11 @@ mov eax, 0
         callCount++;
 
         if (callCount === 1) {
-          // Phase 1: emit system init, then hang forever
+          // Phase 1: emit system init + assistant message (to satisfy TTFT), then hang forever.
+          // The assistant message triggers the soft/hard timeout timers to start counting.
           let rejectPending: ((reason?: unknown) => void) | null = null;
           let yieldedInit = false;
+          let yieldedAssistant = false;
 
           return {
             [Symbol.asyncIterator]: () => {
@@ -2669,6 +2687,19 @@ mov eax, 0
                         subtype: 'init',
                         session_id: TEST_SESSION_ID,
                       } as SDKMessage,
+                    });
+                  }
+                  if (!yieldedAssistant && !options.noSessionId) {
+                    yieldedAssistant = true;
+                    return Promise.resolve({
+                      done: false as const,
+                      value: {
+                        type: 'assistant',
+                        message: {
+                          id: 'msg-phase1-partial',
+                          content: [{ type: 'text', text: 'Let me work on this...' }],
+                        },
+                      } as unknown as SDKMessage,
                     });
                   }
                   // Block forever — will be resolved when close() rejects the pending iterator
@@ -2893,16 +2924,17 @@ mov eax, 0
       expect(secondCall[1].resume).toBe(TEST_SESSION_ID);
     });
 
-    it('throws full timeout error when phase 1 times out and sessionId is null', async () => {
+    it('throws TTFT timeout when phase 1 has no session and no first token', async () => {
       const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
       const mockFactory = createSoftTimeoutQueryFactory({ phase2Response, noSessionId: true });
 
       const plugin = new ClaudeRunnerPlugin({
         config: {
           ...defaultPluginConfig,
+          ttftTimeoutMs: 50,
           timeoutMs: 500,
           softTimeout: {
-            softTimeoutMs: 50,
+            softTimeoutMs: 200,
             prompt: softTimeoutPrompt,
           },
         },
@@ -2916,7 +2948,8 @@ mov eax, 0
       const { result } = await plugin.execute(context);
 
       expect(result.status).toBe('failure');
-      expect(result.error).toContain('timed out after 50ms');
+      expect(result.error).toContain('TTFT timeout');
+      expect(result.data?.ttftTimedOut).toBe(true);
       // Should NOT have made a second query call
       expect(mockFactory).toHaveBeenCalledTimes(1);
     });
@@ -3072,15 +3105,27 @@ mov eax, 0
         }
 
         if (callCount === 2) {
-          // Follow-up query: hangs forever (soft timeout)
+          // Follow-up query: emit assistant message (satisfy TTFT), then hang (soft timeout fires)
           let rejectPending: ((reason?: unknown) => void) | null = null;
+          let yieldedAssistant = false;
           return {
             [Symbol.asyncIterator]: () => {
               const gen = {
-                next: () =>
-                  new Promise<IteratorResult<SDKMessage>>((_, reject) => {
+                next: () => {
+                  if (!yieldedAssistant) {
+                    yieldedAssistant = true;
+                    return Promise.resolve({
+                      done: false as const,
+                      value: {
+                        type: 'assistant',
+                        message: { id: 'msg-followup-partial', content: [{ type: 'text', text: 'Working...' }] },
+                      } as unknown as SDKMessage,
+                    });
+                  }
+                  return new Promise<IteratorResult<SDKMessage>>((_, reject) => {
                     rejectPending = reject;
-                  }),
+                  });
+                },
                 return: () => Promise.resolve({ done: true as const, value: undefined }),
                 throw: (err: unknown) => Promise.reject(err),
                 [Symbol.asyncIterator]: () => gen,
@@ -3157,7 +3202,8 @@ mov eax, 0
               fromCache: false,
               stallDetected: false,
               softTimeoutTriggered: false,
-              connectTimedOut: false,
+              ttftTimedOut: false,
+              ttftMs: undefined,
             },
           },
           compiler: {
@@ -3182,7 +3228,7 @@ mov eax, 0
       const result = claudeRunnerConfigSchema.safeParse({
         ...defaultPluginConfig,
         timeoutMs: 500,
-        connectTimeoutMs: 100,
+        ttftTimeoutMs: 100,
         softTimeout: {
           softTimeoutMs: 500,
           prompt: softTimeoutPrompt,
@@ -3198,7 +3244,7 @@ mov eax, 0
       const result2 = claudeRunnerConfigSchema.safeParse({
         ...defaultPluginConfig,
         timeoutMs: 500,
-        connectTimeoutMs: 100,
+        ttftTimeoutMs: 100,
         softTimeout: {
           softTimeoutMs: 600,
           prompt: softTimeoutPrompt,
@@ -3211,7 +3257,7 @@ mov eax, 0
       const result = claudeRunnerConfigSchema.safeParse({
         ...defaultPluginConfig,
         timeoutMs: 500,
-        connectTimeoutMs: 100,
+        ttftTimeoutMs: 100,
         softTimeout: {
           softTimeoutMs: 200,
           prompt: softTimeoutPrompt,
@@ -3221,8 +3267,8 @@ mov eax, 0
     });
   });
 
-  describe('connect timeout', () => {
-    it('aborts with QueryConnectTimeoutError when no response arrives within connectTimeoutMs', async () => {
+  describe('TTFT timeout', () => {
+    it('aborts with QueryTtftTimeoutError when no response arrives within ttftTimeoutMs', async () => {
       // Mock factory that emits system init then hangs until close() is called
       const factory = vi.fn((_prompt: string, _options: any) => {
         let yieldedInit = false;
@@ -3256,7 +3302,7 @@ mov eax, 0
       }) as unknown as QueryFactory;
 
       const plugin = new ClaudeRunnerPlugin({
-        config: { ...defaultPluginConfig, connectTimeoutMs: 50, timeoutMs: 10_000 },
+        config: { ...defaultPluginConfig, ttftTimeoutMs: 50, timeoutMs: 10_000 },
         pipelineConfig: defaultTestPipelineConfig,
         cCompiler: testCCompiler,
         objdiff: testObjdiff,
@@ -3266,14 +3312,14 @@ mov eax, 0
       const { result } = await plugin.execute(createTestContext());
 
       expect(result.status).toBe('failure');
-      expect(result.error).toContain('connect timeout');
-      expect(result.data?.connectTimedOut).toBe(true);
+      expect(result.error).toContain('TTFT timeout');
+      expect(result.data?.ttftTimedOut).toBe(true);
     });
 
     it('clears connect timer on first response, not triggering false positive', async () => {
       const cCode = 'void sub_8068748(void) {}';
       const response = `\`\`\`c\n${cCode}\n\`\`\``;
-      // Mock that emits messages with short delays (under connectTimeoutMs)
+      // Mock that emits messages with short delays (under ttftTimeoutMs)
       const factory = vi.fn((_prompt: string, _options: any) => {
         const messages: SDKMessage[] = [
           { type: 'system', subtype: 'init', session_id: 'sess-456' } as SDKMessage,
@@ -3290,7 +3336,7 @@ mov eax, 0
               next: () => {
                 if (idx < messages.length) {
                   const msg = messages[idx++];
-                  // Small delay to simulate real latency, but under connectTimeoutMs
+                  // Small delay to simulate real latency, but under ttftTimeoutMs
                   return new Promise<IteratorResult<SDKMessage>>((resolve) =>
                     setTimeout(() => resolve({ done: false, value: msg }), 10),
                   );
@@ -3308,7 +3354,7 @@ mov eax, 0
       }) as unknown as QueryFactory;
 
       const plugin = new ClaudeRunnerPlugin({
-        config: { ...defaultPluginConfig, connectTimeoutMs: 100, timeoutMs: 10_000 },
+        config: { ...defaultPluginConfig, ttftTimeoutMs: 100, timeoutMs: 10_000 },
         pipelineConfig: defaultTestPipelineConfig,
         cCompiler: testCCompiler,
         objdiff: testObjdiff,
@@ -3318,15 +3364,15 @@ mov eax, 0
       const { result } = await plugin.execute(createTestContext());
 
       expect(result.status).toBe('success');
-      expect(result.data?.connectTimedOut).toBe(false);
+      expect(result.data?.ttftTimedOut).toBe(false);
       expect(result.data?.generatedCode).toBe(cCode);
     });
 
-    it('does not false-positive when gaps between tool calls exceed connectTimeoutMs', async () => {
+    it('does not false-positive when gaps between tool calls exceed ttftTimeoutMs', async () => {
       const cCode = 'void sub_8068748(void) {}';
       const response = `\`\`\`c\n${cCode}\n\`\`\``;
       // Mock that emits: system → assistant (tool_use) → [long delay] → user (tool_result) → assistant (text) → result
-      // The delay between assistant and user exceeds connectTimeoutMs, but connect timeout
+      // The delay between assistant and user exceeds ttftTimeoutMs, but TTFT timeout
       // should be disabled after the first assistant message.
       const factory = vi.fn((_prompt: string, _options: any) => {
         const messages: SDKMessage[] = [
@@ -3355,7 +3401,7 @@ mov eax, 0
               next: () => {
                 if (idx < messages.length) {
                   const msg = messages[idx++];
-                  // After the first assistant message (tool_use), add a delay LONGER than connectTimeoutMs
+                  // After the first assistant message (tool_use), add a delay LONGER than ttftTimeoutMs
                   const delay = idx === 3 ? 150 : 5;
                   return new Promise<IteratorResult<SDKMessage>>((resolve) =>
                     setTimeout(() => resolve({ done: false, value: msg }), delay),
@@ -3374,8 +3420,8 @@ mov eax, 0
       }) as unknown as QueryFactory;
 
       const plugin = new ClaudeRunnerPlugin({
-        // connectTimeoutMs=50 is shorter than the 150ms delay between tool_use and tool_result
-        config: { ...defaultPluginConfig, connectTimeoutMs: 50, timeoutMs: 10_000 },
+        // ttftTimeoutMs=50 is shorter than the 150ms delay between tool_use and tool_result
+        config: { ...defaultPluginConfig, ttftTimeoutMs: 50, timeoutMs: 10_000 },
         pipelineConfig: defaultTestPipelineConfig,
         cCompiler: testCCompiler,
         objdiff: testObjdiff,
@@ -3385,12 +3431,12 @@ mov eax, 0
       const { result } = await plugin.execute(createTestContext());
 
       expect(result.status).toBe('success');
-      expect(result.data?.connectTimedOut).toBe(false);
+      expect(result.data?.ttftTimedOut).toBe(false);
       expect(result.data?.generatedCode).toBe(cCode);
     });
 
-    it('prepareRetry skips feedbackPrompt when connectTimedOut, starting fresh conversation', async () => {
-      // First: run a query that triggers connect timeout
+    it('prepareRetry skips feedbackPrompt when ttftTimedOut, starting fresh conversation', async () => {
+      // First: run a query that triggers TTFT timeout
       const factory = vi.fn((_prompt: string, _options: any) => {
         let yieldedInit = false;
         let resolvePending: ((v: IteratorResult<SDKMessage>) => void) | null = null;
@@ -3422,7 +3468,7 @@ mov eax, 0
       }) as unknown as QueryFactory;
 
       const plugin = new ClaudeRunnerPlugin({
-        config: { ...defaultPluginConfig, connectTimeoutMs: 50, timeoutMs: 10_000 },
+        config: { ...defaultPluginConfig, ttftTimeoutMs: 50, timeoutMs: 10_000 },
         pipelineConfig: defaultTestPipelineConfig,
         cCompiler: testCCompiler,
         objdiff: testObjdiff,
@@ -3431,7 +3477,7 @@ mov eax, 0
 
       const context = createTestContext();
       const { result } = await plugin.execute(context);
-      expect(result.data?.connectTimedOut).toBe(true);
+      expect(result.data?.ttftTimedOut).toBe(true);
 
       // Now call prepareRetry — should NOT set feedbackPrompt
       const previousAttempts = [

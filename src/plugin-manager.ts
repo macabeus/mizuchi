@@ -4,6 +4,7 @@
  * Orchestrates the execution of plugins in the pipelines.
  * Handles retry logic and context propagation between plugins.
  */
+import type { ClaudeRunnerResult } from './plugins/claude-runner/claude-runner-plugin.js';
 import type { BackgroundTaskCoordinator } from './shared/background-task-coordinator.js';
 import { PipelineConfig } from './shared/config.js';
 import { PipelineAbortError } from './shared/errors.js';
@@ -18,6 +19,8 @@ import type {
   PluginResult,
   PluginResultMap,
 } from './shared/types.js';
+
+const TTFT_BACKOFF_MS = [15_000, 30_000, 60_000] as const;
 
 export class PluginManager {
   #setupPhasePlugins: Plugin<any>[] = [];
@@ -307,6 +310,15 @@ export class PluginManager {
         const attemptResultsMap = this.#transformResultsToMap(attemptResult.pluginResults);
         context.previousAttempts.push(attemptResultsMap);
 
+        // Backoff on TTFT timeout to avoid rapid-fire retries against a slow API
+        const claudeRunnerResult = attemptResult.pluginResults.find((r) => r.pluginId === 'claude-runner');
+        if ((claudeRunnerResult?.data as ClaudeRunnerResult | undefined)?.ttftTimedOut) {
+          const consecutiveTtftTimeouts = this.#countConsecutiveTtftTimeouts(attempts);
+          const backoffIdx = Math.min(consecutiveTtftTimeouts - 1, TTFT_BACKOFF_MS.length - 1);
+          const backoffMs = TTFT_BACKOFF_MS[backoffIdx];
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        }
+
         // Allow plugins to prepare context for retry
         context = this.#prepareRetryContext(context);
       }
@@ -475,6 +487,22 @@ export class PluginManager {
     }
 
     return resultsMap;
+  }
+
+  /**
+   * Count consecutive TTFT timeouts from the end of the attempts list
+   */
+  #countConsecutiveTtftTimeouts(attempts: AttemptResult[]): number {
+    let count = 0;
+    for (let i = attempts.length - 1; i >= 0; i--) {
+      const cr = attempts[i].pluginResults.find((r) => r.pluginId === 'claude-runner');
+      if ((cr?.data as ClaudeRunnerResult | undefined)?.ttftTimedOut) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
   }
 
   /**

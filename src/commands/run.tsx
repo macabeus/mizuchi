@@ -847,7 +847,7 @@ async function runPipeline(
     // Plugin configs for report transformation (shared between partial and final reports)
     const pluginConfigs: ReportPluginConfigs = {
       claudeRunner: {
-        connectTimeoutMs: claudeRunnerConfig.connectTimeoutMs,
+        ttftTimeoutMs: claudeRunnerConfig.ttftTimeoutMs,
         stallThreshold: claudeRunnerConfig.stallThreshold,
         model: claudeRunnerConfig.model ?? 'claude-sonnet-4-6',
         softTimeout: claudeRunnerConfig.softTimeout,

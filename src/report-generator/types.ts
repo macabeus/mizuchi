@@ -170,7 +170,7 @@ export interface ReportConfig {
   promptsDir: string;
   maxRetries: number;
   stallThreshold: number;
-  connectTimeoutMs: number;
+  ttftTimeoutMs: number;
   compilerScript: string;
   getContextScript: string;
   target: string;

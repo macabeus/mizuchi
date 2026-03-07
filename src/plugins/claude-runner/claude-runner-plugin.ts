@@ -28,7 +28,7 @@ import type {
   PluginStatusData,
 } from '~/shared/types.js';
 
-import { QueryAbortedError, QueryConnectTimeoutError, QueryTimeoutError } from './errors.js';
+import { QueryAbortedError, QueryTimeoutError, QueryTtftTimeoutError } from './errors.js';
 
 /**
  * Query interface from the SDK
@@ -145,11 +145,13 @@ export const claudeRunnerConfigSchema = z
       .positive()
       .default(7)
       .describe('Maximum number of compile_and_view_assembly tool calls allowed per retry iteration'),
-    connectTimeoutMs: z
+    ttftTimeoutMs: z
       .number()
       .positive()
-      .default(60_000)
-      .describe('Connect timeout: abort if no API response arrives within this window (ms)'),
+      .default(180_000)
+      .describe(
+        'TTFT (Time To First Token) timeout: abort if no API response arrives within this window (ms). Soft/hard timeouts only begin counting after the first token arrives.',
+      ),
     softTimeout: z
       .object({
         softTimeoutMs: z.number().positive(),
@@ -168,9 +170,9 @@ export const claudeRunnerConfigSchema = z
     message: 'softTimeout.softTimeoutMs must be less than timeoutMs',
     path: ['softTimeout', 'softTimeoutMs'],
   })
-  .refine((config) => config.connectTimeoutMs < config.timeoutMs, {
-    message: 'connectTimeoutMs must be less than timeoutMs',
-    path: ['connectTimeoutMs'],
+  .refine((config) => config.ttftTimeoutMs < config.timeoutMs, {
+    message: 'ttftTimeoutMs must be less than timeoutMs',
+    path: ['ttftTimeoutMs'],
   });
 
 export type ClaudeRunnerConfig = z.infer<typeof claudeRunnerConfigSchema>;
@@ -436,7 +438,9 @@ export interface ClaudeRunnerResult {
   fromCache: boolean;
   stallDetected: boolean;
   softTimeoutTriggered: boolean;
-  connectTimedOut: boolean;
+  ttftTimedOut: boolean;
+  /** Actual time to first token in milliseconds (undefined if TTFT timeout fired) */
+  ttftMs?: number;
   tokenUsage?: TokenUsageMap;
   queryTiming?: QueryTiming;
   /** Captured stderr from the Claude Code subprocess, if any */
@@ -461,7 +465,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #feedbackPrompt?: string;
   #stallDetected = false;
   #softTimeoutTriggered = false;
-  #connectTimedOut = false;
+  #ttftTimedOut = false;
+  #ttftMs?: number;
   #lastStallAttemptIndex = -1;
   #queryFactory: QueryFactory;
   #cache: ConversationCache | null = null;
@@ -503,9 +508,11 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #mcpServer: McpServer;
   #cliPrompt?: CliPrompt;
 
-  // Connect timer clear callback — set by #runQueryWithAbort, called from #collectResponse
-  // on the first substantive (assistant/user) message to disable connect timeout
-  #clearConnectTimer: (() => void) | null = null;
+  // TTFT callback — set by #runQueryWithAbort, called from #collectResponse
+  // on the first substantive (assistant/user) message to record TTFT and start soft/hard timers
+  #onFirstToken: (() => void) | null = null;
+  // Timestamp when query started (for TTFT measurement)
+  #queryStartTime = 0;
 
   // Captured stderr from the Claude Code subprocess (reset per query)
   #stderrChunks: string[] = [];
@@ -615,13 +622,14 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const hardMs = this.#config.timeoutMs;
 
     let timeValue = formatMs(elapsed);
-    if (this.#clearConnectTimer) {
-      timeValue += ` / ${formatMs(this.#config.connectTimeoutMs)} connect`;
+    if (this.#onFirstToken) {
+      timeValue += ` / ${formatMs(this.#config.ttftTimeoutMs)} ttft`;
+    } else {
+      if (softMs) {
+        timeValue += ` / ${formatMs(softMs)} soft`;
+      }
+      timeValue += ` / ${formatMs(hardMs)} hard`;
     }
-    if (softMs) {
-      timeValue += ` / ${formatMs(softMs)} soft`;
-    }
-    timeValue += ` / ${formatMs(hardMs)} hard`;
 
     stats.push({ label: '', value: timeValue });
 
@@ -832,8 +840,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         if (msg.type === 'system' && msg.session_id) {
           this.#sessionId = msg.session_id;
         } else if (msg.type === 'assistant') {
-          // First substantive message — API is responsive, disable connect timeout
-          this.#clearConnectTimer?.();
+          // First substantive message — API is responsive, record TTFT and start soft/hard timers
+          this.#onFirstToken?.();
           // Track error type from assistant messages (e.g., 'rate_limit', 'billing_error')
           if (msg.error) {
             lastAssistantError = msg.error;
@@ -858,8 +866,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             }
           }
         } else if (msg.type === 'user' && msg.message?.content) {
-          // Tool results come as user messages — also confirms API is responsive, disable connect timeout
-          this.#clearConnectTimer?.();
+          // Tool results come as user messages — also confirms API is responsive
+          this.#onFirstToken?.();
           for (const block of msg.message.content) {
             if (block.type === 'tool_result' && 'tool_use_id' in block && 'content' in block) {
               contentBlocks.push({
@@ -932,22 +940,26 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   /**
    * Run a query with timeout and external-abort handling.
    *
-   * Sets up a timeout that kills the query after `timeoutMs`, listens for the
-   * external abort signal (e.g., background permuter success), and cleans up
-   * in all cases. The caller provides a `work` callback that does the actual
-   * response processing.
+   * Timeout architecture (Option A — TTFT buffer extends total time):
+   *
+   * Phase 1 (TTFT): Only the TTFT timer runs. Soft/hard timeouts have NOT started.
+   * Phase 2 (Working): Once the first substantive SDK message arrives, the TTFT timer
+   *   is cleared and soft/hard timeouts begin with their FULL budgets.
+   *
+   * If `disableTtftTimeout` is set (e.g., soft timeout recovery), the soft/hard timer
+   * starts immediately and no TTFT timer is used.
    */
   async #runQueryWithAbort<T>(
     work: () => Promise<T>,
-    options?: { timeoutMs?: number; timeoutMode?: 'soft' | 'hard'; disableConnectTimeout?: boolean },
+    options?: { timeoutMs?: number; timeoutMode?: 'soft' | 'hard'; disableTtftTimeout?: boolean },
   ): Promise<T> {
     const effectiveTimeout = options?.timeoutMs ?? this.#config.timeoutMs;
     const timeoutMode = options?.timeoutMode ?? 'hard';
-    const connectTimeoutMs = this.#config.connectTimeoutMs;
-    const useConnectTimeout = !options?.disableConnectTimeout && connectTimeoutMs < effectiveTimeout;
+    const ttftTimeoutMs = this.#config.ttftTimeoutMs;
+    const useTtftTimeout = !options?.disableTtftTimeout;
 
     const abortController = new AbortController();
-    let connectTimerTriggered = false;
+    let ttftTimerTriggered = false;
     const abortAndClose = () => {
       abortController.abort();
       if (this.#currentQuery) {
@@ -956,25 +968,40 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       }
     };
 
-    const timeoutId = setTimeout(abortAndClose, effectiveTimeout);
+    // Soft/hard timeout timer — started immediately if TTFT is disabled,
+    // otherwise deferred until first token arrives.
+    let mainTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (!useTtftTimeout) {
+      mainTimeoutId = setTimeout(abortAndClose, effectiveTimeout);
+    }
 
-    // Connect timeout: a one-shot timer that fires if no substantive SDK message
-    // (assistant/user) arrives within connectTimeoutMs of the query start.
-    // Once the first such message arrives, #collectResponse clears the timer —
-    // the API is responsive and regular soft/hard timeouts handle the rest.
-    let connectTimerId: ReturnType<typeof setTimeout> | undefined;
-    if (useConnectTimeout) {
-      connectTimerId = setTimeout(() => {
-        connectTimerTriggered = true;
+    // TTFT timer: fires if no substantive SDK message arrives within ttftTimeoutMs.
+    // When the first token arrives, #collectResponse calls #onFirstToken which
+    // clears this timer and starts the main soft/hard timeout.
+    let ttftTimerId: ReturnType<typeof setTimeout> | undefined;
+    this.#queryStartTime = Date.now();
+    if (useTtftTimeout) {
+      ttftTimerId = setTimeout(() => {
+        ttftTimerTriggered = true;
         abortAndClose();
-      }, connectTimeoutMs);
+      }, ttftTimeoutMs);
 
-      this.#clearConnectTimer = () => {
-        if (connectTimerId !== undefined) {
-          clearTimeout(connectTimerId);
-          connectTimerId = undefined;
+      this.#onFirstToken = () => {
+        // Record actual TTFT
+        this.#ttftMs = Date.now() - this.#queryStartTime;
+
+        // Clear the TTFT timer
+        if (ttftTimerId !== undefined) {
+          clearTimeout(ttftTimerId);
+          ttftTimerId = undefined;
         }
-        this.#clearConnectTimer = null;
+
+        // Start the main soft/hard timeout with its full budget
+        if (mainTimeoutId === undefined) {
+          mainTimeoutId = setTimeout(abortAndClose, effectiveTimeout);
+        }
+
+        this.#onFirstToken = null;
       };
     }
 
@@ -984,33 +1011,35 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       const result = await work();
 
       if (abortController.signal.aborted) {
-        if (connectTimerTriggered) {
-          throw new QueryConnectTimeoutError({ connectTimeoutMs });
+        if (ttftTimerTriggered) {
+          throw new QueryTtftTimeoutError({ ttftTimeoutMs });
         }
         throw new QueryTimeoutError({ timeoutMs: effectiveTimeout, mode: timeoutMode });
       }
 
       return result;
     } catch (error) {
-      if (error instanceof QueryConnectTimeoutError) {
+      if (error instanceof QueryTtftTimeoutError) {
         throw error;
       }
       if (this.#externalAbortSignal?.aborted) {
         throw new QueryAbortedError();
       }
       if (abortController.signal.aborted) {
-        if (connectTimerTriggered) {
-          throw new QueryConnectTimeoutError({ connectTimeoutMs });
+        if (ttftTimerTriggered) {
+          throw new QueryTtftTimeoutError({ ttftTimeoutMs });
         }
         throw new QueryTimeoutError({ timeoutMs: effectiveTimeout, mode: timeoutMode });
       }
       throw error;
     } finally {
-      clearTimeout(timeoutId);
-      if (connectTimerId !== undefined) {
-        clearTimeout(connectTimerId);
+      if (mainTimeoutId !== undefined) {
+        clearTimeout(mainTimeoutId);
       }
-      this.#clearConnectTimer = null;
+      if (ttftTimerId !== undefined) {
+        clearTimeout(ttftTimerId);
+      }
+      this.#onFirstToken = null;
       this.#externalAbortSignal?.removeEventListener('abort', abortAndClose);
       if (this.#currentQuery) {
         this.#currentQuery.close();
@@ -1187,8 +1216,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       const result = await runQuery({ timeoutMs: softConfig.softTimeoutMs, timeoutMode: 'soft' });
       return { ...result, softTimeoutTriggered: false };
     } catch (error) {
-      // Connect timeout errors bypass soft timeout recovery — propagate immediately
-      if (error instanceof QueryConnectTimeoutError) {
+      // TTFT timeout errors bypass soft timeout recovery — propagate immediately
+      if (error instanceof QueryTtftTimeoutError) {
         throw error;
       }
       // Only intercept soft timeout errors
@@ -1216,7 +1245,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         async () => {
           return this.#collectResponse(activeQuery);
         },
-        { timeoutMs: remainingMs, timeoutMode: 'hard', disableConnectTimeout: true },
+        { timeoutMs: remainingMs, timeoutMode: 'hard', disableTtftTimeout: true },
       );
 
       // Append soft timeout prompt + response to conversation history
@@ -1247,7 +1276,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       this.#feedbackPrompt = undefined;
       this.#stallDetected = false;
       this.#softTimeoutTriggered = false;
-      this.#connectTimedOut = false;
+      this.#ttftTimedOut = false;
+      this.#ttftMs = undefined;
     }
 
     if (this.#feedbackPrompt) {
@@ -1354,7 +1384,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const startTime = Date.now();
     this.#executeStartTime = startTime;
     this.#toolCallCount = 0;
-    this.#connectTimedOut = false;
+    this.#ttftTimedOut = false;
 
     this.#startStatusTimer();
 
@@ -1427,7 +1457,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               generatedCode: '',
               stallDetected: this.#stallDetected,
               softTimeoutTriggered,
-              connectTimedOut: this.#connectTimedOut,
+              ttftTimedOut: this.#ttftTimedOut,
+              ttftMs: this.#ttftMs,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
               queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             },
@@ -1454,7 +1485,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               fromCache,
               stallDetected: this.#stallDetected,
               softTimeoutTriggered,
-              connectTimedOut: this.#connectTimedOut,
+              ttftTimedOut: this.#ttftTimedOut,
+              ttftMs: this.#ttftMs,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
               queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             },
@@ -1480,7 +1512,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             fromCache,
             stallDetected: this.#stallDetected,
             softTimeoutTriggered,
-            connectTimedOut: this.#connectTimedOut,
+            ttftTimedOut: this.#ttftTimedOut,
+            ttftMs: this.#ttftMs,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
           },
@@ -1493,9 +1526,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         throw error;
       }
 
-      // Connect timeout: flag for prepareRetry to start a fresh conversation
-      if (error instanceof QueryConnectTimeoutError) {
-        this.#connectTimedOut = true;
+      // TTFT timeout: flag for prepareRetry to start a fresh conversation
+      if (error instanceof QueryTtftTimeoutError) {
+        this.#ttftTimedOut = true;
       }
 
       let errorMessage = error instanceof Error ? error.message : String(error);
@@ -1516,7 +1549,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             generatedCode: '',
             stallDetected: this.#stallDetected,
             softTimeoutTriggered: this.#softTimeoutTriggered,
-            connectTimedOut: this.#connectTimedOut,
+            ttftTimedOut: this.#ttftTimedOut,
+            ttftMs: this.#ttftMs,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             subprocessStderr: stderr || undefined,
@@ -1545,9 +1579,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       return context;
     }
 
-    // Connect timed out: skip feedback prompt so next attempt starts a fresh conversation.
+    // TTFT timed out: skip feedback prompt so next attempt starts a fresh conversation.
     // Also invalidate any cache entry from the timed-out attempt so the retry doesn't replay it.
-    if (claudeResult.data?.connectTimedOut) {
+    if (claudeResult.data?.ttftTimedOut) {
       this.#feedbackPrompt = undefined;
       if (this.#initialPromptHash && this.#cache) {
         delete this.#cache.conversations[this.#initialPromptHash];
@@ -1661,6 +1695,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         lines.push(
           '',
           `**Timing**`,
+          `  TTFT: ${result.data.ttftMs !== undefined ? `${(result.data.ttftMs / 1000).toFixed(1)}s` : 'N/A'}`,
           `  API time: ${(qt.durationApiMs / 1000).toFixed(1)}s (wall: ${(qt.durationMs / 1000).toFixed(1)}s) across ${qt.numTurns} turns`,
           `  Throughput: ${throughput} output tokens/sec`,
         );

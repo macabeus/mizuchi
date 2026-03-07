@@ -20,15 +20,15 @@ export class QueryTimeoutError extends Error {
 }
 
 /**
- * Thrown when no API response arrives within the connect timeout window.
+ * Thrown when no API response arrives within the TTFT (Time To First Token) timeout window.
  */
-export class QueryConnectTimeoutError extends Error {
-  readonly connectTimeoutMs: number;
+export class QueryTtftTimeoutError extends Error {
+  readonly ttftTimeoutMs: number;
 
-  constructor({ connectTimeoutMs }: { connectTimeoutMs: number }) {
-    super(`Claude connect timeout: no API response within ${connectTimeoutMs}ms`);
-    this.name = 'QueryConnectTimeoutError';
-    this.connectTimeoutMs = connectTimeoutMs;
+  constructor({ ttftTimeoutMs }: { ttftTimeoutMs: number }) {
+    super(`Claude TTFT timeout: no API response within ${ttftTimeoutMs}ms`);
+    this.name = 'QueryTtftTimeoutError';
+    this.ttftTimeoutMs = ttftTimeoutMs;
   }
 }
 

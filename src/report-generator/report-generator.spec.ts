@@ -11,7 +11,7 @@ import { type ReportPluginConfigs, transformToReport } from './transform.js';
 import type { RunReport } from './types.js';
 
 const pluginConfigs: ReportPluginConfigs = {
-  claudeRunner: { stallThreshold: 3, connectTimeoutMs: 60_000, model: 'test-model' },
+  claudeRunner: { stallThreshold: 3, ttftTimeoutMs: 180_000, model: 'test-model' },
   compiler: { compilerScript: 'echo test' },
 };
 
