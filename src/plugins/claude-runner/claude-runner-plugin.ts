@@ -70,6 +70,13 @@ interface SDKMessage {
   message?: {
     id?: string;
     content: SDKContentBlock[];
+    model?: string;
+    usage?: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
   };
   subtype?: string;
   errors?: string[];
@@ -835,6 +842,12 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const contentBlocks: ContentBlock[] = [];
     let lastAssistantError: SDKAssistantMessageError | undefined;
 
+    // Track partial token usage from individual assistant messages (BetaMessage.usage).
+    // Used as fallback when the query is aborted before a `result` message is emitted.
+    const partialUsage: TokenUsageMap = {};
+    let partialTurns = 0;
+    let gotResult = false;
+
     try {
       for await (const msg of queryObj) {
         if (msg.type === 'system' && msg.session_id) {
@@ -845,6 +858,24 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           // Track error type from assistant messages (e.g., 'rate_limit', 'billing_error')
           if (msg.error) {
             lastAssistantError = msg.error;
+          }
+
+          // Accumulate per-turn token usage from BetaMessage.usage (fallback for aborted queries)
+          if (msg.message?.usage && msg.message.model) {
+            const model = msg.message.model;
+            const u = msg.message.usage;
+            const entry = (partialUsage[model] ??= {
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              costUsd: 0,
+            });
+            entry.inputTokens += u.input_tokens;
+            entry.outputTokens += u.output_tokens;
+            entry.cacheReadInputTokens += u.cache_read_input_tokens ?? 0;
+            entry.cacheCreationInputTokens += u.cache_creation_input_tokens ?? 0;
+            partialTurns++;
           }
 
           if (msg.message?.content) {
@@ -885,7 +916,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         }
 
         if (msg.type === 'result') {
-          // Accumulate token usage from modelUsage (cumulative across all API roundtrips)
+          gotResult = true;
+
+          // Accumulate token usage from modelUsage (authoritative, cumulative across all API roundtrips)
           if (msg.modelUsage) {
             for (const [model, mu] of Object.entries(msg.modelUsage)) {
               const entry = (this.#tokenUsage[model] ??= {
@@ -932,6 +965,26 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       }
 
       throw error;
+    } finally {
+      // When the query was aborted (no `result` message emitted), apply partial token usage
+      // accumulated from individual assistant messages so timed-out queries still report costs.
+      if (!gotResult) {
+        for (const [model, pu] of Object.entries(partialUsage)) {
+          const entry = (this.#tokenUsage[model] ??= {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            costUsd: 0,
+          });
+          entry.inputTokens += pu.inputTokens;
+          entry.outputTokens += pu.outputTokens;
+          entry.cacheReadInputTokens += pu.cacheReadInputTokens;
+          entry.cacheCreationInputTokens += pu.cacheCreationInputTokens;
+          // costUsd stays 0 — per-turn BetaMessage.usage doesn't include cost
+        }
+        this.#queryTiming.numTurns += partialTurns;
+      }
     }
 
     return { text: responseText, contentBlocks };
