@@ -298,6 +298,20 @@ ${reminderPreviousAttempt.code}
 }
 
 /**
+ * Build a follow-up prompt after a hard timeout.
+ */
+function buildTimeoutFollowUpPrompt(expectedFunctionName: string): string {
+  return `Your previous attempt timed out. You are spending too long on tool calls and analysis.
+
+# CRITICAL: You MUST output code in your next response, even if it's not perfect.
+
+- Do NOT use the compile_and_view_assembly tool at all this attempt
+- Write your best \`${expectedFunctionName}\` implementation based on what you already know
+- Output the complete C code in a single \`\`\`c code block in your next response
+- You have very limited time — every second spent NOT writing code is wasted`;
+}
+
+/**
  * Detect if the pipeline is stalled (no improvement in differenceCount
  * over the last `stallThreshold` consecutive attempts with objdiff results).
  *
@@ -1684,26 +1698,31 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     let error = '';
     let isCompilationError = false;
 
-    if (compilerResult?.status === 'failure') {
-      // Use output for detailed error message, fall back to error field
-      error = compilerResult.output || compilerResult.error || 'Unknown compilation error';
-      isCompilationError = true;
-    } else if (objdiffResult?.status === 'failure') {
-      error = objdiffResult.output || objdiffResult.error || 'Assembly mismatch';
-      isCompilationError = false;
+    // Claude-runner timed out (no compiler/objdiff ran) — use timeout-specific prompt
+    if (claudeResult.status === 'failure' && claudeResult.error?.includes('timed out')) {
+      this.#feedbackPrompt = buildTimeoutFollowUpPrompt(context.functionName);
     } else {
-      error = claudeResult.error || 'Unknown error';
-      isCompilationError = true;
-    }
+      if (compilerResult?.status === 'failure') {
+        // Use output for detailed error message, fall back to error field
+        error = compilerResult.output || compilerResult.error || 'Unknown compilation error';
+        isCompilationError = true;
+      } else if (objdiffResult?.status === 'failure') {
+        error = objdiffResult.output || objdiffResult.error || 'Assembly mismatch';
+        isCompilationError = false;
+      } else {
+        error = claudeResult.error || 'Unknown error';
+        isCompilationError = true;
+      }
 
-    // Build follow-up prompt
-    this.#feedbackPrompt = buildFollowUpPrompt(
-      error,
-      isCompilationError,
-      claudeResult.data!.generatedCode,
-      context.functionName,
-      reminderPreviousAttempt,
-    );
+      // Build follow-up prompt
+      this.#feedbackPrompt = buildFollowUpPrompt(
+        error,
+        isCompilationError,
+        claudeResult.data!.generatedCode,
+        context.functionName,
+        reminderPreviousAttempt,
+      );
+    }
 
     // Detect stall and append recovery guidance if needed.
     const attemptsSinceLastStall = previousAttempts.slice(this.#lastStallAttemptIndex + 1);
