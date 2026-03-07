@@ -92,7 +92,11 @@ export class CCompiler {
           'stderr' in error && Buffer.isBuffer((error as Record<string, unknown>).stderr)
             ? ((error as Record<string, unknown>).stderr as Buffer).toString().trim()
             : '';
-        const rawError = stderr || error.message;
+        const stdout =
+          'stdout' in error && Buffer.isBuffer((error as Record<string, unknown>).stdout)
+            ? ((error as Record<string, unknown>).stdout as Buffer).toString().trim()
+            : '';
+        const rawError = stderr || stdout || error.message;
 
         try {
           const preprocessedSource = await fs.readFile(preprocessedPath, 'utf-8');
