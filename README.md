@@ -2,9 +2,9 @@
 
 <img src="./media/branding/logo.png" align="right" height="130px" />
 
-> A plugin-based pipeline runner for matching decompilation projects.
+> 🐉 Forge C from the ashes of assembly. What the compiler consumed, the dragon returns.
 
-Mizuchi automates the cycle of writing C code, compiling, and comparing against a target binary.
+Mizuchi automates the cycle of writing C code, compiling, and comparing against a target binary, towards the goal of fully automatic **matching decompilation**.
 
 It orchestrates a plugin-based pipeline that can leverage programmatic and AI-powered tools to automatically decompile assembly functions to C source code that produces byte-for-byte identical machine code when compiled.
 
@@ -13,32 +13,45 @@ It orchestrates a plugin-based pipeline that can leverage programmatic and AI-po
 - 🗺️ Decomp Atlas, a powerful webapp to browse functions and generate rich prompts in one click
 - 📊 Beautiful Report UI to visualize the pipeline result
 
-<img width="1143" height="1057" alt="image" src="https://github.com/user-attachments/assets/025e6a00-7a6a-4425-9c11-8b86619cd546" />
+> [📚 Learn about this project and its benchmarks on this post](https://gambiconf.substack.com/p/can-llms-really-do-matching-decompilation)
+
+<img width="1143" height="1057" alt="image" src="https://github.com/user-attachments/assets/3e078ff7-723f-4e4c-bfd1-bcb5d3f0d3fb" />
 
 <table align="center">
     <tr>
-        <td align="center" width="50%">
-          <kbd><img width="1015" height="839" alt="image" src="https://github.com/user-attachments/assets/79547f83-618b-4d91-8aeb-cfa0db59a5cc" /></kbd><br />
-          <i>Achieve fully matching code automatically</i>
-        </td>
-        <td align="center" width="50%">
-          <kbd><img alt="image" src="https://github.com/user-attachments/assets/689914f0-0392-4df6-8f74-5fbad01fb9e2" /></kbd><br />
-          <i>Even partial matches provide a good start</i>
-        </td>
+      <td align="center" width="50%">
+        <kbd><img width="1015" height="839" alt="image" src="https://github.com/user-attachments/assets/04818b83-34e5-4c55-bf6d-ec9ec24dee33" /></kbd><br />
+        <i>Achieve fully matching code automatically</i>
+      </td>
+      <td align="center" width="50%">
+        <kbd><img width="962" height="558" alt="image" src="https://github.com/user-attachments/assets/2afc7ca2-d9c1-44d8-b32f-103ba0661b4d" /></kbd><br />
+        <i>Even partial matches provide a good start</i>
+      </td>
+    </tr>
+</table>
+
+<table align="center">
+    <tr>
+      <td align="center" width="33%">
+        <kbd><img width="1413" height="1136" alt="image" src="https://github.com/user-attachments/assets/036b5d07-af78-466b-ab31-b487d39ac151" /></kbd><br />
+        <i>Explore the function cloud by similarity</i>
+      </td>
+      <td align="center" width="33%">
+        <kbd><img width="1413" height="1136" alt="image" src="https://github.com/user-attachments/assets/3e19248f-dc26-4222-834d-b18468943dfa" /></kbd><br />
+        <i>Pick your next function to decompile based on scoring</i>
+      </td>
+      <td align="center" width="33%">
+        <kbd><img width="1413" height="1136" alt="image" src="https://github.com/user-attachments/assets/a6c46e82-9b58-449b-846f-c12180a84a29" /></kbd><br />
+        <i>Build rich prompts to decompile a function in a single click</i>
+      </td>
     </tr>
 </table>
 
 > ⚙️ **What is Matching Decompilation?**
 >
-> Matching decompilation is the art of converting assembly back into C source code that, when compiled, produces byte-for-byte identical machine code. It's popular in the retro gaming community for recreating source code of classic games. For example, [Super Mario 64](https://github.com/n64decomp/sm64) and [The Legend of Zelda: Ocarina of Time](https://github.com/zeldaret/oot) have been fully match-decompiled.
+> Matching decompilation is the art of converting assembly back into C source code that, when compiled, produces byte-for-byte identical machine code. It’s popular in the retro gaming community for recreating the source code of classic games. For example, [Super Mario 64](https://github.com/n64decomp/sm64) and [The Legend of Zelda: Ocarina of Time](https://github.com/zeldaret/oot) have been fully match-decompiled.
 >
 > [Learn more by watching my talk.](https://www.youtube.com/watch?v=sF_Yk0udbZw)
-
----
-
-> :warning: **Work in Progress**
->
-> Mizuchi is currently focused on benchmarking LLM prompt effectiveness, with plans to become a general-purpose decompilation automation tool. Check the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
 
 ## Installation
 
@@ -67,7 +80,7 @@ git submodule update --init vendor/decomp-permuter
 
 ### Requirements
 
-- `ANTHROPIC_API_KEY` environment variable set
+- `ANTHROPIC_API_KEY` environment variable set or login on Claude Code to cache credentials locally
 
 ## Quick Start
 
@@ -130,48 +143,7 @@ asm: |
 
 Mizuchi executes a pipeline of plugins:
 
-```mermaid
-flowchart TD
-  A[Prompt Loader] --> |Load prompts from directory| O
-
-  subgraph Setup Phase
-    O[Get Context]
-  end
-
-  O --> M
-
-  subgraph Programmatic Phase
-    M[m2c]
-    MC[Compiler]
-    MP[decomp-permuter]
-
-    M --> |Generate C| MC
-    MC --> |Compile to object file| MP
-    MP --> |Permute mutations| MD[Objdiff]
-  end
-
-  M --> |m2c error| B
-  MC --> |Compilation Error| B
-  MD --> |Match found| E[Success]
-  MD --> |No match| B
-
-  subgraph AI-Powered Phase
-    B[Claude Runner]
-    C[Compiler]
-    D[Objdiff]
-    BP[Background permuter]
-
-    B --> |Generate C| C
-    C --> |Compilation Error → Retry| B
-    C --> |Compile to object file| D
-    D --> |Improvement| BP
-    D --> |Mismatch → Retry| B
-  end
-
-  BP -.-> |Match found| E
-  D --> |Match found| E
-  D --> |Max retries exceeded| F[Fail]
-```
+![Pipeline Diagram](./media/docs/pipeline-flow.png)
 
 > 📌 **Roadmap**: See the [issues tab](https://github.com/macabeus/mizuchi/issues) for planned features.
 
