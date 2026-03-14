@@ -20,6 +20,8 @@ export const defaultTestPipelineConfig: PipelineConfig = {
   target: 'gba',
   mapFilePath: '/test/project/mapfile.map',
   nonMatchingAsmFolders: [],
+  matchingAsmFolders: [],
+  excludeFromScan: ['tools'],
 };
 
 /**

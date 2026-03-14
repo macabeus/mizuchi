@@ -109,6 +109,8 @@ global:
           target: 'gba',
           mapFilePath: '/decomp/myproject/build/myproject.map',
           nonMatchingAsmFolders: [],
+          matchingAsmFolders: [],
+          excludeFromScan: ['tools'],
         },
         plugins: {},
       };
@@ -132,6 +134,8 @@ global:
           target: 'gba',
           mapFilePath: '/decomp/myproject/build/myproject.map',
           nonMatchingAsmFolders: [],
+          matchingAsmFolders: [],
+          excludeFromScan: ['tools'],
         },
         plugins: {},
       };

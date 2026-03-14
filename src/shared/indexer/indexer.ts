@@ -82,7 +82,14 @@ function contentHash(asmCode: string, cCode?: string): string {
  */
 export async function indexCodebase(options: IndexCodebaseOptions): Promise<IndexResult> {
   const { config, objdiffDiffSettings, onProgress } = options;
-  const { projectPath, mapFilePath, target: platform, nonMatchingAsmFolders } = config;
+  const {
+    projectPath,
+    mapFilePath,
+    target: platform,
+    nonMatchingAsmFolders,
+    matchingAsmFolders,
+    excludeFromScan,
+  } = config;
 
   // Parse map file
   const mapContent = await fs.readFile(mapFilePath, 'utf-8');
@@ -106,6 +113,8 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
     platform,
     symbolMap,
     objdiffDiffSettings,
+    matchingAsmFolders,
+    excludeFromScan,
     onProgress,
   );
 
@@ -229,12 +238,15 @@ async function scanMatchedFunctions(
   platform: PlatformTarget,
   symbolMap: Map<string, string>,
   objdiffDiffSettings: Record<string, string>,
+  matchingAsmFolders: string[],
+  excludeFromScan: string[],
   onProgress?: (progress: IndexProgress) => void,
 ): Promise<Map<string, DecompFunctionDoc>> {
   registerClangLanguage();
 
   const objdiff = new Objdiff(objdiffDiffSettings);
   const functions = new Map<string, DecompFunctionDoc>();
+  const errors: Array<{ name: string; cModulePath: string; error: string }> = [];
 
   // Collect all function definitions from C files
   const cFunctions: Array<{ name: string; cCode: string; cModulePath: string }> = [];
@@ -275,10 +287,16 @@ async function scanMatchedFunctions(
           continue;
         }
 
-        const name = identifier.text();
-        const cCode = cleanFunctionText(node.text());
         const filePath = node.getRoot().filename();
         const cModulePath = path.relative(projectPath, filePath);
+
+        // Skip files in excluded directories
+        if (excludeFromScan.some((dir) => cModulePath.startsWith(dir + '/'))) {
+          continue;
+        }
+
+        const name = identifier.text();
+        const cCode = cleanFunctionText(node.text());
 
         cFunctions.push({ name, cCode, cModulePath });
       }
@@ -292,6 +310,9 @@ async function scanMatchedFunctions(
     message: `Found ${cFunctions.length} C functions. Extracting assembly...`,
   });
 
+  // Build matching assembly lookup from matchingAsmFolders (used as fallback when objdiff fails)
+  const matchingAsmLookup = await buildMatchingAsmLookup(projectPath, platform, matchingAsmFolders);
+
   // For each C function, resolve object path and extract assembly
   let processed = 0;
   for (const { name, cCode, cModulePath } of cFunctions) {
@@ -301,6 +322,11 @@ async function scanMatchedFunctions(
       continue;
     }
 
+    // Try objdiff first to extract assembly from the compiled .o file
+    let asmCode: string | null = null;
+    let asmModulePath = cModulePath.replace(/\.c$/, '.s');
+    let objdiffError: string | null = null;
+
     try {
       // Try map file first, then fall back to resolving from C source path
       // (static functions don't appear in the linker map)
@@ -309,34 +335,50 @@ async function scanMatchedFunctions(
         objectPath = await resolveObjectPathFromSourceFile(cModulePath, projectPath);
       }
       if (!objectPath) {
-        continue;
+        objdiffError = 'Could not resolve object file path';
+      } else {
+        const parsedObj = await objdiff.parseObjectFile(objectPath);
+        const diffResult = await objdiff.runDiff(parsedObj);
+        if (!diffResult.left) {
+          objdiffError = `objdiff returned no left side for object: ${objectPath}`;
+        } else {
+          const asm = await objdiff.getAssemblyFromSymbol(diffResult.left, name);
+          if (!asm.trim()) {
+            objdiffError = `objdiff returned empty assembly for symbol in: ${objectPath}`;
+          } else {
+            asmCode = asm;
+          }
+        }
       }
-
-      const parsedObj = await objdiff.parseObjectFile(objectPath);
-      const diffResult = await objdiff.runDiff(parsedObj);
-      if (!diffResult.left) {
-        continue;
-      }
-
-      const asmCode = await objdiff.getAssemblyFromSymbol(diffResult.left, name);
-      if (!asmCode.trim()) {
-        continue;
-      }
-
-      const callsFunctions = extractFunctionCallsFromAssembly(platform, asmCode);
-
-      functions.set(name, {
-        id: name,
-        name,
-        cCode,
-        cModulePath,
-        asmCode,
-        asmModulePath: cModulePath.replace(/\.c$/, '.s'),
-        callsFunctions,
-      });
-    } catch {
-      // Skip functions we can't process (missing .o, objdiff errors, etc.)
+    } catch (err) {
+      objdiffError = err instanceof Error ? err.message : String(err);
     }
+
+    // Fallback: try matching assembly folders
+    if (!asmCode) {
+      const fallback = matchingAsmLookup.get(name);
+      if (fallback) {
+        asmCode = fallback.code;
+        asmModulePath = fallback.asmModulePath;
+      }
+    }
+
+    if (!asmCode) {
+      errors.push({ name, cModulePath, error: objdiffError ?? 'No assembly found' });
+      continue;
+    }
+
+    const callsFunctions = extractFunctionCallsFromAssembly(platform, asmCode);
+
+    functions.set(name, {
+      id: name,
+      name,
+      cCode,
+      cModulePath,
+      asmCode,
+      asmModulePath,
+      callsFunctions,
+    });
 
     processed++;
     if (processed % 50 === 0) {
@@ -349,7 +391,55 @@ async function scanMatchedFunctions(
     }
   }
 
+  if (errors.length > 0) {
+    const details = errors.map((e) => `  - ${e.name} (${e.cModulePath}): ${e.error}`).join('\n');
+    throw new Error(`Failed to process ${errors.length} C function(s):\n${details}`);
+  }
+
   return functions;
+}
+
+/**
+ * Build a lookup map from function name → assembly code by scanning matching asm folders.
+ *
+ * Matching asm folders contain per-function .s files (e.g., asm/matchings/gfx/ReadUnalignedU16.s)
+ * with the target assembly for decompiled functions.
+ */
+async function buildMatchingAsmLookup(
+  projectPath: string,
+  platform: PlatformTarget,
+  matchingAsmFolders: string[],
+): Promise<Map<string, { code: string; asmModulePath: string }>> {
+  const lookup = new Map<string, { code: string; asmModulePath: string }>();
+
+  for (const folder of matchingAsmFolders) {
+    const asmDir = path.join(projectPath, folder);
+
+    let asmFiles: string[];
+    try {
+      asmFiles = await globAsmFiles(asmDir);
+    } catch {
+      continue;
+    }
+
+    for (const asmFile of asmFiles) {
+      try {
+        const content = await fs.readFile(asmFile, 'utf-8');
+        const asmModulePath = path.relative(projectPath, asmFile);
+        const asmFunctions = listFunctionsFromAsmModule(platform, content);
+
+        for (const { name, code } of asmFunctions) {
+          if (!lookup.has(name) && countBodyLinesFromAsmFunction(platform, code) > 0) {
+            lookup.set(name, { code, asmModulePath });
+          }
+        }
+      } catch {
+        // Skip files we can't read/parse
+      }
+    }
+  }
+
+  return lookup;
 }
 
 /**

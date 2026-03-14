@@ -55,6 +55,16 @@ export const pipelineConfigSchema = z.object({
   nonMatchingAsmFolders: z
     .array(z.string())
     .describe('Directories containing non-matching assembly files (relative to projectPath)'),
+  matchingAsmFolders: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .describe('Directories containing matching assembly files (relative to projectPath)'),
+  excludeFromScan: z
+    .array(z.string())
+    .optional()
+    .default(['tools'])
+    .describe('Directories to exclude from C source scanning (relative to projectPath)'),
 });
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;

@@ -106,6 +106,8 @@ export function buildPipelineConfig(
     mapFilePath: fileConfig.global?.mapFilePath ?? defaults.mapFilePath,
     target: fileConfig.global?.target ?? defaults.target,
     nonMatchingAsmFolders: fileConfig.global?.nonMatchingAsmFolders ?? defaults.nonMatchingAsmFolders,
+    matchingAsmFolders: fileConfig.global?.matchingAsmFolders ?? defaults.matchingAsmFolders,
+    excludeFromScan: fileConfig.global?.excludeFromScan ?? defaults.excludeFromScan,
   };
 
   return pipelineConfig;

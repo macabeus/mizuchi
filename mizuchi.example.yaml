@@ -61,6 +61,14 @@ global:
   nonMatchingAsmFolders:
     - asm
 
+  # Directories containing matching assembly files (relative to projectPath)
+  # matchingAsmFolders:
+  #   - asm/matchings
+
+  # Directories to exclude from C source scanning (relative to projectPath, default: ['tools'])
+  # excludeFromScan:
+  #   - tools
+
 # Plugin-specific configurations
 # Each plugin receives only its own section along with the global config
 plugins:
@@ -222,6 +230,8 @@ plugins:
 #   target: n64
 #   nonMatchingAsmFolders:
 #     - asm/nonmatchfuncs
+#   matchingAsmFolders:
+#     - asm/matchings
 #
 # plugins:
 #   objdiff:
