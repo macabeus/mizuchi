@@ -98,6 +98,22 @@ export default {
       extensions: ['.ts', '.tsx', '.js', '.jsx'],
     }),
 
+    // Copy non-JS assets (e.g., embed-server.py) to dist/
+    {
+      name: 'copy-assets',
+      generateBundle() {
+        const assets = ['src/shared/indexer/embed-server.py'];
+        for (const asset of assets) {
+          const dest = asset.replace(/^src\//, '');
+          this.emitFile({
+            type: 'asset',
+            fileName: dest,
+            source: fs.readFileSync(asset, 'utf-8'),
+          });
+        }
+      },
+    },
+
     // Compile TypeScript
     typescript({
       tsconfig: './tsconfig.json',

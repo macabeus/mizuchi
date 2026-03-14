@@ -17,7 +17,7 @@ module.exports = {
         ],
       },
     },
-    // Plugins can only import from their own directory or shared/
+    // Plugins can only import from their own directory, shared/, or external modules
     {
       name: 'plugins-import-restrictions',
       severity: 'error',

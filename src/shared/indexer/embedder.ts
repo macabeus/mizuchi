@@ -237,6 +237,9 @@ export async function setupPythonVenv(onProgress?: (message: string) => void): P
 
   const python = await findPython();
 
+  // Remove stale/broken venv if it exists
+  await fs.rm(VENV_DIR, { recursive: true, force: true });
+
   // Create venv
   await fs.mkdir(path.dirname(VENV_DIR), { recursive: true });
   onProgress?.('Creating Python virtual environment...');
