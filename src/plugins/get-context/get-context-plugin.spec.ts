@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import os from 'os';
 import { describe, expect, it } from 'vitest';
 
 import { createTestContext } from '~/shared/test-utils.js';
@@ -8,7 +9,7 @@ import { GetContextPlugin } from './get-context-plugin.js';
 describe('GetContextPlugin', () => {
   describe('metadata', () => {
     it('has correct plugin id and name', () => {
-      const plugin = new GetContextPlugin('echo "hello"');
+      const plugin = new GetContextPlugin('echo "hello"', os.tmpdir());
 
       expect(plugin.id).toBe('get-context');
       expect(plugin.name).toBe('Get Context');
@@ -17,7 +18,7 @@ describe('GetContextPlugin', () => {
 
   describe('.execute', () => {
     it('returns empty context when script is empty', async () => {
-      const plugin = new GetContextPlugin('');
+      const plugin = new GetContextPlugin('', os.tmpdir());
       const context = createTestContext();
 
       const { result, context: updatedContext } = await plugin.execute(context);
@@ -28,7 +29,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('returns empty context when script is whitespace-only', async () => {
-      const plugin = new GetContextPlugin('   ');
+      const plugin = new GetContextPlugin('   ', os.tmpdir());
       const context = createTestContext();
 
       const { result, context: updatedContext } = await plugin.execute(context);
@@ -38,7 +39,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('captures stdout as context content', async () => {
-      const plugin = new GetContextPlugin('echo "typedef int s32;"');
+      const plugin = new GetContextPlugin('echo "typedef int s32;"', os.tmpdir());
       const context = createTestContext();
 
       const { result, context: updatedContext } = await plugin.execute(context);
@@ -48,7 +49,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('writes context to a temp file', async () => {
-      const plugin = new GetContextPlugin('echo "typedef int u32;"');
+      const plugin = new GetContextPlugin('echo "typedef int u32;"', os.tmpdir());
       const context = createTestContext();
 
       const { context: updatedContext } = await plugin.execute(context);
@@ -59,7 +60,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('substitutes {{functionName}} template variable', async () => {
-      const plugin = new GetContextPlugin('echo "func={{functionName}}"');
+      const plugin = new GetContextPlugin('echo "func={{functionName}}"', os.tmpdir());
       const context = createTestContext({ functionName: 'MyFunc' });
 
       const { context: updatedContext } = await plugin.execute(context);
@@ -68,7 +69,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('substitutes {{targetObjectPath}} template variable', async () => {
-      const plugin = new GetContextPlugin('echo "target={{targetObjectPath}}"');
+      const plugin = new GetContextPlugin('echo "target={{targetObjectPath}}"', os.tmpdir());
       const context = createTestContext({ targetObjectPath: '/build/obj/foo.o' });
 
       const { context: updatedContext } = await plugin.execute(context);
@@ -77,7 +78,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('returns failure when script exits with non-zero code', async () => {
-      const plugin = new GetContextPlugin('exit 1');
+      const plugin = new GetContextPlugin('exit 1', os.tmpdir());
       const context = createTestContext();
 
       const { result, context: updatedContext } = await plugin.execute(context);
@@ -89,7 +90,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('returns failure when script has a command error', async () => {
-      const plugin = new GetContextPlugin('cat /nonexistent/file/path');
+      const plugin = new GetContextPlugin('cat /nonexistent/file/path', os.tmpdir());
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -99,7 +100,7 @@ describe('GetContextPlugin', () => {
     });
 
     it('shows warning when script succeeds but produces no stdout', async () => {
-      const plugin = new GetContextPlugin('true');
+      const plugin = new GetContextPlugin('true', os.tmpdir());
       const context = createTestContext();
 
       const { result } = await plugin.execute(context);
@@ -115,7 +116,7 @@ echo "typedef int s32;"
 echo "typedef unsigned int u32;"
 echo "typedef short s16;"
 `;
-      const plugin = new GetContextPlugin(script);
+      const plugin = new GetContextPlugin(script, os.tmpdir());
       const context = createTestContext();
 
       const { result, context: updatedContext } = await plugin.execute(context);
@@ -129,7 +130,7 @@ echo "typedef short s16;"
 
   describe('.getReportSections', () => {
     it('returns code section when contextContent is present', () => {
-      const plugin = new GetContextPlugin('echo test');
+      const plugin = new GetContextPlugin('echo test', os.tmpdir());
       const result = {
         pluginId: 'get-context',
         pluginName: 'Get Context',
@@ -146,7 +147,7 @@ echo "typedef short s16;"
     });
 
     it('returns empty sections when script is empty', () => {
-      const plugin = new GetContextPlugin('');
+      const plugin = new GetContextPlugin('', os.tmpdir());
       const result = {
         pluginId: 'get-context',
         pluginName: 'Get Context',
@@ -161,7 +162,7 @@ echo "typedef short s16;"
     });
 
     it('returns error section when there is an error', () => {
-      const plugin = new GetContextPlugin('exit 1');
+      const plugin = new GetContextPlugin('exit 1', os.tmpdir());
       const result = {
         pluginId: 'get-context',
         pluginName: 'Get Context',

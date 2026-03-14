@@ -93,12 +93,12 @@ describe('writeMizuchiDb', () => {
 
 describe('indexCodebase', () => {
   let tempDir: string;
-  let projectPath: string;
+  let projectRoot: string;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'indexer-test-'));
-    projectPath = path.join(tempDir, 'project');
-    await fs.mkdir(projectPath, { recursive: true });
+    projectRoot = path.join(tempDir, 'project');
+    await fs.mkdir(projectRoot, { recursive: true });
   });
 
   afterEach(async () => {
@@ -107,11 +107,11 @@ describe('indexCodebase', () => {
 
   it('scans unmatched assembly functions from asm folders', async () => {
     // Create map file (empty — no matched functions)
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
     // Create asm folder with a function
-    const asmDir = path.join(projectPath, 'asm', 'non_matching');
+    const asmDir = path.join(projectRoot, 'asm', 'non_matching');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -128,7 +128,7 @@ describe('indexCodebase', () => {
 
     const result = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm/non_matching'],
@@ -157,10 +157,10 @@ MyFunc:
   });
 
   it('skips empty functions', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'empty.s'),
@@ -169,7 +169,7 @@ MyFunc:
 
     const result = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -189,11 +189,11 @@ MyFunc:
   });
 
   it('computes incremental diff against existing DB', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
     // Create asm folder
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -215,7 +215,7 @@ MyFunc:
     // First index
     const result1 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -234,12 +234,12 @@ MyFunc:
     expect(result1.stats.unchangedCount).toBe(0);
 
     // Write DB to project path
-    await writeMizuchiDb(projectPath, result1.dump);
+    await writeMizuchiDb(projectRoot, result1.dump);
 
     // Re-index without changes
     const result2 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -261,10 +261,10 @@ MyFunc:
   });
 
   it('detects updated functions on re-index', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -274,7 +274,7 @@ MyFunc:
     // First index
     const result1 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -288,7 +288,7 @@ MyFunc:
       },
       objdiffDiffSettings: {},
     });
-    await writeMizuchiDb(projectPath, result1.dump);
+    await writeMizuchiDb(projectRoot, result1.dump);
 
     // Modify the function
     await fs.writeFile(
@@ -307,7 +307,7 @@ MyFunc:
     // Re-index
     const result2 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -327,10 +327,10 @@ MyFunc:
   });
 
   it('detects removed functions on re-index', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -352,7 +352,7 @@ MyFunc:
     // First index
     const result1 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -366,7 +366,7 @@ MyFunc:
       },
       objdiffDiffSettings: {},
     });
-    await writeMizuchiDb(projectPath, result1.dump);
+    await writeMizuchiDb(projectRoot, result1.dump);
 
     // Remove FuncB
     await fs.writeFile(
@@ -377,7 +377,7 @@ MyFunc:
     // Re-index
     const result2 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -397,10 +397,10 @@ MyFunc:
   });
 
   it('preserves existing embeddings for unchanged functions', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -410,7 +410,7 @@ MyFunc:
     // First index
     const result1 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -427,12 +427,12 @@ MyFunc:
 
     // Add fake embedding to the dump
     result1.dump.vectors.push({ id: 'FuncA', embedding: [0.1, 0.2, 0.3] });
-    await writeMizuchiDb(projectPath, result1.dump);
+    await writeMizuchiDb(projectRoot, result1.dump);
 
     // Re-index without changes
     const result2 = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -454,12 +454,12 @@ MyFunc:
   });
 
   it('handles missing asm directories gracefully', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
     const result = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['nonexistent/asm'],
@@ -479,10 +479,10 @@ MyFunc:
   });
 
   it('reports progress callbacks', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -493,7 +493,7 @@ MyFunc:
 
     await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -518,10 +518,10 @@ MyFunc:
   });
 
   it('extracts call graph from assembly', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -539,7 +539,7 @@ MyFunc:
 
     const result = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],
@@ -561,10 +561,10 @@ MyFunc:
   });
 
   it('includes indexMetadata in dump', async () => {
-    const mapFilePath = path.join(projectPath, 'test.map');
+    const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
 
-    const asmDir = path.join(projectPath, 'asm');
+    const asmDir = path.join(projectRoot, 'asm');
     await fs.mkdir(asmDir, { recursive: true });
     await fs.writeFile(
       path.join(asmDir, 'code.s'),
@@ -573,7 +573,7 @@ MyFunc:
 
     const result = await indexCodebase({
       config: {
-        projectPath,
+        projectRoot,
         mapFilePath,
         target: 'gba',
         nonMatchingAsmFolders: ['asm'],

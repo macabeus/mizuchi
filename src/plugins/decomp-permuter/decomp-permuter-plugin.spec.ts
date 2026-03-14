@@ -1,4 +1,6 @@
 import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
@@ -12,7 +14,7 @@ import { DecompPermuterPlugin } from './decomp-permuter-plugin.js';
 describe('DecompPermuterPlugin', () => {
   describe('metadata', () => {
     const compilerScript = getArmCompilerScript();
-    const cCompiler = new CCompiler(compilerScript);
+    const cCompiler = new CCompiler(compilerScript, os.tmpdir());
 
     it('has correct plugin id and name', () => {
       const plugin = new DecompPermuterPlugin(
@@ -27,7 +29,8 @@ describe('DecompPermuterPlugin', () => {
 
   describe('.execute', () => {
     const compilerScript = getArmCompilerScript();
-    const cCompiler = new CCompiler(compilerScript);
+    let tempDir: string;
+    let cCompiler: CCompiler;
 
     // Simple ARM function for testing
     const MATCHING_C_CODE = 'int SimpleAdd(int a, int b) { return a + b; }';
@@ -37,6 +40,9 @@ describe('DecompPermuterPlugin', () => {
     let compiledObjPath: string;
 
     beforeAll(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mizuchi-permuter-test-'));
+      cCompiler = new CCompiler(compilerScript, tempDir);
+
       // Compile the matching code to create target .o
       const targetResult = await cCompiler.compile('SimpleAdd', MATCHING_C_CODE, '');
       expect(targetResult.success).toBe(true);
@@ -61,6 +67,7 @@ describe('DecompPermuterPlugin', () => {
       if (compiledObjPath) {
         await fs.unlink(compiledObjPath).catch(() => {});
       }
+      await fs.rm(tempDir, { recursive: true, force: true });
     });
 
     it('runs the permuter on non-matching code', async () => {
@@ -74,7 +81,7 @@ describe('DecompPermuterPlugin', () => {
         generatedCode: NON_MATCHING_C_CODE,
         compiledObjectPath: compiledObjPath,
         targetObjectPath: targetObjPath,
-        config: defaultTestPipelineConfig,
+        config: { ...defaultTestPipelineConfig, projectRoot: tempDir },
       });
 
       const { result } = await plugin.execute(context);
@@ -96,7 +103,7 @@ describe('DecompPermuterPlugin', () => {
         generatedCode: MATCHING_C_CODE,
         compiledObjectPath: compiledObjPath,
         targetObjectPath: targetObjPath,
-        config: defaultTestPipelineConfig,
+        config: { ...defaultTestPipelineConfig, projectRoot: tempDir },
       });
 
       const { result } = await plugin.execute(context);
@@ -116,7 +123,7 @@ describe('DecompPermuterPlugin', () => {
         generatedCode: NON_MATCHING_C_CODE,
         compiledObjectPath: compiledObjPath,
         targetObjectPath: targetObjPath,
-        config: defaultTestPipelineConfig,
+        config: { ...defaultTestPipelineConfig, projectRoot: tempDir },
       });
 
       const start = Date.now();
@@ -192,7 +199,7 @@ describe('DecompPermuterPlugin', () => {
 
   describe('.getReportSections', () => {
     const compilerScript = getArmCompilerScript();
-    const cCompiler = new CCompiler(compilerScript);
+    const cCompiler = new CCompiler(compilerScript, os.tmpdir());
 
     it('returns permuter results section when data is present', () => {
       const plugin = new DecompPermuterPlugin(
@@ -275,7 +282,7 @@ describe('DecompPermuterPlugin', () => {
 
   describe('.background', () => {
     const compilerScript = getArmCompilerScript();
-    const cCompiler = new CCompiler(compilerScript);
+    const cCompiler = new CCompiler(compilerScript, os.tmpdir());
 
     function createPlugin() {
       return new DecompPermuterPlugin(

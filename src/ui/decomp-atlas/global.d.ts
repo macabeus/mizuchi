@@ -5,7 +5,7 @@ declare module '*.png' {
 
 interface MizuchiConfig {
   serverBaseUrl: string;
-  projectPath: string;
+  projectRoot: string;
   target: string;
 }
 

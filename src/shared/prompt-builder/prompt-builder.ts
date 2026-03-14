@@ -7,10 +7,10 @@ import { craftPrompt } from './craft-prompt.js';
 export async function createDecompilePrompt(params: {
   db: MizuchiDb;
   functionId: string;
-  projectPath: string;
+  projectRoot: string;
   platform: PlatformTarget;
 }): Promise<string> {
-  const { db, functionId, projectPath, platform } = params;
+  const { db, functionId, projectRoot, platform } = params;
 
   const func = db.getFunctionById(functionId);
   if (!func) {
@@ -20,7 +20,7 @@ export async function createDecompilePrompt(params: {
   const { asmDeclaration, calledFunctionsDeclarations, sampling, typeDefinitions } = await getFuncContext(
     db,
     functionId,
-    projectPath,
+    projectRoot,
   );
 
   return craftPrompt({

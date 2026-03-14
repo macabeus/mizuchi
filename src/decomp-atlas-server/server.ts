@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 export function createAtlasServer({ fileConfig, configPath }: { fileConfig: ConfigFile; configPath: string }) {
   // Cached state after load-project
   let cachedDb: MizuchiDb | null = null;
-  let cachedProjectPath: string | null = null;
+  let cachedProjectRoot: string | null = null;
   let cachedSymbolMap: Map<string, string> | null = null;
 
   const platform = fileConfig.global.target;
@@ -29,10 +29,10 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
   // Chain API routes for Hono RPC type inference
   const app = new Hono()
     .use('/api/*', cors())
-    .post('/api/loadProject', zValidator('json', z.object({ projectPath: z.string() })), async (c) => {
-      const { projectPath } = c.req.valid('json');
+    .post('/api/loadProject', zValidator('json', z.object({})), async (c) => {
+      const projectRoot = fileConfig.global.projectRoot;
 
-      const mizuchiDbPath = path.join(projectPath, 'mizuchi-db.json');
+      const mizuchiDbPath = path.join(projectRoot, 'mizuchi-db.json');
 
       let raw: string;
       try {
@@ -43,7 +43,7 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
 
       const dump: MizuchiDbDump = JSON.parse(raw);
       cachedDb = MizuchiDb.fromDump(dump);
-      cachedProjectPath = projectPath;
+      cachedProjectRoot = projectRoot;
 
       // Parse map file if configured
       const mapFilePath = fileConfig.global.mapFilePath;
@@ -57,7 +57,7 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
       return c.json({ data: dump, platform });
     })
     .post('/api/buildPrompt', zValidator('json', z.object({ functionId: z.string() })), async (c) => {
-      if (!cachedDb || !cachedProjectPath) {
+      if (!cachedDb || !cachedProjectRoot) {
         return c.json({ error: 'Project not loaded. Call /api/loadProject first.' }, 400);
       }
 
@@ -67,7 +67,7 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
         const prompt = await createDecompilePrompt({
           db: cachedDb,
           functionId,
-          projectPath: cachedProjectPath,
+          projectRoot: cachedProjectRoot,
           platform,
         });
 
@@ -98,8 +98,8 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
           await fs.writeFile(promptPath, promptContent, 'utf-8');
 
           const targetObjectPath =
-            cachedProjectPath && cachedSymbolMap
-              ? await resolveObjectPath(functionName, cachedProjectPath, cachedSymbolMap)
+            cachedProjectRoot && cachedSymbolMap
+              ? await resolveObjectPath(functionName, cachedProjectRoot, cachedSymbolMap)
               : null;
 
           const settings: PromptSettings = {
@@ -137,7 +137,7 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
         // Inject server config into the HTML
         const configScript = `<script>window.__MIZUCHI_CONFIG__ = ${JSON.stringify({
           serverBaseUrl: '',
-          projectPath: cachedProjectPath ?? fileConfig.global?.projectPath ?? '',
+          projectRoot: cachedProjectRoot ?? fileConfig.global?.projectRoot ?? '',
           target: platform,
         })};</script>`;
         html = html.replace('</head>', `${configScript}\n</head>`);

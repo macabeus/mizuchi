@@ -83,7 +83,7 @@ function contentHash(asmCode: string, cCode?: string): string {
 export async function indexCodebase(options: IndexCodebaseOptions): Promise<IndexResult> {
   const { config, objdiffDiffSettings, onProgress } = options;
   const {
-    projectPath,
+    projectRoot,
     mapFilePath,
     target: platform,
     nonMatchingAsmFolders,
@@ -96,7 +96,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
   const symbolMap = parseMapFile(mapContent);
 
   // Load existing database for incremental indexing
-  const existingDump = await loadExistingDb(projectPath);
+  const existingDump = await loadExistingDb(projectRoot);
   const existingHashes = existingDump?.indexMetadata?.contentHashes ?? {};
   const existingVectorsById = new Map((existingDump?.vectors ?? []).map((v) => [v.id, v.embedding]));
 
@@ -109,7 +109,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
   });
 
   const matchedFunctions = await scanMatchedFunctions(
-    projectPath,
+    projectRoot,
     platform,
     symbolMap,
     objdiffDiffSettings,
@@ -127,7 +127,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
   });
 
   const unmatchedFunctions = await scanUnmatchedFunctions(
-    projectPath,
+    projectRoot,
     platform,
     nonMatchingAsmFolders,
     matchedFunctions,
@@ -210,8 +210,8 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
 /**
  * Load an existing mizuchi-db.json from the project path.
  */
-async function loadExistingDb(projectPath: string): Promise<MizuchiDbDump | null> {
-  const dbPath = path.join(projectPath, 'mizuchi-db.json');
+async function loadExistingDb(projectRoot: string): Promise<MizuchiDbDump | null> {
+  const dbPath = path.join(projectRoot, 'mizuchi-db.json');
   try {
     const raw = await fs.readFile(dbPath, 'utf-8');
     const parsed = JSON.parse(raw) as MizuchiDbDump;
@@ -234,7 +234,7 @@ async function loadExistingDb(projectPath: string): Promise<MizuchiDbDump | null
  * and extracts assembly via Objdiff.
  */
 async function scanMatchedFunctions(
-  projectPath: string,
+  projectRoot: string,
   platform: PlatformTarget,
   symbolMap: Map<string, string>,
   objdiffDiffSettings: Record<string, string>,
@@ -254,7 +254,7 @@ async function scanMatchedFunctions(
   await findInFiles(
     'c',
     {
-      paths: [projectPath],
+      paths: [projectRoot],
       matcher: {
         rule: {
           kind: 'function_definition',
@@ -288,7 +288,7 @@ async function scanMatchedFunctions(
         }
 
         const filePath = node.getRoot().filename();
-        const cModulePath = path.relative(projectPath, filePath);
+        const cModulePath = path.relative(projectRoot, filePath);
 
         // Skip files in excluded directories
         if (excludeFromScan.some((dir) => cModulePath.startsWith(dir + '/'))) {
@@ -311,7 +311,7 @@ async function scanMatchedFunctions(
   });
 
   // Build matching assembly lookup from matchingAsmFolders (used as fallback when objdiff fails)
-  const matchingAsmLookup = await buildMatchingAsmLookup(projectPath, platform, matchingAsmFolders);
+  const matchingAsmLookup = await buildMatchingAsmLookup(projectRoot, platform, matchingAsmFolders);
 
   // For each C function, resolve object path and extract assembly
   let processed = 0;
@@ -330,9 +330,9 @@ async function scanMatchedFunctions(
     try {
       // Try map file first, then fall back to resolving from C source path
       // (static functions don't appear in the linker map)
-      let objectPath = await resolveObjectPath(name, projectPath, symbolMap);
+      let objectPath = await resolveObjectPath(name, projectRoot, symbolMap);
       if (!objectPath) {
-        objectPath = await resolveObjectPathFromSourceFile(cModulePath, projectPath);
+        objectPath = await resolveObjectPathFromSourceFile(cModulePath, projectRoot);
       }
       if (!objectPath) {
         objdiffError = 'Could not resolve object file path';
@@ -406,14 +406,14 @@ async function scanMatchedFunctions(
  * with the target assembly for decompiled functions.
  */
 async function buildMatchingAsmLookup(
-  projectPath: string,
+  projectRoot: string,
   platform: PlatformTarget,
   matchingAsmFolders: string[],
 ): Promise<Map<string, { code: string; asmModulePath: string }>> {
   const lookup = new Map<string, { code: string; asmModulePath: string }>();
 
   for (const folder of matchingAsmFolders) {
-    const asmDir = path.join(projectPath, folder);
+    const asmDir = path.join(projectRoot, folder);
 
     let asmFiles: string[];
     try {
@@ -425,7 +425,7 @@ async function buildMatchingAsmLookup(
     for (const asmFile of asmFiles) {
       try {
         const content = await fs.readFile(asmFile, 'utf-8');
-        const asmModulePath = path.relative(projectPath, asmFile);
+        const asmModulePath = path.relative(projectRoot, asmFile);
         const asmFunctions = listFunctionsFromAsmModule(platform, content);
 
         for (const { name, code } of asmFunctions) {
@@ -449,7 +449,7 @@ async function buildMatchingAsmLookup(
  * functions that don't have a matched C implementation.
  */
 async function scanUnmatchedFunctions(
-  projectPath: string,
+  projectRoot: string,
   platform: PlatformTarget,
   nonMatchingAsmFolders: string[],
   matchedFunctions: Map<string, DecompFunctionDoc>,
@@ -460,7 +460,7 @@ async function scanUnmatchedFunctions(
   let processedFiles = 0;
 
   for (const folder of nonMatchingAsmFolders) {
-    const asmDir = path.join(projectPath, folder);
+    const asmDir = path.join(projectRoot, folder);
 
     let asmFiles: string[];
     try {
@@ -475,7 +475,7 @@ async function scanUnmatchedFunctions(
     for (const asmFile of asmFiles) {
       try {
         const content = await fs.readFile(asmFile, 'utf-8');
-        const asmModulePath = path.relative(projectPath, asmFile);
+        const asmModulePath = path.relative(projectRoot, asmFile);
         const asmFunctions = listFunctionsFromAsmModule(platform, content);
 
         for (const { name, code } of asmFunctions) {
@@ -537,8 +537,8 @@ async function globAsmFiles(dir: string): Promise<string[]> {
 /**
  * Write a MizuchiDbDump to mizuchi-db.json atomically (temp file + rename).
  */
-export async function writeMizuchiDb(projectPath: string, dump: MizuchiDbDump): Promise<void> {
-  const dbPath = path.join(projectPath, 'mizuchi-db.json');
+export async function writeMizuchiDb(projectRoot: string, dump: MizuchiDbDump): Promise<void> {
+  const dbPath = path.join(projectRoot, 'mizuchi-db.json');
   const tmpPath = `${dbPath}.tmp`;
 
   await fs.writeFile(tmpPath, JSON.stringify(dump, null, 2), 'utf-8');

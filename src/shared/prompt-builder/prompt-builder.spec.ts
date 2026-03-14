@@ -220,7 +220,7 @@ describe('createDecompilePrompt', () => {
     const prompt = await createDecompilePrompt({
       db,
       functionId: 'id:TargetFunc',
-      projectPath: tempDir,
+      projectRoot: tempDir,
       platform: 'gba',
     });
 
@@ -236,7 +236,7 @@ describe('createDecompilePrompt', () => {
     const prompt = await createDecompilePrompt({
       db,
       functionId: 'id:TargetFunc',
-      projectPath: tempDir,
+      projectRoot: tempDir,
       platform: 'gba',
     });
 
@@ -251,7 +251,7 @@ describe('createDecompilePrompt', () => {
     const prompt = await createDecompilePrompt({
       db,
       functionId: 'id:TargetFunc',
-      projectPath: tempDir,
+      projectRoot: tempDir,
       platform: 'gba',
     });
 
@@ -267,13 +267,13 @@ describe('createDecompilePrompt', () => {
       createDecompilePrompt({
         db,
         functionId: 'id:NonExistent',
-        projectPath: tempDir,
+        projectRoot: tempDir,
         platform: 'gba',
       }),
     ).rejects.toThrow('Function not found: id:NonExistent');
   });
 
-  it('finds declarations from C/H files in projectPath', async () => {
+  it('finds declarations from C/H files in projectRoot', async () => {
     // Create a header file with a declaration for HelperFunc
     const includeDir = path.join(tempDir, 'include');
     await fs.mkdir(includeDir, { recursive: true });
@@ -284,7 +284,7 @@ describe('createDecompilePrompt', () => {
     const prompt = await createDecompilePrompt({
       db,
       functionId: 'id:TargetFunc',
-      projectPath: tempDir,
+      projectRoot: tempDir,
       platform: 'gba',
     });
 
@@ -305,7 +305,7 @@ describe('createDecompilePrompt', () => {
     const prompt = await createDecompilePrompt({
       db,
       functionId: 'id:TargetFunc',
-      projectPath: tempDir,
+      projectRoot: tempDir,
       platform: 'gba',
     });
 

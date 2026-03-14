@@ -5,8 +5,6 @@
  */
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { z } from 'zod';
 
 import {
   type ConfigFile,
@@ -15,18 +13,7 @@ import {
   getDefaultConfigPath,
   getPluginConfig,
   loadConfig,
-  pipelineConfigSchema,
 } from '~/shared/config.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-/**
- * Get project root directory
- */
-export function getProjectRoot(): string {
-  return path.resolve(__dirname, '../..');
-}
 
 /**
  * Get the config file path (custom or default)
@@ -36,38 +23,7 @@ export function getConfigFilePath(customPath?: string): string {
     return path.resolve(customPath);
   }
 
-  return getDefaultConfigPath(getProjectRoot());
-}
-
-/**
- * Pipeline configuration schema with defaults based on project root
- */
-export function createPipelineConfigSchema(projectRoot: string) {
-  return pipelineConfigSchema
-    .extend({
-      promptsDir: z.string().default(projectRoot),
-    })
-    .transform((config) => ({
-      ...config,
-      outputDir: config.outputDir === '.' ? projectRoot : config.outputDir,
-    }));
-}
-
-/**
- * Get default configuration values using Zod schema defaults
- */
-export function getDefaultConfig(): PipelineConfig {
-  const projectRoot = getProjectRoot();
-  const schema = createPipelineConfigSchema(projectRoot);
-
-  // Parse an object with required fields to get all defaults
-  return schema.parse({
-    getContextScript: '',
-    compilerScript: '',
-    projectPath: '',
-    mapFilePath: '',
-    nonMatchingAsmFolders: [],
-  });
+  return getDefaultConfigPath();
 }
 
 /**
@@ -82,7 +38,10 @@ export async function loadConfigFile(configPath: string): Promise<ConfigFile | n
 }
 
 /**
- * Build the full pipeline configuration from CLI options and config file
+ * Build the full pipeline configuration from CLI options and config file.
+ *
+ * `projectRoot` is already resolved by `loadConfig()` from the config file's directory.
+ * CLI options can override specific fields.
  */
 export function buildPipelineConfig(
   fileConfig: ConfigFile,
@@ -92,22 +51,13 @@ export function buildPipelineConfig(
     output?: string;
   },
 ): PipelineConfig {
-  const defaults = getDefaultConfig();
+  const global = fileConfig.global as PipelineConfig;
 
   const pipelineConfig: PipelineConfig = {
-    getContextScript: fileConfig.global?.getContextScript ?? defaults.getContextScript,
-    outputDir: cliOptions.output
-      ? path.resolve(cliOptions.output)
-      : (fileConfig.global?.outputDir ?? defaults.outputDir),
-    compilerScript: fileConfig.global?.compilerScript ?? defaults.compilerScript,
-    maxRetries: cliOptions.retries ?? fileConfig.global?.maxRetries ?? defaults.maxRetries,
-    promptsDir: cliOptions.prompts ?? fileConfig.global?.promptsDir ?? defaults.promptsDir,
-    projectPath: fileConfig.global?.projectPath ?? defaults.projectPath,
-    mapFilePath: fileConfig.global?.mapFilePath ?? defaults.mapFilePath,
-    target: fileConfig.global?.target ?? defaults.target,
-    nonMatchingAsmFolders: fileConfig.global?.nonMatchingAsmFolders ?? defaults.nonMatchingAsmFolders,
-    matchingAsmFolders: fileConfig.global?.matchingAsmFolders ?? defaults.matchingAsmFolders,
-    excludeFromScan: fileConfig.global?.excludeFromScan ?? defaults.excludeFromScan,
+    ...global,
+    maxRetries: cliOptions.retries ?? global.maxRetries,
+    promptsDir: cliOptions.prompts ? path.resolve(cliOptions.prompts) : global.promptsDir,
+    outputDir: cliOptions.output ? path.resolve(cliOptions.output) : global.outputDir,
   };
 
   return pipelineConfig;

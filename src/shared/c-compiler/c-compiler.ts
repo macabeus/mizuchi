@@ -38,9 +38,11 @@ function formatCompilationError(rawError: string, contextFileLinesCount: number)
  */
 export class CCompiler {
   #compilerScript: string;
+  #projectRoot: string;
 
-  constructor(compilerScript: string) {
+  constructor(compilerScript: string, projectRoot: string) {
     this.#compilerScript = compilerScript;
+    this.#projectRoot = projectRoot;
   }
 
   /**
@@ -83,7 +85,7 @@ export class CCompiler {
         .replaceAll('{{objFilePath}}', objPath)
         .replaceAll('{{functionName}}', functionName);
       await fs.writeFile(scriptPath, 'set -e\n' + renderedScript);
-      execSync(`bash "${scriptPath}"`, { cwd: tmpDir, stdio: 'pipe' });
+      execSync(`bash "${scriptPath}"`, { cwd: this.#projectRoot, stdio: 'pipe' });
 
       return { success: true, objPath };
     } catch (error) {

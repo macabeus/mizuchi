@@ -1,4 +1,5 @@
 import { type SDKMessage, SDKResultSuccess } from '@anthropic-ai/claude-agent-sdk';
+import os from 'os';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ARM_DIFF_SETTINGS, getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
@@ -171,7 +172,7 @@ const defaultPluginConfig: ClaudeRunnerConfig = {
   debug: false,
 };
 
-const testCCompiler = new CCompiler(getArmCompilerScript());
+const testCCompiler = new CCompiler(getArmCompilerScript(), os.tmpdir());
 const testObjdiff = new Objdiff(ARM_DIFF_SETTINGS);
 
 /**

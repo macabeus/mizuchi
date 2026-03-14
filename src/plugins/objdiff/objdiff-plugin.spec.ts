@@ -96,7 +96,7 @@ describe('ObjdiffPlugin', () => {
   });
 
   describe('integration tests with actual compilation', async () => {
-    const compiler = new CCompiler(getArmCompilerScript());
+    const compiler = new CCompiler(getArmCompilerScript(), os.tmpdir());
     // Empty context path since these tests don't use custom types
     const emptyContextPath = '';
 

@@ -50,12 +50,12 @@ export function parseMapFile(content: string): Map<string, string> {
  *
  * The map file paths are relative to the linker's working directory, which may
  * differ from the project root. We try the direct path first (works for AF-style
- * projects), then glob under `<projectPath>/build/` for the .o filename (handles
+ * projects), then glob under `<projectRoot>/build/` for the .o filename (handles
  * SA3-style where the linker runs from a build subdirectory).
  */
 export async function resolveObjectPath(
   functionName: string,
-  projectPath: string,
+  projectRoot: string,
   symbolMap: Map<string, string>,
 ): Promise<string | null> {
   const relativePath = symbolMap.get(functionName);
@@ -64,7 +64,7 @@ export async function resolveObjectPath(
   }
 
   // Try direct join (works when map paths are relative to project root)
-  const directPath = path.join(projectPath, relativePath);
+  const directPath = path.join(projectRoot, relativePath);
   try {
     await fs.access(directPath);
     return directPath;
@@ -73,7 +73,7 @@ export async function resolveObjectPath(
   }
 
   const fileName = path.basename(relativePath);
-  const buildDir = path.join(projectPath, 'build');
+  const buildDir = path.join(projectRoot, 'build');
   for await (const match of fs.glob(`**/${fileName}`, { cwd: buildDir })) {
     return path.join(buildDir, match);
   }
@@ -90,12 +90,12 @@ export async function resolveObjectPath(
  */
 export async function resolveObjectPathFromSourceFile(
   cModulePath: string,
-  projectPath: string,
+  projectRoot: string,
 ): Promise<string | null> {
   const objRelativePath = cModulePath.replace(/\.c$/, '.o');
 
   // Try direct path (same directory structure as source)
-  const directPath = path.join(projectPath, objRelativePath);
+  const directPath = path.join(projectRoot, objRelativePath);
   try {
     await fs.access(directPath);
     return directPath;
@@ -105,7 +105,7 @@ export async function resolveObjectPathFromSourceFile(
 
   // Glob for the .o filename under build/
   const fileName = path.basename(objRelativePath);
-  const buildDir = path.join(projectPath, 'build');
+  const buildDir = path.join(projectRoot, 'build');
   try {
     for await (const match of fs.glob(`**/${fileName}`, { cwd: buildDir })) {
       return path.join(buildDir, match);

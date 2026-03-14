@@ -1,6 +1,8 @@
 /**
  * Transform PipelineResults to RunReport format
  */
+import path from 'path';
+
 import type { AttemptResult, PipelineResults, PluginResult } from '~/shared/types.js';
 
 import type {
@@ -83,7 +85,7 @@ export function transformToReport(
     version: 1,
     timestamp: results.timestamp,
     config: {
-      promptsDir: results.config.promptsDir,
+      promptsDir: path.relative(results.config.projectRoot, results.config.promptsDir) || '.',
       maxRetries: results.config.maxRetries,
       stallThreshold: pluginConfigs.claudeRunner.stallThreshold,
       ttftTimeoutMs: pluginConfigs.claudeRunner.ttftTimeoutMs,

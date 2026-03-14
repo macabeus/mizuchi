@@ -84,59 +84,30 @@ git submodule update --init vendor/decomp-permuter
 
 ## Quick Start
 
-1. **Create a configuration file**:
+1. **Create a configuration file**: Copy the example config and customize it for your project.
 
 ```bash
-cp mizuchi.example.yaml mizuchi.yaml
+cp mizuchi.example.yaml /path/to/you/decomp/project/mizuchi.yaml
 ```
 
-2. **Set up your prompts**:
-
-Create the prompt directory following this structure:
-
-```txt
-prompts/
-  my-function-1/
-    prompt.md         # The prompt content
-    settings.yaml     # Metadata (functionName, targetObjectPath)
-  my-function-2/
-    prompt.md
-    settings.yaml
-```
-
-See the [Prompt Folder Structure](#prompt-folder-structure) section for details.
-
-> **Tip**: Use the [Decomp Atlas](#decomp-atlas) to browse your project's functions and generate rich prompts from a web app.
-
-3. **Run the pipelines**:
+2. **Index your codebase**:
 
 ```bash
-npm start -- run
+npm start -- index-codebase --config /path/to/your/decomp/project/mizuchi.yaml
 ```
 
-## Prompt Folder Structure
+3. **Start the Decomp Atlas server**:
 
-Each prompt is a folder containing two files. See the [`prompts/`](prompts/) directory for examples.
+```bash
+npm start -- atlas --config /path/to/your/decomp/project/mizuchi.yaml
+```
 
-### `prompt.md`
+4. **Generate prompts**: Open Decomp Atlas at [`http://localhost:3000/`](http://localhost:3000/), browse the functions and generate the prompts
 
-The prompt sent to Claude. Should include:
+5. **Run the pipelines**:
 
-- A request to decompile an assembly function to C
-- The assembly code to decompile
-
-### `settings.yaml`
-
-Metadata for the prompt:
-
-```yaml
-functionName: my_function
-targetObjectPath: /path/to/build/code.o
-asm: |
-  .text
-  glabel my_function
-      push {lr}
-      bx lr
+```bash
+npm start -- run --config /path/to/your/decomp/project/mizuchi.yaml
 ```
 
 ## Pipeline Overview

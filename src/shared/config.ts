@@ -48,26 +48,34 @@ export const pipelineConfigSchema = z.object({
   outputDir: z.string().default('.'),
   compilerScript: z.string(),
   getContextScript: z.string(),
-  promptsDir: z.string(),
-  projectPath: z.string().describe('Path to the decomp project root'),
-  mapFilePath: z.string().describe('Path to GNU ld map file for resolving function → object file'),
+  promptsDir: z.string().default('./prompts'),
+  mapFilePath: z
+    .string()
+    .describe('Path to GNU ld map file for resolving function → object file (relative to mizuchi.yaml)'),
   target: z.enum(platformTargets).default('gba'),
   nonMatchingAsmFolders: z
     .array(z.string())
-    .describe('Directories containing non-matching assembly files (relative to projectPath)'),
+    .describe('Directories containing non-matching assembly files (relative to mizuchi.yaml)'),
   matchingAsmFolders: z
     .array(z.string())
     .optional()
     .default([])
-    .describe('Directories containing matching assembly files (relative to projectPath)'),
+    .describe('Directories containing matching assembly files (relative to mizuchi.yaml)'),
   excludeFromScan: z
     .array(z.string())
     .optional()
     .default(['tools'])
-    .describe('Directories to exclude from C source scanning (relative to projectPath)'),
+    .describe('Directories to exclude from C source scanning (relative to mizuchi.yaml)'),
 });
 
-export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;
+/**
+ * The parsed schema fields plus `projectRoot`, which is derived from the
+ * directory containing mizuchi.yaml (not user-configured).
+ */
+export type PipelineConfig = z.infer<typeof pipelineConfigSchema> & {
+  /** Absolute path to the project root (directory containing mizuchi.yaml). Computed, not user-configured. */
+  projectRoot: string;
+};
 
 /**
  * Full configuration file schema
@@ -77,7 +85,12 @@ export const configFileSchema = z.object({
   plugins: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
 });
 
-export type ConfigFile = z.infer<typeof configFileSchema>;
+/**
+ * After `loadConfig()`, `global` is enriched with `projectRoot`.
+ */
+export type ConfigFile = Omit<z.infer<typeof configFileSchema>, 'global'> & {
+  global: PipelineConfig;
+};
 
 /**
  * Plugin configuration requirement
@@ -116,7 +129,10 @@ export function getDefaultConfigPath(cwd: string = process.cwd()): string {
 }
 
 /**
- * Load and parse the configuration file
+ * Load, parse, and resolve the configuration file.
+ *
+ * The directory containing `configPath` becomes the project root (`projectRoot`).
+ * All relative paths in the config are resolved against it.
  */
 export async function loadConfig(configPath: string): Promise<ConfigFile> {
   try {
@@ -131,7 +147,18 @@ export async function loadConfig(configPath: string): Promise<ConfigFile> {
       throw new ConfigValidationError(`Invalid configuration file: ${issues}`);
     }
 
-    return result.data;
+    // Resolve paths relative to the config file's directory (project root)
+    const projectRoot = path.resolve(path.dirname(configPath));
+    const data = result.data;
+    data.global = {
+      ...data.global,
+      projectRoot,
+      mapFilePath: path.resolve(projectRoot, data.global.mapFilePath),
+      promptsDir: path.resolve(projectRoot, data.global.promptsDir),
+      outputDir: path.resolve(projectRoot, data.global.outputDir),
+    } as PipelineConfig;
+
+    return data as unknown as ConfigFile;
   } catch (error) {
     if (error instanceof ConfigValidationError) {
       throw error;

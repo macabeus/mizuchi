@@ -25,9 +25,11 @@ export class GetContextPlugin implements Plugin<GetContextResult> {
   readonly description = 'Executes getContextScript to generate context content';
 
   #getContextScript: string;
+  #projectRoot: string;
 
-  constructor(getContextScript: string) {
+  constructor(getContextScript: string, projectRoot: string) {
     this.#getContextScript = getContextScript;
+    this.#projectRoot = projectRoot;
   }
 
   async execute(context: PipelineContext): Promise<{
@@ -64,7 +66,7 @@ export class GetContextPlugin implements Plugin<GetContextResult> {
       await fs.writeFile(scriptPath, 'set -e\n' + renderedScript);
 
       const stdout = execSync(`bash "${scriptPath}"`, {
-        cwd: tmpDir,
+        cwd: this.#projectRoot,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 

@@ -27,7 +27,7 @@ type CodebaseContext = {
 async function getCodebaseContext(
   functionName: string,
   calledFunctionNames: string[],
-  projectPath: string,
+  projectRoot: string,
 ): Promise<CodebaseContext> {
   registerClangLanguage();
 
@@ -45,7 +45,7 @@ async function getCodebaseContext(
   await findInFiles(
     'c',
     {
-      paths: [projectPath],
+      paths: [projectRoot],
       matcher: {
         rule: {
           kind: 'identifier',
@@ -100,7 +100,7 @@ async function getCodebaseContext(
       await findInFiles(
         'c',
         {
-          paths: [projectPath],
+          paths: [projectRoot],
           matcher: {
             rule: {
               kind: 'type_identifier',
@@ -139,7 +139,7 @@ async function getCodebaseContext(
 export async function getFuncContext(
   db: MizuchiDb,
   functionId: string,
-  projectPath: string,
+  projectRoot: string,
 ): Promise<DecompFuncContext> {
   const func = db.getFunctionById(functionId);
   if (!func) {
@@ -155,7 +155,7 @@ export async function getFuncContext(
     }
   }
 
-  const context = await getCodebaseContext(func.name, calledFunctionNames, projectPath);
+  const context = await getCodebaseContext(func.name, calledFunctionNames, projectRoot);
 
   const result: DecompFuncContext = {
     asmDeclaration: context.asmDeclaration,

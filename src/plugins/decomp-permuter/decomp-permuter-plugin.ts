@@ -53,6 +53,7 @@ interface PermuterSpawnConfig {
   functionName: string;
   targetObjectPath: string;
   compilerScript: string;
+  projectRoot: string;
   target: PlatformTarget;
   compilerType: string;
   contextContent?: string;
@@ -119,6 +120,7 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterResult> {
         functionName: ctx.context.functionName,
         targetObjectPath: ctx.context.targetObjectPath!,
         compilerScript: ctx.context.config.compilerScript,
+        projectRoot: ctx.context.config.projectRoot,
         target: ctx.context.config.target,
         compilerType: this.#resolveCompilerType(ctx.context.config.target),
         contextContent: ctx.context.contextContent,
@@ -133,6 +135,7 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterResult> {
         targetObjectPath: config.targetObjectPath,
         functionName: config.functionName,
         compilerScript: config.compilerScript,
+        projectRoot: config.projectRoot,
         target: config.target,
         compilerType: config.compilerType,
         contextContent: config.contextContent,
@@ -213,6 +216,7 @@ export class DecompPermuterPlugin implements Plugin<DecompPermuterResult> {
         targetObjectPath: context.targetObjectPath,
         functionName: context.functionName,
         compilerScript: context.config.compilerScript,
+        projectRoot: context.config.projectRoot,
         target: context.config.target,
         compilerType: this.#resolveCompilerType(context.config.target),
         contextContent: context.contextContent,

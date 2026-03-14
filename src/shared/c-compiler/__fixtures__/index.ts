@@ -31,7 +31,9 @@ const DEFAULT_ARM_FLAGS = '-mthumb-interwork -Wimplicit -Wparentheses -Werror -O
 
 export function getArmCompilerScript(): string {
   const compilerPath = getAgbccCompilerPath();
-  return `"${compilerPath}" "{{cFilePath}}" -o asm.s ${DEFAULT_ARM_FLAGS}\n${ARM_ASSEMBLER} asm.s -o "{{objFilePath}}"`;
+  // Use {{objFilePath}}-derived path for asm.s to avoid conflicts when
+  // multiple tests share the same cwd (projectRoot)
+  return `ASM_FILE="{{objFilePath}}.s"\n"${compilerPath}" "{{cFilePath}}" -o "$ASM_FILE" ${DEFAULT_ARM_FLAGS}\n${ARM_ASSEMBLER} "$ASM_FILE" -o "{{objFilePath}}"`;
 }
 
 // --- MIPS (KMC GCC) fixtures ---

@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import fs from 'fs/promises';
+import os from 'os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getArmCompilerScript, getMipsCompilerScript } from './c-compiler/__fixtures__/index.js';
@@ -85,7 +86,7 @@ describe('DecompPermuter', () => {
 
     beforeAll(async () => {
       permuter = new DecompPermuter();
-      compiler = new CCompiler(compilerScript);
+      compiler = new CCompiler(compilerScript, os.tmpdir());
 
       const compileResult = await compiler.compile('SimpleAdd', MATCHING_C_CODE, '');
       expect(compileResult.success).toBe(true);
@@ -107,6 +108,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 1,
@@ -124,6 +126,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 1,
@@ -156,6 +159,7 @@ describe('DecompPermuter', () => {
           targetObjectPath: multiTargetResult.objPath,
           functionName: 'SimpleAdd',
           compilerScript,
+          projectRoot: os.tmpdir(),
           target: 'gba',
           compilerType: 'gcc',
           maxIterations: 1,
@@ -184,7 +188,7 @@ describe('DecompPermuter', () => {
 
     beforeAll(async () => {
       permuter = new DecompPermuter();
-      compiler = new CCompiler(compilerScript);
+      compiler = new CCompiler(compilerScript, os.tmpdir());
 
       const compileResult = await compiler.compile('SimpleAdd', MATCHING_C_CODE, '');
       expect(compileResult.success).toBe(true);
@@ -208,6 +212,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         maxIterations,
@@ -226,6 +231,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 100000,
@@ -248,6 +254,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         contextContent,
@@ -270,6 +277,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         contextContent,
@@ -294,6 +302,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 100000,
@@ -314,6 +323,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: '/nonexistent/target.o',
         functionName: 'SimpleAdd',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'gba',
         compilerType: 'gcc',
         maxIterations: 1,
@@ -337,7 +347,7 @@ describe('DecompPermuter', () => {
 
     beforeAll(async () => {
       permuter = new DecompPermuter();
-      compiler = new CCompiler(compilerScript);
+      compiler = new CCompiler(compilerScript, os.tmpdir());
 
       const compileResult = await compiler.compile('simple_add', MATCHING_C_CODE, '');
       expect(compileResult.success).toBe(true);
@@ -359,6 +369,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'simple_add',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'n64',
         compilerType: 'ido',
         maxIterations: 1,
@@ -375,6 +386,7 @@ describe('DecompPermuter', () => {
         targetObjectPath: targetObjPath,
         functionName: 'simple_add',
         compilerScript,
+        projectRoot: os.tmpdir(),
         target: 'n64',
         compilerType: 'ido',
         maxIterations: 1,
@@ -404,6 +416,7 @@ describe('DecompPermuter', () => {
           targetObjectPath: multiTargetResult.objPath,
           functionName: 'simple_add',
           compilerScript,
+          projectRoot: os.tmpdir(),
           target: 'n64',
           compilerType: 'ido',
           maxIterations: 1,
@@ -452,6 +465,7 @@ describe('DecompPermuter', () => {
           targetObjectPath: multiTargetResult.objPath,
           functionName: 'simple_add',
           compilerScript,
+          projectRoot: os.tmpdir(),
           target: 'n64',
           compilerType: 'ido',
           maxIterations: 1,

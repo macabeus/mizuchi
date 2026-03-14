@@ -8,7 +8,10 @@ import { PipelineConfig } from './config.js';
 import type { PipelineContext } from './types.js';
 
 /**
- * Default global pipeline config for tests
+ * Default global pipeline config for tests.
+ *
+ * projectRoot is a dummy path — tests that actually run compiler/context scripts
+ * must create their own temp directory and override it to avoid conflicts.
  */
 export const defaultTestPipelineConfig: PipelineConfig = {
   getContextScript: 'echo ""',
@@ -16,7 +19,7 @@ export const defaultTestPipelineConfig: PipelineConfig = {
   compilerScript: getArmCompilerScript(),
   maxRetries: 3,
   promptsDir: '/test/prompts',
-  projectPath: '/test/project',
+  projectRoot: '/test/project',
   target: 'gba',
   mapFilePath: '/test/project/mapfile.map',
   nonMatchingAsmFolders: [],

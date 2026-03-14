@@ -1,23 +1,22 @@
 # Mizuchi Configuration File
-# This is an example configuration
-# Copy this file to mizuchi.yaml and customize for your project
+# Place this file (mizuchi.yaml) in your decompilation project's root directory.
+# All relative paths are resolved from this file's location (the project root).
+# Scripts (compilerScript, getContextScript) run with cwd = project root.
 
 # Global settings that apply to the entire pipeline
 global:
   # Shell script whose stdout becomes the context content prepended during compilation.
+  # Runs with cwd = project root, so relative paths like "ctx.c" work directly.
   # Template variables: {{functionName}}, {{targetObjectPath}}
   #
-  # Static file example: always read the same context file regardless of the prompt
-  #   getContextScript: |
-  #     cat /path/to/decomp-project/ctx.h
+  # Static file example:
+  #   getContextScript: cat ctx.h
   #
-  # Dynamic example: call m2ctx.py to write the context file
+  # Dynamic example (m2ctx.py):
   #   getContextScript: |
-  #     cd /path/to/decomp-project
   #     python3 tools/m2ctx.py "$(echo "{{targetObjectPath}}" | sed 's|.*/build/||; s|\.o$|.c|')"
   #     cat ctx.c
-  getContextScript: |
-    cat /path/to/your/context.h
+  getContextScript: cat ctx.h
 
   # Maximum retry attempts per prompt (default: 25)
   maxRetries: 25
@@ -26,11 +25,10 @@ global:
   outputDir: '.'
 
   # Shell script template for compilation.
+  # Runs with cwd = project root. {{cFilePath}} and {{objFilePath}} are absolute temp paths.
   # Template variables: {{cFilePath}}, {{objFilePath}}, {{functionName}}
-  #
-  # ARM example (three-step: agbcc outputs .s, strip the .size directive, then call arm-none-eabi-as to assemble to .o):
   compilerScript: |
-    "/path/to/agbcc" \
+    tools/agbcc/bin/agbcc \
       "{{cFilePath}}" -o asm.s \
       -mthumb-interwork -Wimplicit \
       -Wparentheses -Werror -O2 -g -fhex-asm
@@ -39,33 +37,26 @@ global:
 
     arm-none-eabi-as -mcpu=arm7tdmi -mthumb-interwork asm.s -o "{{objFilePath}}"
 
-  # Directory containing prompt folders
-  # Discovers and loads prompts from directory structure
-  # Each prompt lives in its own folder with:
-  #   - prompt.md: The prompt content
-  #   - settings.yaml: Metadata (functionName, targetObjectPath)
-  promptsDir: './prompts'
+  # Directory containing prompt folders (default: ./prompts)
+  promptsDir: ./prompts
 
-  # Path to the decomp project root (used by Claude Agent and prompt builder)
-  projectPath: '/path/to/your/project'
-
-  # Path to GNU ld map file for resolving function → object file
-  mapFilePath: '/path/to/your/project/build/project.map'
+  # Path to GNU ld map file
+  mapFilePath: build/project.map
 
   # Target platform for decompilation (default: gba)
   # Supported values: gba, nds, n3ds, n64, gc, wii, ps1, ps2, psp, win32, switch, android_x86, irix, saturn, dreamcast
   target: gba
 
-  # Directories containing non-matching assembly files (relative to projectPath)
-  # Used by the `index-codebase` command to discover undecompiled functions
+  # Directories containing non-matching assembly files
   nonMatchingAsmFolders:
     - asm
 
-  # Directories containing matching assembly files (relative to projectPath)
+  # Directories containing matching assembly files (relative to this file)
+  # Optional. Used as a fallback when objdiff fails to extract assembly from compiled .o files
   # matchingAsmFolders:
   #   - asm/matchings
 
-  # Directories to exclude from C source scanning (relative to projectPath, default: ['tools'])
+  # Directories to exclude from C source scanning (relative to this file, default: ['tools'])
   # excludeFromScan:
   #   - tools
 
@@ -88,24 +79,15 @@ plugins:
     timeoutMs: 600000
 
     # TTFT (Time To First Token) timeout in milliseconds (default: 180000 = 3 minutes)
-    # If no API response arrives within this window at the start of a query, the attempt
-    # is aborted early and retried with a fresh conversation. Only active until the first
-    # substantive message arrives; after that, soft/hard timeouts begin with their full budgets
-    # (the TTFT wait time does NOT count against the soft/hard timeout budgets).
     ttftTimeoutMs: 180000
 
-    # Soft timeout: gives Claude a chance to submit its best code before the hard timeout kills the request.
-    # When softTimeoutMs elapses, the current query is closed and a new "submit now" prompt is sent
-    # with the remaining time budget (timeoutMs - softTimeoutMs). If no session was established
-    # (API never responded), falls through to the normal hard timeout error.
+    # Soft timeout: gives Claude a chance to submit its best code before the hard timeout
     softTimeout:
-      # Time in milliseconds before the soft timeout fires (must be < timeoutMs)
       softTimeoutMs: 420000
-      # Prompt sent to Claude when the soft timeout fires
       prompt: 'You are running out of time. Submit your best C code now in a ```c block. Do not explain, do not use tools, just output the code.'
-      # Optional: override model for the resumed query (defaults to the parent model)
+      # Optional. Override model for the resumed query (defaults to the parent model)
       # model: claude-haiku-4-5-20251001
-      # Optional: override effort level for the resumed query
+      # Optional. Override effort level for the resumed query
       # effort: low
 
     # Path to cache file for Claude responses (default: claude-cache.json in output directory)
@@ -186,21 +168,11 @@ plugins:
       - If stuck, try different approaches (different variable types, control structures, etc.)
 
   # m2c Plugin (optional)
-  # Runs m2c in the programmatic phase before the AI-powered phase.
-  # If m2c produces a match, the pipeline succeeds immediately.
-  # Otherwise, the m2c output feeds into Claude Runner as additional context.
-  # Requires: scripts/setup-m2c.sh to be run first
   m2c:
-    # Enable or disable m2c programmatic phase (default: true)
     enable: true
 
   # decomp-permuter Plugin (optional)
-  # Brute-forces code mutations to improve match percentage.
-  # If m2c is enabled, it runs in the programmatic phase after m2c.
-  # On the AI-powered phase, it runs in background while Claude makes progress.
-  # Requires: scripts/setup-decomp-permuter.sh to be run first
   decomp-permuter:
-    # Enable or disable decomp-permuter (default: false)
     enable: true
     # Maximum iterations on the programmatic phase (default: 1000)
     maxIterations: 1000
@@ -221,12 +193,13 @@ plugins:
 # To configure for a MIPS target like N64, use settings like:
 #
 # global:
-#   getContextScript: 'cat /path/to/context.h'
+#   getContextScript: cat ctx.h
 #   compilerScript: |
-#     COMPILER_PATH='/path/to/compiler/dir' \
-#       '/path/to/mips-gcc' \
+#     COMPILER_PATH='tools/ido' \
+#       tools/ido/cc \
 #       -O2 -G0 -mips2 \
 #       -c "{{cFilePath}}" -o "{{objFilePath}}"
+#   mapFilePath: build/project.map
 #   target: n64
 #   nonMatchingAsmFolders:
 #     - asm/nonmatchfuncs

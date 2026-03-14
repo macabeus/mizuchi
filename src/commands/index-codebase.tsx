@@ -64,9 +64,9 @@ export default function IndexCodebase({ options: opts }: Props) {
   } | null>(null);
   const [logLines, setLogLines] = useState<Array<{ id: number; text: string }>>([]);
   const logIdRef = useRef(0);
-  const [errorMessage, setErrorMessage] = useState<string>('');
-  const [projectPath, setProjectPath] = useState<string>('');
-  const [platform, setPlatform] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [projectRoot, setProjectPath] = useState('');
+  const [platform, setPlatform] = useState('');
 
   useEffect(() => {
     async function run() {
@@ -82,7 +82,7 @@ export default function IndexCodebase({ options: opts }: Props) {
         }
 
         const config = fileConfig.global;
-        setProjectPath(config.projectPath);
+        setProjectPath(config.projectRoot);
         setPlatform(config.target);
 
         // Get objdiff diffSettings from plugin config
@@ -140,7 +140,7 @@ export default function IndexCodebase({ options: opts }: Props) {
 
         // Phase 5: Write database
         setPhase('writing');
-        await writeMizuchiDb(config.projectPath, indexResult.dump);
+        await writeMizuchiDb(config.projectRoot, indexResult.dump);
 
         setPhase('done');
       } catch (error) {
@@ -164,7 +164,7 @@ export default function IndexCodebase({ options: opts }: Props) {
     return (
       <Box flexDirection="column" gap={1}>
         <Text color="green" bold>
-          Done! mizuchi-db.json written to {projectPath}/mizuchi-db.json
+          Done! mizuchi-db.json written to {projectRoot}/mizuchi-db.json
         </Text>
         <Box flexDirection="column">
           <Text>
@@ -184,9 +184,9 @@ export default function IndexCodebase({ options: opts }: Props) {
   return (
     <Box flexDirection="column" gap={1}>
       <Text bold>Mizuchi - Index Codebase</Text>
-      {projectPath && (
+      {projectRoot && (
         <Box flexDirection="column">
-          <Text>Project: {projectPath}</Text>
+          <Text>Project: {projectRoot}</Text>
           <Text>Platform: {platform}</Text>
         </Box>
       )}

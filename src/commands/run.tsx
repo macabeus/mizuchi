@@ -789,11 +789,11 @@ async function runPipeline(
     );
 
     // Create shared CCompiler and Objdiff instances
-    const cCompiler = new CCompiler(pipelineConfig.compilerScript);
+    const cCompiler = new CCompiler(pipelineConfig.compilerScript, pipelineConfig.projectRoot);
     const objdiff = new Objdiff(objdiffConfig.diffSettings);
 
     // Create plugins
-    const getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript);
+    const getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript, pipelineConfig.projectRoot);
     claudePlugin = new ClaudeRunnerPlugin({
       config: claudeRunnerConfig,
       pipelineConfig,

@@ -1,4 +1,6 @@
 import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getArmCompilerScript } from '~/shared/c-compiler/__fixtures__/index.js';
@@ -10,15 +12,18 @@ import { CompilerPlugin } from './compiler-plugin.js';
 
 describe('CompilerPlugin', () => {
   let plugin: CompilerPlugin;
+  let tempDir: string;
 
   beforeEach(async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    plugin = new CompilerPlugin(new CCompiler(getArmCompilerScript()));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compiler-plugin-test-'));
+    plugin = new CompilerPlugin(new CCompiler(getArmCompilerScript(), tempDir));
   });
 
   afterEach(async () => {
     // Clean up any generated files
     await plugin.cleanup();
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
   const createContext = (overrides: Partial<PipelineContext> = {}): PipelineContext =>

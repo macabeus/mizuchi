@@ -19,7 +19,7 @@ export function App() {
     (async () => {
       try {
         const res = await apiClient.api.loadProject.$post({
-          json: { projectPath: config.projectPath },
+          json: {},
         });
         const json = await res.json();
 
@@ -67,7 +67,7 @@ export function App() {
     );
   }
 
-  const projectName = window.__MIZUCHI_CONFIG__?.projectPath.split(/[\\/]/).pop() || 'Unknown Project';
+  const projectName = window.__MIZUCHI_CONFIG__?.projectRoot.split(/[\\/]/).pop() || 'Unknown Project';
 
   return (
     <MizuchiDbProvider db={db}>

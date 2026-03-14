@@ -10,7 +10,7 @@ import { loadPrompts } from './prompt-loader.js';
 
 describe('PromptLoaderPlugin', () => {
   let tempDir: string;
-  const compiler = new CCompiler(getArmCompilerScript());
+  const compiler = new CCompiler(getArmCompilerScript(), os.tmpdir());
   const emptyContextPath = '';
   const compiledObjects: string[] = [];
 

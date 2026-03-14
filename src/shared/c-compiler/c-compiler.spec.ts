@@ -1,23 +1,30 @@
 import fs from 'fs/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import os from 'os';
+import path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { getArmCompilerScript, getMipsCompilerScript } from './__fixtures__/index.js';
 import { CCompiler } from './c-compiler.js';
 
 describe('CCompiler', () => {
   const compiledObjects: string[] = [];
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mizuchi-test-project-'));
+  });
 
   afterEach(async () => {
     for (const objPath of compiledObjects) {
       await fs.unlink(objPath).catch(() => {});
     }
     compiledObjects.length = 0;
+    await fs.rm(projectRoot, { recursive: true, force: true });
   });
 
   describe('ARM (agbcc)', () => {
-    const compiler = new CCompiler(getArmCompilerScript());
-
     it('compiles a simple function', async () => {
+      const compiler = new CCompiler(getArmCompilerScript(), projectRoot);
       const code = `void TestFunc(void) { volatile int x = 1; }`;
       const result = await compiler.compile('TestFunc', code, '');
 
@@ -28,6 +35,7 @@ describe('CCompiler', () => {
     });
 
     it('returns compilation errors for invalid code', async () => {
+      const compiler = new CCompiler(getArmCompilerScript(), projectRoot);
       const code = `void BadFunc(void) { undefined_type x; }`;
       const result = await compiler.compile('BadFunc', code, '');
 
@@ -36,9 +44,8 @@ describe('CCompiler', () => {
   });
 
   describe('MIPS (KMC GCC)', () => {
-    const compiler = new CCompiler(getMipsCompilerScript());
-
     it('compiles a simple function', async () => {
+      const compiler = new CCompiler(getMipsCompilerScript(), projectRoot);
       const code = `
 int add(int a, int b) {
     return a + b;
@@ -55,6 +62,7 @@ int add(int a, int b) {
     });
 
     it('compiles a function with local variables', async () => {
+      const compiler = new CCompiler(getMipsCompilerScript(), projectRoot);
       const code = `
 int sum_array(int *arr, int n) {
     int total = 0;
@@ -74,6 +82,7 @@ int sum_array(int *arr, int n) {
     });
 
     it('returns compilation errors for invalid code', async () => {
+      const compiler = new CCompiler(getMipsCompilerScript(), projectRoot);
       const code = `void BadFunc(void) { undefined_type x; }`;
       const result = await compiler.compile('BadFunc', code, '');
 

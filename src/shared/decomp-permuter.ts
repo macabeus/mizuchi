@@ -107,6 +107,8 @@ export interface DecompPermuterOptions {
   target: PlatformTarget;
   /** Permuter compiler_type for randomization weights (e.g. 'gcc', 'ido', 'mwcc') */
   compilerType: string;
+  /** Absolute path to the project root (for script cwd) */
+  projectRoot: string;
   /** Context content (type definitions etc.) to prepend during compilation */
   contextContent?: string;
   /** Maximum number of iterations before stopping. When omitted, runs until perfect match, timeout, or abort. */
@@ -424,8 +426,8 @@ export class DecompPermuter {
 
     // The permuter calls: compile.sh <c_file> -o <o_file>
     // $1 = C source file, $2 = "-o", $3 = output object file
-    // We cd into TMPDIR before compiling so intermediate files (e.g. asm.s from agbcc)
-    // are written there instead of cwd, avoiding conflicts with concurrent runs.
+    // We cd into projectRoot before compiling so relative paths in the user's
+    // compilerScript resolve correctly (e.g. tools/agbcc/bin/agbcc).
     const compileScript = `#!/bin/bash
 set -e
 CFILE="$(realpath "$1")"
@@ -438,8 +440,8 @@ perl -0777 -pe 's|/\\*.*?\\*/||gs' "$CFILE" > "$TMPDIR/stripped.c"
 # Preprocess
 cpp -P "$TMPDIR/stripped.c" "$TMPDIR/preprocessed.c"
 
-# Compile (cd into tmpdir so intermediate files don't conflict)
-cd "$TMPDIR"
+# Compile (cd into project root so relative paths in compilerScript work)
+cd "${options.projectRoot}"
 ${renderedCompilerScript}
 
 # Cleanup

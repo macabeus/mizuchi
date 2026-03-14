@@ -34,7 +34,7 @@ async function main() {
   }
 
   const platform = fileConfig.global?.target ?? 'gba';
-  const projectPath = fileConfig.global?.projectPath ?? '';
+  const projectRoot = fileConfig.global?.projectRoot ?? '';
 
   // Start the Atlas API backend on port 3000
   const atlasApp = createAtlasServer({ fileConfig, configPath });
@@ -52,7 +52,7 @@ async function main() {
       handler(html) {
         const config = JSON.stringify({
           serverBaseUrl: '',
-          projectPath,
+          projectRoot,
           target: platform,
         });
         const script = `<script>window.__MIZUCHI_CONFIG__ = ${config};</script>`;
@@ -75,7 +75,7 @@ async function main() {
   console.log(`  UI:       http://localhost:${vitePort}/`);
   console.log(`  API:      http://localhost:${apiPort}/ (proxied via /api)`);
   console.log(`  Config:   ${configPath}`);
-  console.log(`  Project:  ${projectPath}`);
+  console.log(`  Project:  ${projectRoot}`);
 }
 
 main().catch((err) => {

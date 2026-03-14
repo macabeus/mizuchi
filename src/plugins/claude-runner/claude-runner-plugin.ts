@@ -573,7 +573,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             ...(options.effort ? { effort: options.effort } : {}),
             allowedTools: ['Read', 'Glob', 'Grep', 'mcp__mizuchi__compile_and_view_assembly'],
             permissionMode: 'dontAsk',
-            cwd: pipelineConfig.projectPath,
+            cwd: pipelineConfig.projectRoot,
             mcpServers: {
               mizuchi: this.#mcpServer,
             },
