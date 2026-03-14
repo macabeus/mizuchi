@@ -277,9 +277,12 @@ export class PluginManager {
 
       const willRetry = !attemptResult.success && attempt < this.#config.maxRetries;
 
-      // Extract differenceCount from objdiff result for the attempt-complete event
+      // Extract differenceCount from objdiff or mismatchCount from behavioral-match
       const objdiffResult = attemptResult.pluginResults.find((r) => r.pluginId === 'objdiff');
-      const differenceCount = (objdiffResult?.data as { differenceCount?: number } | undefined)?.differenceCount;
+      const behavioralResult = attemptResult.pluginResults.find((r) => r.pluginId === 'behavioral-match');
+      const differenceCount =
+        (objdiffResult?.data as { differenceCount?: number } | undefined)?.differenceCount ??
+        (behavioralResult?.data as { mismatchCount?: number } | undefined)?.mismatchCount;
 
       this.#emit({
         type: 'attempt-complete',

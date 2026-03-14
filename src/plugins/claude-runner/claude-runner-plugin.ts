@@ -298,6 +298,60 @@ ${reminderPreviousAttempt.code}
 }
 
 /**
+ * Build a follow-up prompt after behavioral decompilation finds mismatches.
+ * Provides rich context about what observable behaviors differ so Claude can fix them.
+ */
+function buildBehavioralFollowUpPrompt(
+  error: string,
+  lastCode: string,
+  expectedFunctionName: string,
+  reminderPreviousAttempt: { code: string; mismatchesCount: number } | undefined,
+): string {
+  let prompt = `The code you provided compiles but produces different observable behavior from the target. The behavioral verification ran the original and your code with identical inputs and found differences.
+
+Here is your code:
+
+\`\`\`c
+${lastCode}
+\`\`\`
+
+Here are the behavioral differences found:
+
+\`\`\`
+${error}
+\`\`\`
+
+# How to interpret the differences
+
+- **Return value (r0)**: Your function returns a different value. Check your arithmetic, conditionals, and control flow.
+- **Memory write count/values**: Your function writes to memory differently. Check pointer dereferences, array accesses, and struct field assignments.
+- **MMIO write count/values**: Your function interacts with hardware registers differently. Check register writes (addresses starting with 0x04).
+- **External call count/args**: Your function calls external functions differently. Check function call arguments and call ordering.
+- **Completion mismatch**: One version terminates while the other hits the instruction limit — likely an infinite loop or missing loop exit.
+
+# Rules
+
+- Fix the behavioral differences while keeping the code compiling
+- Focus on the logic: the goal is identical observable behavior (same return values, same memory writes, same function calls)
+- Make incremental changes to preserve working parts
+- Your C code should have exactly only one C function named \`${expectedFunctionName}\`
+`;
+
+  if (reminderPreviousAttempt) {
+    prompt += `
+
+Reminder: You previously provided this code that worked partially with ${reminderPreviousAttempt.mismatchesCount} behavioral mismatches
+
+\`\`\`c
+${reminderPreviousAttempt.code}
+\`\`\`
+`;
+  }
+
+  return prompt;
+}
+
+/**
  * Build a follow-up prompt after a hard timeout.
  */
 function buildTimeoutFollowUpPrompt(expectedFunctionName: string): string {
@@ -322,6 +376,8 @@ function detectStall(previousAttempts: Array<Partial<PluginResultMap>>, stallThr
   for (const attempt of previousAttempts) {
     if (attempt.objdiff?.data?.differenceCount !== undefined) {
       differenceCounts.push(attempt.objdiff.data.differenceCount);
+    } else if (attempt['behavioral-match']?.data?.mismatchCount !== undefined) {
+      differenceCounts.push(attempt['behavioral-match'].data.mismatchCount);
     }
   }
 
@@ -1641,6 +1697,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const claudeResult = lastAttempt['claude-runner'];
     const compilerResult = lastAttempt.compiler;
     const objdiffResult = lastAttempt.objdiff;
+    const behavioralResult = lastAttempt['behavioral-match'];
 
     if (!claudeResult) {
       return context;
@@ -1657,11 +1714,22 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       return context;
     }
 
-    // Find the attempt with the fewest mismatches
+    // Find the attempt with the fewest mismatches.
+    // Supports both objdiff (differenceCount) and behavioral-match (mismatchCount).
+    const getMismatchCount = (attempt: Partial<PluginResultMap>): number | undefined => {
+      if (attempt.objdiff?.data?.differenceCount !== undefined) {
+        return attempt.objdiff.data.differenceCount;
+      }
+      if (attempt['behavioral-match']?.data?.mismatchCount !== undefined) {
+        return attempt['behavioral-match'].data.mismatchCount;
+      }
+      return undefined;
+    };
+
     const attemptWithFewestMismatches = previousAttempts.reduce(
       (best, current) => {
-        // Skip attempts where compiler didn't succeed or objdiff has no difference count
-        if (current.compiler?.status !== 'success' || current.objdiff?.data?.differenceCount === undefined) {
+        // Skip attempts where compiler didn't succeed or verification has no mismatch count
+        if (current.compiler?.status !== 'success' || getMismatchCount(current) === undefined) {
           return best;
         }
 
@@ -1669,8 +1737,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           return current;
         }
 
-        const currentDiffCount = current.objdiff?.data?.differenceCount ?? Infinity;
-        const bestDiffCount = best.objdiff?.data?.differenceCount ?? Infinity;
+        const currentDiffCount = getMismatchCount(current) ?? Infinity;
+        const bestDiffCount = getMismatchCount(best) ?? Infinity;
 
         // Return current if it has fewer mismatches than best
         if (currentDiffCount < bestDiffCount) {
@@ -1682,15 +1750,17 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       null as Partial<PluginResultMap> | null,
     );
 
+    const lastMismatchCount = getMismatchCount(lastAttempt);
+    const bestMismatchCount = attemptWithFewestMismatches ? getMismatchCount(attemptWithFewestMismatches) : undefined;
+
     const lastAttemptIsWorse =
       attemptWithFewestMismatches &&
-      (objdiffResult?.data?.differenceCount === undefined ||
-        attemptWithFewestMismatches.objdiff!.data!.differenceCount < objdiffResult.data.differenceCount);
+      (lastMismatchCount === undefined || (bestMismatchCount !== undefined && bestMismatchCount < lastMismatchCount));
 
     const reminderPreviousAttempt = lastAttemptIsWorse
       ? {
           code: attemptWithFewestMismatches['claude-runner']!.data!.generatedCode,
-          mismatchesCount: attemptWithFewestMismatches.objdiff!.data!.differenceCount,
+          mismatchesCount: getMismatchCount(attemptWithFewestMismatches)!,
         }
       : undefined;
 
@@ -1706,6 +1776,16 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         // Use output for detailed error message, fall back to error field
         error = compilerResult.output || compilerResult.error || 'Unknown compilation error';
         isCompilationError = true;
+      } else if (behavioralResult?.status === 'failure') {
+        // Behavioral decompilation found mismatches — build specialized feedback
+        error = behavioralResult.output || behavioralResult.error || 'Behavioral mismatch';
+        isCompilationError = false;
+        this.#feedbackPrompt = buildBehavioralFollowUpPrompt(
+          error,
+          claudeResult.data!.generatedCode,
+          context.functionName,
+          reminderPreviousAttempt,
+        );
       } else if (objdiffResult?.status === 'failure') {
         error = objdiffResult.output || objdiffResult.error || 'Assembly mismatch';
         isCompilationError = false;
@@ -1714,14 +1794,16 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         isCompilationError = true;
       }
 
-      // Build follow-up prompt
-      this.#feedbackPrompt = buildFollowUpPrompt(
-        error,
-        isCompilationError,
-        claudeResult.data!.generatedCode,
-        context.functionName,
-        reminderPreviousAttempt,
-      );
+      // Build follow-up prompt (unless behavioral already built one above)
+      if (!behavioralResult || behavioralResult.status !== 'failure') {
+        this.#feedbackPrompt = buildFollowUpPrompt(
+          error,
+          isCompilationError,
+          claudeResult.data!.generatedCode,
+          context.functionName,
+          reminderPreviousAttempt,
+        );
+      }
     }
 
     // Detect stall and append recovery guidance if needed.

@@ -67,6 +67,10 @@ export default {
     'path',
     'url',
     'os',
+    // @sgba packages
+    '@sgba/arm-emulator',
+    '@sgba/gba-emulator',
+    '@sgba/gba-node',
     // External dependencies (don't bundle these)
     '@anthropic-ai/claude-agent-sdk',
     '@ast-grep/napi',
