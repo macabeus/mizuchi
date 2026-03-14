@@ -14,6 +14,11 @@ import {
 } from '~/cli/config.js';
 import { PluginManager } from '~/plugin-manager.js';
 import {
+  BehavioralMatchConfig,
+  BehavioralMatchPlugin,
+  behavioralMatchConfigSchema,
+} from '~/plugins/behavioral-match/behavioral-match-plugin.js';
+import {
   ClaudeRunnerConfig,
   ClaudeRunnerPlugin,
   claudeRunnerConfigSchema,
@@ -782,15 +787,30 @@ async function runPipeline(
       claudeRunnerConfigSchema,
     );
 
-    const objdiffConfig: ObjdiffConfig = getPluginConfigFromFile<ObjdiffConfig>(
-      fileConfig,
-      'objdiff',
-      objdiffConfigSchema,
-    );
-
-    // Create shared CCompiler and Objdiff instances
+    // Create shared CCompiler instance
     const cCompiler = new CCompiler(pipelineConfig.compilerScript);
-    const objdiff = new Objdiff(objdiffConfig.diffSettings);
+
+    // Create verification plugin based on mode
+    const useBehavioral = pipelineConfig.verificationMode === 'behavioral-match';
+    let verificationPlugin: ObjdiffPlugin | BehavioralMatchPlugin;
+    let objdiff: Objdiff | undefined;
+
+    if (useBehavioral) {
+      const behavioralConfig: BehavioralMatchConfig = getPluginConfigFromFile<BehavioralMatchConfig>(
+        fileConfig,
+        'behavioral-match',
+        behavioralMatchConfigSchema,
+      );
+      verificationPlugin = new BehavioralMatchPlugin(behavioralConfig);
+    } else {
+      const objdiffConfig: ObjdiffConfig = getPluginConfigFromFile<ObjdiffConfig>(
+        fileConfig,
+        'objdiff',
+        objdiffConfigSchema,
+      );
+      objdiff = new Objdiff(objdiffConfig.diffSettings);
+      verificationPlugin = new ObjdiffPlugin(objdiffConfig);
+    }
 
     // Create plugins
     const getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript);
@@ -798,11 +818,10 @@ async function runPipeline(
       config: claudeRunnerConfig,
       pipelineConfig,
       cCompiler,
-      objdiff,
+      objdiff: objdiff ?? new Objdiff(), // Claude Runner needs objdiff for its MCP tool
       cliPrompt,
     });
     compilerPlugin = new CompilerPlugin(cCompiler);
-    const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
 
     // Register setup phase plugins
     manager.registerSetupPhase(getContextPlugin);
@@ -820,10 +839,10 @@ async function runPipeline(
 
       if (decompPermuterConfig.enable) {
         const decompPermuterPlugin = new DecompPermuterPlugin(decompPermuterConfig, cCompiler);
-        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, objdiffPlugin], [decompPermuterPlugin]);
+        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, verificationPlugin], [decompPermuterPlugin]);
         backgroundCoordinator = new BackgroundTaskCoordinator([decompPermuterPlugin], onEvent);
       } else {
-        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, objdiffPlugin]);
+        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, verificationPlugin]);
       }
     }
 
@@ -835,7 +854,7 @@ async function runPipeline(
     }
 
     // Register plugins for the ai-powered phase
-    manager.register(claudePlugin).register(compilerPlugin).register(objdiffPlugin);
+    manager.register(claudePlugin).register(compilerPlugin).register(verificationPlugin);
 
     // Compute timestamp and file paths up front so partial and final files share the same timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

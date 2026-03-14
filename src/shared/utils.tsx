@@ -1,3 +1,4 @@
+import type { BehavioralMatchResult } from '~/plugins/behavioral-match/behavioral-match-plugin.js';
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
 import type { GetContextResult } from '~/plugins/get-context/get-context-plugin.js';
@@ -11,6 +12,7 @@ import { AttemptResult, PluginResult } from './types';
  * Used by getPluginResult to provide type-safe access to plugin results
  */
 type PluginResultDataMap = {
+  'behavioral-match': BehavioralMatchResult;
   'claude-runner': ClaudeRunnerResult;
   compiler: CompilerResult;
   'get-context': GetContextResult;

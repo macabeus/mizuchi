@@ -18,6 +18,7 @@ export const defaultTestPipelineConfig: PipelineConfig = {
   promptsDir: '/test/prompts',
   projectPath: '/test/project',
   target: 'gba',
+  verificationMode: 'objdiff',
   mapFilePath: '/test/project/mapfile.map',
   nonMatchingAsmFolders: [],
 };

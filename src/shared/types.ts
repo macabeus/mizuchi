@@ -3,6 +3,7 @@
  *
  * The plugin system provides a modular way to handle the decompilation pipeline.
  */
+import type { BehavioralMatchResult } from '~/plugins/behavioral-match/behavioral-match-plugin.js';
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
 import type { M2cPluginResult } from '~/plugins/m2c/m2c-plugin.js';
@@ -15,6 +16,7 @@ import type { PipelineConfig } from './config.js';
  * Mapping of plugin IDs to their result types
  */
 export type PluginResultMap = {
+  'behavioral-match': PluginResult<BehavioralMatchResult>;
   'claude-runner': PluginResult<ClaudeRunnerResult>;
   compiler: PluginResult<CompilerResult>;
   'decomp-permuter': PluginResult<DecompPermuterResult>;

@@ -43,6 +43,9 @@ export const isMipsPlatform = (target: PlatformTarget): boolean => {
  *
  * These are the top-level settings that apply to the entire pipeline run.
  */
+export const verificationModes = ['objdiff', 'behavioral-match'] as const;
+export type VerificationMode = (typeof verificationModes)[number];
+
 export const pipelineConfigSchema = z.object({
   maxRetries: z.number().positive().default(25),
   outputDir: z.string().default('.'),
@@ -52,9 +55,14 @@ export const pipelineConfigSchema = z.object({
   projectPath: z.string().describe('Path to the decomp project root'),
   mapFilePath: z.string().describe('Path to GNU ld map file for resolving function → object file'),
   target: z.enum(platformTargets).default('gba'),
+  verificationMode: z
+    .enum(verificationModes)
+    .default('objdiff')
+    .describe('How to verify decompiled code: objdiff (byte-matching) or behavioral-match (behavioral equivalence)'),
   nonMatchingAsmFolders: z
     .array(z.string())
     .describe('Directories containing non-matching assembly files (relative to projectPath)'),
+  romPath: z.string().optional().describe('Path to the game ROM file (used by GBA Debugger for automatic ROM loading)'),
 });
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;

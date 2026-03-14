@@ -105,6 +105,7 @@ export function buildPipelineConfig(
     projectPath: fileConfig.global?.projectPath ?? defaults.projectPath,
     mapFilePath: fileConfig.global?.mapFilePath ?? defaults.mapFilePath,
     target: fileConfig.global?.target ?? defaults.target,
+    verificationMode: fileConfig.global?.verificationMode ?? defaults.verificationMode,
     nonMatchingAsmFolders: fileConfig.global?.nonMatchingAsmFolders ?? defaults.nonMatchingAsmFolders,
   };
 

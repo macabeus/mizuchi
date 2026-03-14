@@ -25,11 +25,21 @@ export function BestResultCode({ result }: BestResultProps) {
   // Consider both programmatic and AI-powered phases
   const allAttempts = [...(result.programmaticPhase ? [result.programmaticPhase] : []), ...result.attempts];
 
+  // Helper to get mismatch count from either objdiff or behavioral-match
+  const getMismatchCount = (attempt: ReportAttempt): number | undefined => {
+    const objdiff = getPluginResult(attempt, 'objdiff');
+    if (objdiff?.data?.differenceCount !== undefined) {
+      return objdiff.data.differenceCount;
+    }
+    const behavioral = getPluginResult(attempt, 'behavioral-match');
+    if (behavioral?.data?.mismatchCount !== undefined) {
+      return behavioral.data.mismatchCount;
+    }
+    return undefined;
+  };
+
   const bestAttempt = allAttempts.reduce<ReportAttempt | null>((best, attempt) => {
-    if (
-      getPluginResult(attempt, 'compiler')?.status !== 'success' ||
-      getPluginResult(attempt, 'objdiff')?.data?.differenceCount === undefined
-    ) {
+    if (getPluginResult(attempt, 'compiler')?.status !== 'success' || getMismatchCount(attempt) === undefined) {
       return best;
     }
 
@@ -37,13 +47,7 @@ export function BestResultCode({ result }: BestResultProps) {
       return attempt;
     }
 
-    const bestObjdiffPluginResult = getPluginResult(best, 'objdiff');
-    const attemptObjdiffPluginResult = getPluginResult(attempt, 'objdiff');
-
-    if (
-      (attemptObjdiffPluginResult?.data?.differenceCount ?? Infinity) <
-      (bestObjdiffPluginResult?.data?.differenceCount ?? Infinity)
-    ) {
+    if ((getMismatchCount(attempt) ?? Infinity) < (getMismatchCount(best) ?? Infinity)) {
       return attempt;
     }
 
@@ -94,7 +98,7 @@ export function BestResultCode({ result }: BestResultProps) {
         ) : (
           <h4 className="font-semibold text-yellow-400 flex items-center gap-2">
             <Icon name="checkCircle" className="w-5 h-5" />
-            Compiling code with {getPluginResult(bestAttempt, 'objdiff')?.data?.differenceCount} difference(s)
+            Compiling code with {getMismatchCount(bestAttempt)} difference(s)
           </h4>
         )}
         {badge && (
