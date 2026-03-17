@@ -182,17 +182,28 @@ export class Objdiff {
         rightInstruction = this.#instructionDiffRowToString(rightInstructionRow);
       }
 
-      const hasRealDifference = (leftDiffKind !== 'none' || rightDiffKind !== 'none') && leftDiffKind !== rightDiffKind;
-
       const leftClean = leftInstruction.replace(/\s+/g, ' ').trim();
       const rightClean = rightInstruction.replace(/\s+/g, ' ').trim();
+
+      // One side has content but the other doesn't — always a difference.
+      // This catches cases where the target symbol covers more bytes than
+      // the current symbol (e.g., spanning into the next function).
+      const oneSidedContent = (leftClean === '') !== (rightClean === '');
+
+      const hasRealDifference = (leftDiffKind !== 'none' || rightDiffKind !== 'none') && leftDiffKind !== rightDiffKind;
       const contentDiffers = leftClean !== rightClean && leftClean !== '' && rightClean !== '';
 
-      if (hasRealDifference || (contentDiffers && (leftDiffKind !== 'none' || rightDiffKind !== 'none'))) {
+      if (
+        oneSidedContent ||
+        hasRealDifference ||
+        (contentDiffers && (leftDiffKind !== 'none' || rightDiffKind !== 'none'))
+      ) {
         differenceCount++;
 
         let diffType = '';
-        if (leftDiffKind === 'insert' || rightDiffKind === 'insert') {
+        if (oneSidedContent) {
+          diffType = leftClean === '' ? 'INSERTION' : 'DELETION';
+        } else if (leftDiffKind === 'insert' || rightDiffKind === 'insert') {
           diffType = 'INSERTION';
         } else if (leftDiffKind === 'delete' || rightDiffKind === 'delete') {
           diffType = 'DELETION';
@@ -210,7 +221,7 @@ export class Objdiff {
         differences.push(`- Current: \`${leftInstruction.trim() || '(empty)'}\` [${leftDiffKind}]`);
         differences.push(`- Target:  \`${rightInstruction.trim() || '(empty)'}\` [${rightDiffKind}]`);
         differences.push('');
-      } else if (leftInstruction.trim() !== '' || rightInstruction.trim() !== '') {
+      } else if (leftClean !== '' || rightClean !== '') {
         matchingCount++;
       }
     }

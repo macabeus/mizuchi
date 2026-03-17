@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -127,14 +128,14 @@ describe('ObjdiffPlugin', () => {
         finalTargetPath = path.join(tempDir, 'target.o');
         await fs.copyFile(targetResult.objPath, finalTargetPath);
 
-        const integrationPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
+        const objdiffPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
         const context = createContext({
           compiledObjectPath: compiledResult.objPath,
           targetObjectPath: finalTargetPath,
           functionName: 'TestMatchFunc',
         });
 
-        const { result } = await integrationPlugin.execute(context);
+        const { result } = await objdiffPlugin.execute(context);
 
         expect(result.status).toBe('success');
         expect(result.output).toContain('Perfect match');
@@ -183,14 +184,14 @@ describe('ObjdiffPlugin', () => {
         finalTargetPath = path.join(tempDir, 'target_diff.o');
         await fs.copyFile(targetResult.objPath, finalTargetPath);
 
-        const integrationPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
+        const objdiffPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
         const context = createContext({
           compiledObjectPath: compiledResult.objPath,
           targetObjectPath: finalTargetPath,
           functionName: 'TestDiffFunc',
         });
 
-        const { result } = await integrationPlugin.execute(context);
+        const { result } = await objdiffPlugin.execute(context);
 
         expect(result.status).toBe('failure');
         expect(result.error).toContain('Assembly mismatch');
@@ -209,6 +210,72 @@ describe('ObjdiffPlugin', () => {
           fs.unlink(finalTargetPath).catch(() => {});
         }
       }
+    });
+
+    it('detects differences when target symbol spans beyond function (size=0)', async () => {
+      // Reproduce the decomp project scenario: the target object file has a
+      // symbol with no .size directive (size=0), so it extends to the end of
+      // the section — covering instructions from the next function.
+      // The current (compiled) object has the same symbol with correct size.
+      // objdiff must detect the extra instructions as differences.
+      const currentAsmSrc = [
+        '\t.text',
+        '\t.align 2',
+        '\t.thumb',
+        '\t.globl F',
+        '\t.type F, %function',
+        'F:',
+        '\tadd r0, #1',
+        '\tbx lr',
+        '\t.size F, .-F',
+      ].join('\n');
+
+      const targetAsmSrc = [
+        '\t.text',
+        '\t.align 2',
+        '\t.thumb',
+        '\t.globl F',
+        '\t.type F, %function',
+        'F:',
+        '\tadd r0, #1',
+        '\tbx lr',
+        // Extra instructions in same section — no symbol boundary.
+        // This simulates a ROM-extracted target where the symbol spans
+        // into the next function because there is no .size directive.
+        '\tmov r0, r1',
+        '\tlsl r0, r0, #2',
+        '\tadd r0, #5',
+        '\tbx lr',
+      ].join('\n');
+
+      const currentObjPath = path.join(tempDir, 'current_prefix.o');
+      const targetObjPath = path.join(tempDir, 'target_prefix.o');
+      const currentAsmPath = path.join(tempDir, 'current_prefix.s');
+      const targetAsmPath = path.join(tempDir, 'target_prefix.s');
+
+      await fs.writeFile(currentAsmPath, currentAsmSrc);
+      await fs.writeFile(targetAsmPath, targetAsmSrc);
+
+      execSync(`arm-none-eabi-as -mcpu=arm7tdmi -mthumb-interwork "${currentAsmPath}" -o "${currentObjPath}"`, {
+        stdio: 'pipe',
+      });
+      execSync(`arm-none-eabi-as -mcpu=arm7tdmi -mthumb-interwork "${targetAsmPath}" -o "${targetObjPath}"`, {
+        stdio: 'pipe',
+      });
+
+      const objdiffPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
+      const context = createContext({
+        compiledObjectPath: currentObjPath,
+        targetObjectPath: targetObjPath,
+        functionName: 'F',
+      });
+
+      const { result } = await objdiffPlugin.execute(context);
+
+      expect(result.status).toBe('failure');
+      expect(result.data?.differenceCount).toBeGreaterThan(0);
+      // The first 2 instructions match, the remaining 4 are extra in the target
+      expect(result.data?.matchingCount).toBe(2);
     });
 
     it('fails when function symbol is not found', async () => {
@@ -235,14 +302,14 @@ describe('ObjdiffPlugin', () => {
         finalTargetPath = path.join(tempDir, 'target_symbol.o');
         await fs.copyFile(targetResult.objPath, finalTargetPath);
 
-        const integrationPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
+        const objdiffPlugin = new ObjdiffPlugin({ diffSettings: ARM_DIFF_SETTINGS });
         const context = createContext({
           compiledObjectPath: compiledResult.objPath,
           targetObjectPath: finalTargetPath,
           functionName: 'NonExistentFunc',
         });
 
-        const { result } = await integrationPlugin.execute(context);
+        const { result } = await objdiffPlugin.execute(context);
 
         expect(result.status).toBe('failure');
         expect(result.error).toBe('Symbol not found');
