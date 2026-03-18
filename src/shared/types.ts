@@ -5,6 +5,7 @@
  */
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
+import type { IntegratorResult } from '~/plugins/integrator/integrator-plugin.js';
 import type { M2cPluginResult } from '~/plugins/m2c/m2c-plugin.js';
 import type { ObjdiffResult } from '~/plugins/objdiff/objdiff-plugin.js';
 import type { DecompPermuterResult } from '~/shared/decomp-permuter.js';
@@ -18,6 +19,7 @@ export type PluginResultMap = {
   'claude-runner': PluginResult<ClaudeRunnerResult>;
   compiler: PluginResult<CompilerResult>;
   'decomp-permuter': PluginResult<DecompPermuterResult>;
+  integrator: PluginResult<IntegratorResult>;
   m2c: PluginResult<M2cPluginResult>;
   objdiff: PluginResult<ObjdiffResult>;
 };
@@ -126,6 +128,16 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'error';
   content: string | ContentBlock[];
 }
+
+/**
+ * Query factory type for dependency injection (enables testing of SDK-based plugins).
+ * The return type is intentionally broad (unknown) since it varies by SDK version;
+ * each consumer casts it to their local Query interface.
+ */
+export type QueryFactory = (
+  prompt: string,
+  options: { model?: string; resume?: string; effort?: 'low' | 'medium' | 'high' | 'max' },
+) => unknown;
 
 /**
  * Report data that a plugin can contribute to the run report
@@ -317,6 +329,8 @@ export interface PipelineRunResult {
   backgroundTasks?: BackgroundTaskResult[];
   /** What found the match (if successful) */
   matchSource?: MatchSource;
+  /** Result from the post-match phase (e.g., integration) */
+  postMatchPhase?: AttemptResult;
 }
 
 /**

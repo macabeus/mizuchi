@@ -137,6 +137,7 @@ Mizuchi generates three output files:
 | **Claude Runner**   | Sends prompts to Claude and processes responses                                                                                         |
 | **Compiler**        | Compiles generated C code using a configurable shell script template                                                                    |
 | **Objdiff**         | Compares compiled object files against targets using [objdiff](https://github.com/encounter/objdiff)                                    |
+| **Integrator**      | Optional post-match: integrates matched C code into the decomp project ([docs](docs/integrator-plugin.md))                              |
 
 ## Decomp Atlas
 

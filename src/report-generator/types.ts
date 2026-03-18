@@ -150,6 +150,8 @@ export interface ReportPromptResult {
   backgroundTasks?: ReportBackgroundTask[];
   /** What found the match (if successful) */
   matchSource?: ReportMatchSource;
+  /** Result from post-match phase (e.g., integration) */
+  postMatchPhase?: ReportAttempt;
 }
 
 /**

@@ -129,6 +129,13 @@ export interface ProgrammaticPhaseStartEvent {
 }
 
 /**
+ * Event emitted when the post-match phase starts
+ */
+export interface PostMatchPhaseStartEvent {
+  type: 'post-match-phase-start';
+}
+
+/**
  * Event emitted when a background task starts
  */
 export interface BackgroundTaskStartEvent {
@@ -166,6 +173,7 @@ export type PipelineEvent =
   | PromptStartEvent
   | SetupPhaseStartEvent
   | ProgrammaticPhaseStartEvent
+  | PostMatchPhaseStartEvent
   | AttemptStartEvent
   | PluginExecutionStartEvent
   | PluginExecutionCompleteEvent

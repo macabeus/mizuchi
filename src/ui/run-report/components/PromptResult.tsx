@@ -113,6 +113,14 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
                 disabled: result.attempts.length === 0,
                 tooltip: 'No AI-powered attempts available for this prompt.',
               },
+              {
+                id: 'postMatchPhase',
+                type: 'button',
+                label: 'Post-Match Phase',
+                icon: 'wrenchScrewdriver',
+                disabled: !result.postMatchPhase,
+                tooltip: 'Post-match phase not available.',
+              },
             ]}
             defaultActiveId="finalCode"
             content={(tab) => {
@@ -125,6 +133,8 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
                   return <AttemptContent attempt={result.programmaticPhase!} />;
                 case 'aiPoweredPhase':
                   return <AIPoweredPhaseContent result={result} />;
+                case 'postMatchPhase':
+                  return <AttemptContent attempt={result.postMatchPhase!} />;
                 default:
                   return null;
               }

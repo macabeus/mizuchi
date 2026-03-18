@@ -26,6 +26,7 @@ export class PluginManager {
   #setupPhasePlugins: Plugin<any>[] = [];
   #programmaticPhaseStages: Plugin<any>[][] = [];
   #plugins: Plugin<any>[] = [];
+  #postMatchPlugins: Plugin<any>[] = [];
   #config: PipelineConfig;
   #eventHandler?: PipelineEventHandler;
   #backgroundCoordinator?: BackgroundTaskCoordinator;
@@ -121,10 +122,37 @@ export class PluginManager {
   }
 
   /**
+   * Register plugins for the post-match phase.
+   * These plugins run once per prompt after a successful match.
+   * Post-match failures do not change the overall match result.
+   */
+  registerPostMatchPhase(...plugins: Plugin<any>[]): this {
+    this.#postMatchPlugins = plugins;
+    for (const plugin of plugins) {
+      this.#emit({
+        type: 'plugin-registered',
+        plugin: {
+          id: plugin.id,
+          name: plugin.name,
+          description: plugin.description,
+        },
+      });
+    }
+    return this;
+  }
+
+  /**
    * Get all registered setup phase plugins
    */
   getSetupPhasePlugins(): readonly Plugin<any>[] {
     return this.#setupPhasePlugins;
+  }
+
+  /**
+   * Get all registered post-match phase plugins
+   */
+  getPostMatchPhasePlugins(): readonly Plugin<any>[] {
+    return this.#postMatchPlugins;
   }
 
   /**
@@ -208,6 +236,17 @@ export class PluginManager {
       };
 
       if (stageSucceeded) {
+        // Run post-match phase if configured
+        let postMatchPhase: AttemptResult | undefined;
+        if (this.#postMatchPlugins.length > 0) {
+          this.#emit({ type: 'post-match-phase-start' });
+          const { finalContext: _ctx, ...postMatchResult } = await this.#runAttempt(
+            lastContext,
+            this.#postMatchPlugins,
+          );
+          postMatchPhase = postMatchResult;
+        }
+
         return {
           promptPath,
           functionName,
@@ -217,6 +256,7 @@ export class PluginManager {
           setupPhase,
           programmaticPhase,
           matchSource: 'programmatic-phase',
+          postMatchPhase,
         };
       }
 
@@ -274,6 +314,11 @@ export class PluginManager {
 
       const { finalContext: attemptFinalContext, ...attemptResult } = await this.#runAttempt(context);
       attempts.push(attemptResult);
+
+      // Capture the final context from the last successful attempt for post-match phase
+      if (attemptResult.success) {
+        context = { ...context, ...attemptFinalContext };
+      }
 
       const willRetry = !attemptResult.success && attempt < this.#config.maxRetries;
 
@@ -336,6 +381,19 @@ export class PluginManager {
       success = true;
     }
 
+    // Post-match phase (e.g., integrator) — runs once if match was found
+    let postMatchPhase: AttemptResult | undefined;
+    if (success && this.#postMatchPlugins.length > 0) {
+      this.#emit({ type: 'post-match-phase-start' });
+
+      const { finalContext: _postMatchContext, ...postMatchResult } = await this.#runAttempt(
+        context,
+        this.#postMatchPlugins,
+      );
+
+      postMatchPhase = postMatchResult;
+    }
+
     return {
       promptPath,
       functionName,
@@ -346,6 +404,7 @@ export class PluginManager {
       programmaticPhase,
       backgroundTasks: backgroundTasks?.length ? backgroundTasks : undefined,
       matchSource,
+      postMatchPhase,
     };
   }
 

@@ -1,6 +1,7 @@
 import type { ClaudeRunnerResult } from '~/plugins/claude-runner/claude-runner-plugin.js';
 import type { CompilerResult } from '~/plugins/compiler/compiler-plugin.js';
 import type { GetContextResult } from '~/plugins/get-context/get-context-plugin.js';
+import type { IntegratorResult } from '~/plugins/integrator/integrator-plugin.js';
 import type { M2cPluginResult } from '~/plugins/m2c/m2c-plugin.js';
 import type { ObjdiffResult } from '~/plugins/objdiff/objdiff-plugin.js';
 
@@ -14,6 +15,7 @@ type PluginResultDataMap = {
   'claude-runner': ClaudeRunnerResult;
   compiler: CompilerResult;
   'get-context': GetContextResult;
+  integrator: IntegratorResult;
   m2c: M2cPluginResult;
   objdiff: ObjdiffResult;
 };

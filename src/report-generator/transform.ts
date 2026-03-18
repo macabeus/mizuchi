@@ -67,6 +67,7 @@ export function transformToReport(
       : undefined;
 
     const backgroundTasks: ReportBackgroundTask[] | undefined = promptResult.backgroundTasks;
+    const postMatchPhase = promptResult.postMatchPhase ? transformAttempt(promptResult.postMatchPhase) : undefined;
 
     return {
       promptPath: promptResult.promptPath,
@@ -78,6 +79,7 @@ export function transformToReport(
       programmaticPhase,
       backgroundTasks: backgroundTasks?.length ? backgroundTasks : undefined,
       matchSource: promptResult.matchSource as ReportMatchSource | undefined,
+      postMatchPhase,
     };
   });
 

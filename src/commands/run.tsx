@@ -25,6 +25,7 @@ import {
   decompPermuterConfigSchema,
 } from '~/plugins/decomp-permuter/decomp-permuter-plugin.js';
 import { GetContextPlugin } from '~/plugins/get-context/get-context-plugin.js';
+import { IntegratorConfig, IntegratorPlugin, integratorConfigSchema } from '~/plugins/integrator/integrator-plugin.js';
 import { M2cConfig, M2cPlugin, m2cConfigSchema } from '~/plugins/m2c/m2c-plugin.js';
 import { ObjdiffConfig, ObjdiffPlugin, objdiffConfigSchema } from '~/plugins/objdiff/objdiff-plugin.js';
 import { loadPrompts } from '~/prompt-loader.js';
@@ -87,7 +88,7 @@ interface PluginStatus {
  */
 interface ProgressState {
   phase: 'loading' | 'initializing' | 'running' | 'complete' | 'error';
-  currentPhase: 'loading' | 'programmatic-phase' | 'ai-powered-phase';
+  currentPhase: 'loading' | 'programmatic-phase' | 'ai-powered-phase' | 'post-match-phase';
   config?: PipelineConfig;
   plugins: PluginInfo[];
   // Current prompt info
@@ -217,6 +218,13 @@ export default function Index({ options: opts }: Props) {
           return {
             ...prev,
             currentPhase: 'programmatic-phase',
+            pluginStatuses: [],
+          };
+
+        case 'post-match-phase-start':
+          return {
+            ...prev,
+            currentPhase: 'post-match-phase',
             pluginStatuses: [],
           };
 
@@ -836,6 +844,18 @@ async function runPipeline(
 
     // Register plugins for the ai-powered phase
     manager.register(claudePlugin).register(compilerPlugin).register(objdiffPlugin);
+
+    // Register integrator plugin for the post-match phase (optional)
+    const integratorConfig = getPluginConfigFromFile<IntegratorConfig>(
+      fileConfig,
+      'integrator',
+      integratorConfigSchema,
+    );
+
+    if (integratorConfig.enable) {
+      const integratorPlugin = new IntegratorPlugin(integratorConfig, pipelineConfig);
+      manager.registerPostMatchPhase(integratorPlugin);
+    }
 
     // Compute timestamp and file paths up front so partial and final files share the same timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

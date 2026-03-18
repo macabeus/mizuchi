@@ -189,6 +189,33 @@ plugins:
     # Inferred defaults: gba/nds/n3ds → gcc, n64/ps1/ps2/psp/irix → ido, gc/wii → mwcc
     # compilerType: gcc
 
+  # Integrator Plugin (optional)
+  # Integrates matched C code into the decomp project via a git worktree.
+  # Runs only after a successful match (post-match phase).
+  # See docs/integrator-plugin.md for how to write the integrator module.
+  # integrator:
+  #   enable: true
+  #   # Path to your JS module that performs the integration (relative to project root)
+  #   integratorModule: ./mizuchi-integrator.mjs
+  #   # Shell script to verify the build after integration (optional)
+  #   # Template variable: {{worktreePath}}
+  #   verifyBuildScript: |
+  #     cd {{worktreePath}} && make compare
+  #   # How far automation goes after a match: "commit", "push", or "pr" (default: "commit")
+  #   autoAction: commit
+  #   # Commit message template. Template variable: {{functionName}}
+  #   commitMessageTemplate: "match {{functionName}}"
+  #   # Branch name template. Template variables: {{functionName}}, {{timestamp}}
+  #   branchTemplate: "mizuchi/{{functionName}}"
+  #   # PR settings (used when autoAction is "pr")
+  #   pr:
+  #     title: "Match {{functionName}}"
+  #     body: "Matched `{{functionName}}` via Mizuchi."
+  #   # AI-powered build fix: spawns a Claude session to fix build errors (optional)
+  #   aiBuildFix:
+  #     enable: true
+  #     timeoutMs: 300000
+
 # ---- MIPS Example (N64) ----
 # To configure for a MIPS target like N64, use settings like:
 #

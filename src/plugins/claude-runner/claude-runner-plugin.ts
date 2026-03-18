@@ -6,7 +6,7 @@
  *
  * Cache uses a conversation tree structure to track multi-turn interactions.
  */
-import { SDKAssistantMessageError, createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
 import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -17,6 +17,7 @@ import type { CliPrompt } from '~/shared/cli-prompt.js';
 import { PipelineConfig } from '~/shared/config';
 import { PipelineAbortError, UsageLimitError } from '~/shared/errors.js';
 import { Objdiff } from '~/shared/objdiff.js';
+import type { SDKAssistantMessageError, SDKQuery } from '~/shared/sdk-types.js';
 import type {
   ChatMessage,
   ContentBlock,
@@ -31,83 +32,18 @@ import type {
 import { QueryAbortedError, QueryTimeoutError, QueryTtftTimeoutError } from './errors.js';
 
 /**
- * Query interface from the SDK
- */
-interface Query {
-  [Symbol.asyncIterator](): AsyncIterator<SDKMessage>;
-  close(): void;
-}
-
-/**
- * SDK content block types
- */
-interface SDKTextBlock {
-  type: 'text';
-  text: string;
-}
-
-interface SDKToolUseBlock {
-  type: 'tool_use';
-  id: string;
-  name: string;
-  input: Record<string, unknown>;
-}
-
-interface SDKToolResultBlock {
-  type: 'tool_result';
-  tool_use_id: string;
-  content: string;
-}
-
-type SDKContentBlock = SDKTextBlock | SDKToolUseBlock | SDKToolResultBlock | { type: string; text?: string };
-
-/**
- * SDK message types from the V2 SDK
- */
-interface SDKMessage {
-  type: 'assistant' | 'result' | 'user' | string;
-  session_id?: string;
-  message?: {
-    id?: string;
-    content: SDKContentBlock[];
-    model?: string;
-    usage?: {
-      input_tokens: number;
-      output_tokens: number;
-      cache_creation_input_tokens?: number;
-      cache_read_input_tokens?: number;
-    };
-  };
-  subtype?: string;
-  errors?: string[];
-  error?: SDKAssistantMessageError;
-  modelUsage?: Record<
-    string,
-    {
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadInputTokens: number;
-      cacheCreationInputTokens: number;
-      costUSD: number;
-    }
-  >;
-  duration_ms?: number;
-  duration_api_ms?: number;
-  num_turns?: number;
-}
-
-/**
  * MCP Server type from the SDK
  */
 type McpServer = ReturnType<typeof createSdkMcpServer>;
 
 /**
- * Query factory type for dependency injection (enables testing)
+ * Query factory type for dependency injection (enables testing).
+ * Narrows the shared QueryFactory's return type to the local SDKQuery interface.
  */
 export type QueryFactory = (
   prompt: string,
   options: { model?: string; resume?: string; effort?: 'low' | 'medium' | 'high' | 'max' },
-) => Query;
+) => SDKQuery;
 
 /**
  * Conversation node in the cache tree
@@ -496,7 +432,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #cacheModified: boolean = false;
 
   // Session state (per pipeline run)
-  #currentQuery: Query | null = null;
+  #currentQuery: SDKQuery | null = null;
   #sessionId: string | null = null;
   #lastMessageId: string | null = null;
   #conversationHistory: ChatMessage[] = [];
@@ -582,7 +518,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               this.#stderrChunks.push(data);
             },
           },
-        }) as unknown as Query);
+        }) as unknown as SDKQuery);
 
     this.#cliPrompt = cliPrompt;
 
@@ -851,7 +787,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   /**
    * Collect response from query stream
    */
-  async #collectResponse(queryObj: Query): Promise<{ text: string; contentBlocks: ContentBlock[] }> {
+  async #collectResponse(queryObj: SDKQuery): Promise<{ text: string; contentBlocks: ContentBlock[] }> {
     let responseText = '';
     const contentBlocks: ContentBlock[] = [];
     let lastAssistantError: SDKAssistantMessageError | undefined;
