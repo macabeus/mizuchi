@@ -2809,6 +2809,38 @@ mov eax, 0
       expect(secondCall[1].resume).toBe(TEST_SESSION_ID);
     });
 
+    it('includes aborted query elapsed time in queryTiming.durationMs', async () => {
+      // When the soft timeout fires, the initial query is aborted before a `result`
+      // message (which carries duration_ms) is emitted. The reported durationMs must
+      // include the wall-clock time spent on the aborted query, not just the recovery
+      // query's API time.
+      const phase2Response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const softTimeoutMs = 50;
+      const mockFactory = createSoftTimeoutQueryFactory({ phase2Response });
+
+      const plugin = new ClaudeRunnerPlugin({
+        config: {
+          ...defaultPluginConfig,
+          timeoutMs: 500,
+          softTimeout: { softTimeoutMs, prompt: softTimeoutPrompt },
+        },
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.softTimeoutTriggered).toBe(true);
+
+      // durationMs must be >= softTimeoutMs (the aborted query ran for at least that long)
+      const durationMs = result.data?.queryTiming?.durationMs ?? 0;
+      expect(durationMs).toBeGreaterThanOrEqual(softTimeoutMs);
+    });
+
     it('resumes when close() causes graceful iterator exit instead of throwing', async () => {
       // This test reproduces the real SDK behaviour: calling close() on a query
       // causes the async iterator to return {done: true} rather than rejecting.

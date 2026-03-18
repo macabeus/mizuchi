@@ -918,6 +918,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     } finally {
       // When the query was aborted (no `result` message emitted), apply partial token usage
       // accumulated from individual assistant messages so timed-out queries still report costs.
+      // Also apply elapsed wall time so reports reflect the actual time spent, not just the
+      // recovery query's duration.
       if (!gotResult) {
         for (const [model, pu] of Object.entries(partialUsage)) {
           const entry = (this.#tokenUsage[model] ??= {
@@ -934,6 +936,13 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
           // costUsd stays 0 — per-turn BetaMessage.usage doesn't include cost
         }
         this.#queryTiming.numTurns += partialTurns;
+
+        // The `result` message (which carries duration_ms / duration_api_ms) is
+        // never emitted for aborted queries. Fall back to wall-clock elapsed
+        // time so the report captures the actual time spent on the initial query.
+        const elapsedMs = Date.now() - this.#queryStartTime;
+        this.#queryTiming.durationMs += elapsedMs;
+        this.#queryTiming.durationApiMs += elapsedMs;
       }
     }
 
