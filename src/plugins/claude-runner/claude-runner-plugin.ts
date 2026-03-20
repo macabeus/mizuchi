@@ -357,7 +357,7 @@ function validateCCode(code: string): { valid: boolean; error?: string } {
     };
   }
 
-  const hasFunctionPattern = /\w+\s+\w+\s*\([^)]*\)\s*\{/.test(code);
+  const hasFunctionPattern = /\w[\w\s]*\s+\*?\s*\w+\s*\([^)]*\)\s*\{/.test(code);
   if (!hasFunctionPattern) {
     return { valid: false, error: 'No function definition found' };
   }

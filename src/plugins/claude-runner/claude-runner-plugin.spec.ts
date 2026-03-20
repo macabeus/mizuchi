@@ -374,6 +374,66 @@ describe('ClaudeRunnerPlugin', () => {
       expect(result.error).toContain('No function definition');
     });
 
+    it('accepts function with pointer return type', async () => {
+      const cCode = 'u8 *StrCmp(const u8 *str1, const u8 *str2) {\n  return 0;\n}';
+      const response = `\`\`\`c\n${cCode}\n\`\`\``;
+
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.generatedCode).toBe(cCode);
+    });
+
+    it('accepts function with const pointer return type', async () => {
+      const cCode = 'const u8 *GetString(int id) {\n  return 0;\n}';
+      const response = `\`\`\`c\n${cCode}\n\`\`\``;
+
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.generatedCode).toBe(cCode);
+    });
+
+    it('accepts function with struct pointer return type', async () => {
+      const cCode = 'struct Foo *CreateFoo(void) {\n  return 0;\n}';
+      const response = `\`\`\`c\n${cCode}\n\`\`\``;
+
+      const mockFactory = createMockQueryFactory([response]);
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext();
+
+      const { result } = await plugin.execute(context);
+
+      expect(result.status).toBe('success');
+      expect(result.data?.generatedCode).toBe(cCode);
+    });
+
     it('handles SDK errors gracefully', async () => {
       const mockFactory = createMockQueryFactory({
         responses: [],
