@@ -11,6 +11,7 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { CappedOutput } from '~/shared/capped-output.js';
 import type { PlatformTarget } from '~/shared/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -238,7 +239,8 @@ export class DecompPermuter {
       });
 
       // #streamOutput captures raw stdout/stderr and parses events in one place.
-      const capture = { stdoutChunks: [] as string[], stderrChunks: [] as string[] };
+      // CappedOutput keeps head + tail to avoid unbounded memory growth from long runs.
+      const capture = { stdout: new CappedOutput(), stderr: new CappedOutput() };
 
       let baseScore = -1;
       let bestScore = -1;
@@ -304,7 +306,7 @@ export class DecompPermuter {
 
       // If the process exited with a non-zero code and we never got a base score,
       // surface the error from stderr so callers can diagnose the failure.
-      const stderr = capture.stderrChunks.join('');
+      const stderr = capture.stderr.toString();
       if (baseScore === -1 && exitCode !== null && exitCode !== 0) {
         return {
           perfectMatch: false,
@@ -312,7 +314,7 @@ export class DecompPermuter {
           bestScore: -1,
           iterationsRun: 0,
           error: stderr.trim() || `permuter.py exited with code ${exitCode}`,
-          stdout: capture.stdoutChunks.join(''),
+          stdout: capture.stdout.toString(),
           stderr,
         };
       }
@@ -333,7 +335,7 @@ export class DecompPermuter {
         iterationsRun: lastIterationSeen,
         bestCode,
         bestDiff,
-        stdout: capture.stdoutChunks.join(''),
+        stdout: capture.stdout.toString(),
         stderr,
       };
     } catch (error) {
@@ -567,7 +569,7 @@ fi
    */
   async *#streamOutput(
     process: ChildProcess,
-    capture: { stdoutChunks: string[]; stderrChunks: string[] },
+    capture: { stdout: CappedOutput; stderr: CappedOutput },
   ): AsyncGenerator<DecompPermuterLogEntry> {
     let lineBuffer = '';
     let processEnded = false;
@@ -629,7 +631,7 @@ fi
 
     process.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
-      capture.stdoutChunks.push(text);
+      capture.stdout.push(text);
       processChunk(text);
     });
     // Swallow errors from force-destroyed pipes (see killProcessGroup)
@@ -637,7 +639,7 @@ fi
 
     process.stderr?.on('data', (data: Buffer) => {
       const text = data.toString();
-      capture.stderrChunks.push(text);
+      capture.stderr.push(text);
       processChunk(text);
     });
     // Swallow errors from force-destroyed pipes (see killProcessGroup)
