@@ -1,4 +1,5 @@
 import { type SDKMessage, SDKResultSuccess } from '@anthropic-ai/claude-agent-sdk';
+import fs from 'fs/promises';
 import os from 'os';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -1862,6 +1863,106 @@ mov eax, 0
       const result = await plugin.handleCompileAndViewAssembly(toolArgs);
       expect(result.content[0].text).toContain('Compilation successful');
       expect(result.content[0].text).toContain('Tool calls remaining: 1/2');
+    });
+  });
+
+  describe('compile_and_view_assembly diff against target', () => {
+    const emptyContextPath = '';
+
+    async function createPluginWithTarget(targetObjPath: string) {
+      const cCode = 'int testFunc(void) { return 42; }';
+      const response = `\`\`\`c\n${cCode}\n\`\`\``;
+      const mockFactory = createMockQueryFactory({
+        responses: [response],
+        requireResumeForFollowUp: false,
+      });
+      const plugin = new ClaudeRunnerPlugin({
+        config: defaultPluginConfig,
+        pipelineConfig: defaultTestPipelineConfig,
+        cCompiler: testCCompiler,
+        objdiff: testObjdiff,
+        queryFactory: mockFactory,
+      });
+      const context = createTestContext({
+        targetObjectPath: targetObjPath,
+        functionName: 'testFunc',
+      });
+
+      // execute() sets #currentTargetObjectPath and #currentFunctionName
+      await plugin.execute(context);
+
+      return plugin;
+    }
+
+    it('includes diff data with 0 differences for matching code', async () => {
+      const cCode = 'void testFunc(void) { volatile int x = 1; x = x + 1; }';
+      const targetResult = await testCCompiler.compile('testFunc', cCode, emptyContextPath);
+      expect(targetResult.success).toBe(true);
+      if (!targetResult.success) {
+        return;
+      }
+
+      try {
+        const plugin = await createPluginWithTarget(targetResult.objPath);
+
+        const result = await plugin.handleCompileAndViewAssembly({
+          code: cCode,
+          function_name: 'testFunc',
+        });
+
+        const text = result.content[0].text;
+        expect(text).toContain('Compilation successful!');
+        expect(text).toContain('0 differences');
+        expect(text).toContain('PERFECT MATCH');
+      } finally {
+        await fs.unlink(targetResult.objPath).catch(() => {});
+      }
+    });
+
+    it('includes diff data with differences for non-matching code', async () => {
+      const currentCode = 'void testFunc(void) { volatile int x = 1; }';
+      const targetCode = 'void testFunc(void) { volatile int x = 2; x = x + 1; }';
+
+      const targetResult = await testCCompiler.compile('testFunc', targetCode, emptyContextPath);
+      expect(targetResult.success).toBe(true);
+      if (!targetResult.success) {
+        return;
+      }
+
+      try {
+        const plugin = await createPluginWithTarget(targetResult.objPath);
+
+        const result = await plugin.handleCompileAndViewAssembly({
+          code: currentCode,
+          function_name: 'testFunc',
+        });
+
+        const text = result.content[0].text;
+        expect(text).toContain('Compilation successful!');
+        expect(text).toContain('Diff against target:');
+        expect(text).toContain('differences');
+        expect(text).not.toContain('PERFECT MATCH');
+        // Should contain specific difference details
+        expect(text).toMatch(/Difference \d+/);
+        expect(text).toContain('Current:');
+        expect(text).toContain('Target:');
+      } finally {
+        await fs.unlink(targetResult.objPath).catch(() => {});
+      }
+    });
+
+    it('does not attempt diff when compilation fails', async () => {
+      const plugin = await createPluginWithTarget('/nonexistent/target.o');
+
+      const result = await plugin.handleCompileAndViewAssembly({
+        code: 'int testFunc(void) { return }',
+        function_name: 'testFunc',
+      });
+
+      const text = result.content[0].text;
+      expect(text).toContain('Compilation failed');
+      // Should not contain any diff section
+      expect(text).not.toContain('Diff against target');
     });
   });
 

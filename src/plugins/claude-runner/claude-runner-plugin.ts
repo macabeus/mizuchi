@@ -460,6 +460,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
   // MCP tool dependencies
   #currentContextContent = '';
+  #currentTargetObjectPath = '';
+  #currentFunctionName = '';
   #cCompiler: CCompiler;
   #objdiff: Objdiff;
   #mcpServer: McpServer;
@@ -619,7 +621,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       tools: [
         tool(
           'compile_and_view_assembly',
-          "Compile C code and view the resulting assembly. Use this to test how your C code compiles before submitting the final result. This helps to learn the compiler's behavior and iterate on the code to match the target assembly.",
+          'Compile C code, view the resulting assembly, and see the diff against the target. Returns the compiled assembly plus a difference count and specific mismatches. Use this to verify your code matches before submitting.',
           {
             code: z.string().describe('The C code to compile'),
             function_name: z.string().describe('The name of the function to extract assembly for'),
@@ -707,11 +709,39 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       // Get the assembly
       const assembly = await this.#objdiff.getAssemblyFromSymbol(diffResult.left, args.function_name);
 
+      // Compare against target if available
+      let diffSection = '';
+      try {
+        const targetObject = await this.#objdiff.parseObjectFile(this.#currentTargetObjectPath, 'target');
+        const fullDiffResult = await this.#objdiff.runDiff(parsedObject, targetObject);
+
+        if (fullDiffResult.left && fullDiffResult.right) {
+          const targetSymbol = fullDiffResult.right.findSymbol(this.#currentFunctionName, undefined);
+          if (targetSymbol) {
+            const { differenceCount, matchingCount, differences } = await this.#objdiff.getDifferences(
+              fullDiffResult.left,
+              fullDiffResult.right,
+              this.#currentFunctionName,
+            );
+
+            if (differenceCount === 0) {
+              diffSection = `\n\nDiff against target: ${differenceCount} differences, ${matchingCount} matching instructions. PERFECT MATCH — submit this code.`;
+            } else {
+              diffSection = `\n\nDiff against target: ${differenceCount} differences, ${matchingCount} matching instructions.\n\n${differences.join('\n')}`;
+            }
+          } else {
+            diffSection = `\n\nDiff against target: could not find symbol '${this.#currentFunctionName}' in target object.`;
+          }
+        }
+      } catch (error) {
+        diffSection = `\n\nDiff against target: failed — ${error instanceof Error ? error.message : String(error)}`;
+      }
+
       return {
         content: [
           {
             type: 'text' as const,
-            text: `Compilation successful!\n\nAssembly for '${args.function_name}':\n\`\`\`asm\n${assembly}\n\`\`\`${callWarning}`,
+            text: `Compilation successful!\n\nAssembly for '${args.function_name}':\n\`\`\`asm\n${assembly}\n\`\`\`${diffSection}${callWarning}`,
           },
         ],
       };
@@ -1434,8 +1464,10 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     }
 
     try {
-      // Update context content for MCP tool
+      // Update context for MCP tool
       this.#currentContextContent = context.contextContent ?? '';
+      this.#currentTargetObjectPath = context.targetObjectPath ?? '';
+      this.#currentFunctionName = context.functionName ?? '';
 
       // Load cache on first execution
       await this.#loadCache();

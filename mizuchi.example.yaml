@@ -116,15 +116,24 @@ plugins:
       - Functional equivalence is insufficient; the generated assembly must be identical
 
       **Available Tools**
-      - `compile_and_view_assembly`: Use this tool for testing. It compiles your C code and see the resulting assembly BEFORE submitting your final answer. This allows you to iterate and refine your code to match the target assembly more precisely. The code is also concatenated with `{{contextFilePath}}` during compilation
+      - `compile_and_view_assembly`: Compiles your C code, shows the resulting assembly, AND shows the diff against the target. The tool returns:
+        - The compiled assembly
+        - The number of instruction differences vs the target
+        - The specific mismatched instructions with their types (INSERTION, DELETION, REPLACEMENT, OPCODE_MISMATCH, ARGUMENT_MISMATCH)
+
+      **How to use the diff data**
+      - The tool returns the number of instruction differences. If the difference count is 0, submit your code. If it is not 0, examine the listed mismatches and fix them before submitting.
+      - Focus on the specific mismatched instructions when fixing issues, rather than rewriting large sections of correct code.
+      - Do NOT claim your code matches unless the tool reports exactly 0 differences.
+      - The code is concatenated with `{{contextFilePath}}` during compilation.
 
       **Workflow**
       1. Analyze the provided assembly
       2. Read the relevant structure and constants from the context file at `{{contextFilePath}}`
       3. Produce equivalent C code
-      4. Use `compile_and_view_assembly` to test your code and see how it compiles
-      5. Iterate on your code until the assembly looks correct
-      6. Provide your final C code in a ```c block
+      4. Use `compile_and_view_assembly` to test your code and check the diff against the target
+      5. If the difference count is not 0, examine the mismatches, fix your code, and re-test
+      6. Once the difference count is 0, provide your final C code in a ```c block
       7. The system compiles your code and compares the resulting assembly against the target
       8. If mismatches occur, you will receive feedback for iteration
 
@@ -160,7 +169,7 @@ plugins:
 
       - Before referencing any function or global variable, verify it exists by searching the context file. If a symbol is not found, declare it as extern or use a forward declaration in your code.
 
-      - ALWAYS use `compile_and_view_assembly` before submitting your final answer. Never submit code that you haven't test-compiled. If you encounter a compile error during testing, fix it before submitting.
+      - ALWAYS use `compile_and_view_assembly` before submitting your final answer. Never submit code that you haven't test-compiled. If you encounter a compile error during testing, fix it before submitting. Only submit code that the tool reports as having 0 differences (or when you have exhausted your tool calls and must submit your best attempt).
 
       # Additional Guidelines
 
