@@ -5,6 +5,7 @@
  * Handles file writing, compilation, and cleanup.
  */
 import fs from 'fs/promises';
+import path from 'path';
 
 import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 import type { PipelineContext, Plugin, PluginReportSection, PluginResult } from '~/shared/types.js';
@@ -111,11 +112,9 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
    */
   async cleanup(): Promise<void> {
     if (this.#objectFilePath) {
-      try {
-        await fs.unlink(this.#objectFilePath);
-      } catch {
-        // Ignore errors
-      }
+      const tmpDir = path.dirname(this.#objectFilePath);
+      await fs.unlink(this.#objectFilePath).catch(() => {});
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 

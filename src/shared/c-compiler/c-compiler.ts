@@ -65,6 +65,7 @@ export class CCompiler {
     const objPath = path.join(tmpDir, `${functionName}.o`);
     const scriptPath = path.join(tmpDir, `${functionName}_compile.sh`);
 
+    let succeeded = false;
     try {
       // 1. Concatenate context + marker + source
       const combined = contextContent + '\nextern void _MIZUCHI_CONCATENATED_CODE();\n' + cCode;
@@ -87,6 +88,7 @@ export class CCompiler {
       await fs.writeFile(scriptPath, 'set -e\n' + renderedScript);
       execSync(`bash "${scriptPath}"`, { cwd: this.#projectRoot, stdio: 'pipe' });
 
+      succeeded = true;
       return { success: true, objPath };
     } catch (error) {
       if (error instanceof Error) {
@@ -124,6 +126,11 @@ export class CCompiler {
         fs.unlink(preprocessedPath),
         fs.unlink(scriptPath),
       ]);
+      // On failure, no .o is needed — remove the entire temp directory.
+      // On success, the caller cleans up via path.dirname(objPath) after consuming the .o.
+      if (!succeeded) {
+        await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      }
     }
   }
 }

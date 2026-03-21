@@ -755,9 +755,11 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         ],
       };
     } finally {
-      // Clean up the object file
+      // Clean up the object file and its temp directory
       if (compileResult?.success) {
+        const tmpDir = path.dirname(compileResult.objPath);
         await fs.unlink(compileResult.objPath).catch(() => {});
+        await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       }
     }
   }

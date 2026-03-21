@@ -565,13 +565,17 @@ export class IntegratorPlugin implements Plugin<IntegratorResult> {
     const scriptPath = path.join(tmpDir, 'verify-build.sh');
     fs.writeFileSync(scriptPath, 'set -e\n' + script);
 
-    const result = execSync(`bash "${scriptPath}"`, {
-      cwd: worktreePath,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 300_000, // 5 minute timeout for builds
-    });
+    try {
+      const result = execSync(`bash "${scriptPath}"`, {
+        cwd: worktreePath,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 300_000, // 5 minute timeout for builds
+      });
 
-    return result.toString();
+      return result.toString();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   }
 
   /**

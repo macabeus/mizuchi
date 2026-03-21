@@ -26,6 +26,7 @@ export class GetContextPlugin implements Plugin<GetContextResult> {
 
   #getContextScript: string;
   #projectRoot: string;
+  #tmpDir?: string;
 
   constructor(getContextScript: string, projectRoot: string) {
     this.#getContextScript = getContextScript;
@@ -53,7 +54,11 @@ export class GetContextPlugin implements Plugin<GetContextResult> {
       };
     }
 
+    // Clean up any previous temp dir from a prior prompt
+    await this.cleanup();
+
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mizuchi-context-'));
+    this.#tmpDir = tmpDir;
     const scriptPath = path.join(tmpDir, 'get-context.sh');
     const contextFilePath = path.join(tmpDir, 'context.h');
 
@@ -98,6 +103,9 @@ export class GetContextPlugin implements Plugin<GetContextResult> {
           : '';
       const errorMessage = stderr || (error instanceof Error ? error.message : String(error));
 
+      // On failure, context files aren't needed — clean up immediately
+      await this.cleanup();
+
       return {
         result: {
           pluginId: this.id,
@@ -108,6 +116,16 @@ export class GetContextPlugin implements Plugin<GetContextResult> {
         },
         context,
       };
+    }
+  }
+
+  /**
+   * Clean up temp directory created for context files
+   */
+  async cleanup(): Promise<void> {
+    if (this.#tmpDir) {
+      await fs.rm(this.#tmpDir, { recursive: true, force: true }).catch(() => {});
+      this.#tmpDir = undefined;
     }
   }
 

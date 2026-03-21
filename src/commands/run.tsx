@@ -706,6 +706,7 @@ async function runPipeline(
 
   let claudePlugin: ClaudeRunnerPlugin | undefined;
   let compilerPlugin: CompilerPlugin | undefined;
+  let getContextPlugin: GetContextPlugin | undefined;
   let backgroundCoordinator: BackgroundTaskCoordinator | undefined;
 
   try {
@@ -801,7 +802,7 @@ async function runPipeline(
     const objdiff = new Objdiff(objdiffConfig.diffSettings);
 
     // Create plugins
-    const getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript, pipelineConfig.projectRoot);
+    getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript, pipelineConfig.projectRoot);
     claudePlugin = new ClaudeRunnerPlugin({
       config: claudeRunnerConfig,
       pipelineConfig,
@@ -909,6 +910,7 @@ async function runPipeline(
     await claudePlugin.saveCache();
 
     await compilerPlugin.cleanup();
+    await getContextPlugin.cleanup();
 
     // Transform results to report format
     const report = transformToReport(results, pluginConfigs);
@@ -945,6 +947,11 @@ async function runPipeline(
     }
     try {
       await compilerPlugin?.cleanup();
+    } catch {
+      // Best-effort cleanup
+    }
+    try {
+      await getContextPlugin?.cleanup();
     } catch {
       // Best-effort cleanup
     }
