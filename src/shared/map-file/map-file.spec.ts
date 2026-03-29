@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { parseMapFile, resolveObjectPathFromSourceFile } from './map-file.js';
+import { parseMapFile, parseMapFileAddresses, resolveObjectPathFromSourceFile } from './map-file.js';
 
 describe('parseMapFile', () => {
   it('parses SA3-style map with ARM symbols', () => {
@@ -85,6 +85,77 @@ describe('parseMapFile', () => {
     // stray_symbol after *fill* should NOT be associated with first.o
     expect(result.has('stray_symbol')).toBe(false);
     expect(result.get('second_func')).toBe('asm/second.o');
+  });
+});
+
+describe('parseMapFileAddresses', () => {
+  it('extracts addresses from .text section symbols', () => {
+    const mapContent = `
+ .text          0x08000000      0x100 asm/main.o
+                0x08000000                main_func
+                0x08000040                second_func
+
+ .text          0x08001000      0x200 asm/utils.o
+                0x08001000                util_func
+`;
+    const result = parseMapFileAddresses(mapContent);
+
+    expect(result.get('main_func')).toBe(0x08000000);
+    expect(result.get('second_func')).toBe(0x08000040);
+    expect(result.get('util_func')).toBe(0x08001000);
+  });
+
+  it('extracts addresses from alias definitions', () => {
+    const mapContent = `
+                0x08045734                        FUN_08045734 = GameUpdate
+                0x0803b074                        FUN_0803b074 = UpdateEntities
+`;
+    const result = parseMapFileAddresses(mapContent);
+
+    expect(result.get('GameUpdate')).toBe(0x08045734);
+    expect(result.get('UpdateEntities')).toBe(0x0803b074);
+  });
+
+  it('prefers .text section addresses over aliases', () => {
+    const mapContent = `
+                0x08999999                        FUN_08999999 = GameUpdate
+
+ .text          0x08045700      0x100 src/code.o
+                0x08045734                GameUpdate
+`;
+    const result = parseMapFileAddresses(mapContent);
+
+    expect(result.get('GameUpdate')).toBe(0x08045734);
+  });
+
+  it('strips .NON_MATCHING suffix', () => {
+    const mapContent = `
+ .text          0x80060e60      0x3f0 build/src/ac_depart.o
+                0x80060e60                ac_depart_init
+                0x80060fc0                ac_depart_init.NON_MATCHING
+`;
+    const result = parseMapFileAddresses(mapContent);
+
+    expect(result.get('ac_depart_init')).toBe(0x80060e60);
+  });
+
+  it('handles empty input', () => {
+    const result = parseMapFileAddresses('');
+    expect(result.size).toBe(0);
+  });
+
+  it('ignores non-.text sections', () => {
+    const mapContent = `
+ .data          0x08100000      0x200 asm/main.o
+                0x08100000                main_data
+
+ .text          0x08000000      0x100 asm/main.o
+                0x08000000                main_func
+`;
+    const result = parseMapFileAddresses(mapContent);
+
+    expect(result.has('main_data')).toBe(false);
+    expect(result.get('main_func')).toBe(0x08000000);
   });
 });
 

@@ -13,6 +13,7 @@ import {
 export type DecompFunctionDoc = {
   id: string;
   name: string;
+  romAddress?: number;
   cCode?: string;
   cModulePath?: string;
   asmCode: string;

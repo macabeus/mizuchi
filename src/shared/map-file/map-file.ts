@@ -10,6 +10,8 @@ import path from 'path';
 
 const SECTION_HEADER_RE = /^\s*\.text\s+0x[\da-f]+\s+0x[\da-f]+\s+(\S+\.o)/i;
 const SYMBOL_RE = /^\s+0x[\da-f]+\s+(\S+)$/;
+const SYMBOL_WITH_ADDR_RE = /^\s+0x([\da-f]+)\s+(\S+)$/;
+const ALIAS_RE = /^\s+0x([\da-f]+)\s+\S+\s*=\s*(\S+)/;
 
 /**
  * Parse a GNU ld map file and return a map of symbol name → relative .o path.
@@ -79,6 +81,58 @@ export async function resolveObjectPath(
   }
 
   return null;
+}
+
+/**
+ * Parse a GNU ld map file and return a map of symbol name → ROM address.
+ *
+ * Extracts addresses from two sources:
+ * 1. Standard `.text` section symbol entries (authoritative — these are the
+ *    actual linked addresses from the object files).
+ * 2. Linker-script alias definitions of the form `0x{addr} FUN_xxx = HumanName`
+ *    (fallback for symbols not found in `.text` sections).
+ *
+ * `.text` section entries take priority when a symbol appears in both.
+ */
+export function parseMapFileAddresses(content: string): Map<string, number> {
+  const result = new Map<string, number>();
+  let inTextSection = false;
+
+  for (const line of content.split('\n')) {
+    const sectionMatch = line.match(SECTION_HEADER_RE);
+    if (sectionMatch) {
+      inTextSection = true;
+      continue;
+    }
+
+    if (inTextSection) {
+      const symbolMatch = line.match(SYMBOL_WITH_ADDR_RE);
+      if (symbolMatch) {
+        const address = parseInt(symbolMatch[1], 16);
+        const rawName = symbolMatch[2];
+        const name = rawName.replace(/\.NON_MATCHING$/, '');
+        // Don't let .NON_MATCHING aliases overwrite the original symbol's address
+        if (rawName === name || !result.has(name)) {
+          result.set(name, address);
+        }
+      } else {
+        inTextSection = false;
+      }
+    }
+
+    // Also check for alias definitions (outside or inside sections)
+    const aliasMatch = line.match(ALIAS_RE);
+    if (aliasMatch) {
+      const address = parseInt(aliasMatch[1], 16);
+      const name = aliasMatch[2];
+      // Only use alias if we don't already have an address from .text
+      if (!result.has(name)) {
+        result.set(name, address);
+      }
+    }
+  }
+
+  return result;
 }
 
 /**

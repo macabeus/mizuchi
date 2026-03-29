@@ -12,7 +12,12 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import type { PipelineConfig, PlatformTarget } from '~/shared/config';
-import { parseMapFile, resolveObjectPath, resolveObjectPathFromSourceFile } from '~/shared/map-file/map-file';
+import {
+  parseMapFile,
+  parseMapFileAddresses,
+  resolveObjectPath,
+  resolveObjectPathFromSourceFile,
+} from '~/shared/map-file/map-file';
 import { type DecompFunctionDoc, MIZUCHI_DB_VERSION, type MizuchiDbDump } from '~/shared/mizuchi-db/mizuchi-db';
 import { Objdiff } from '~/shared/objdiff';
 import { registerClangLanguage } from '~/shared/prompt-builder/ast-grep-utils';
@@ -94,6 +99,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
   // Parse map file
   const mapContent = await fs.readFile(mapFilePath, 'utf-8');
   const symbolMap = parseMapFile(mapContent);
+  const addressMap = parseMapFileAddresses(mapContent);
 
   // Load existing database for incremental indexing
   const existingDump = await loadExistingDb(projectRoot);
@@ -112,6 +118,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
     projectRoot,
     platform,
     symbolMap,
+    addressMap,
     objdiffDiffSettings,
     matchingAsmFolders,
     excludeFromScan,
@@ -131,6 +138,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
     platform,
     nonMatchingAsmFolders,
     matchedFunctions,
+    addressMap,
     onProgress,
   );
 
@@ -237,6 +245,7 @@ async function scanMatchedFunctions(
   projectRoot: string,
   platform: PlatformTarget,
   symbolMap: Map<string, string>,
+  addressMap: Map<string, number>,
   objdiffDiffSettings: Record<string, string>,
   matchingAsmFolders: string[],
   excludeFromScan: string[],
@@ -369,10 +378,12 @@ async function scanMatchedFunctions(
     }
 
     const callsFunctions = extractFunctionCallsFromAssembly(platform, asmCode);
+    const romAddress = addressMap.get(name);
 
     functions.set(name, {
       id: name,
       name,
+      ...(romAddress !== undefined && { romAddress }),
       cCode,
       cModulePath,
       asmCode,
@@ -453,6 +464,7 @@ async function scanUnmatchedFunctions(
   platform: PlatformTarget,
   nonMatchingAsmFolders: string[],
   matchedFunctions: Map<string, DecompFunctionDoc>,
+  addressMap: Map<string, number>,
   onProgress?: (progress: IndexProgress) => void,
 ): Promise<Map<string, DecompFunctionDoc>> {
   const functions = new Map<string, DecompFunctionDoc>();
@@ -495,10 +507,12 @@ async function scanUnmatchedFunctions(
           }
 
           const callsFunctions = extractFunctionCallsFromAssembly(platform, code);
+          const romAddress = addressMap.get(name);
 
           functions.set(name, {
             id: name,
             name,
+            ...(romAddress !== undefined && { romAddress }),
             asmCode: code,
             asmModulePath,
             callsFunctions,
