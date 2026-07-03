@@ -1,5 +1,6 @@
 import { Icon } from '@ui-shared/components/Icon';
 import { Tabs } from '@ui-shared/components/Tabs';
+import { getPluginResult } from '@shared/utils.js';
 import { useState } from 'react';
 
 import type {
@@ -32,6 +33,10 @@ function formatDuration(ms: number): string {
 export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps) {
   const promptName = result.promptPath.split(/[\\/]/).pop() || result.promptPath;
 
+  // Model warnings surfaced across any AI-powered attempt for this prompt.
+  const hasRefusal = result.attempts.some((a) => getPluginResult(a, 'claude-runner')?.data?.refusal);
+  const hasModelDowngrade = result.attempts.some((a) => getPluginResult(a, 'claude-runner')?.data?.modelDowngrade);
+
   return (
     <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden border border-slate-700">
       {/* Header */}
@@ -56,6 +61,22 @@ export function PromptResult({ result, isExpanded, onToggle }: PromptResultProps
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {hasModelDowngrade && (
+            <span
+              title="The model that served at least one attempt differed from the requested model"
+              className="px-3 py-1 rounded-full text-sm font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30"
+            >
+              ⚠️ Model downgrade
+            </span>
+          )}
+          {hasRefusal && (
+            <span
+              title="The model refused to answer at least one attempt"
+              className="px-3 py-1 rounded-full text-sm font-medium bg-rose-500/20 text-rose-300 border border-rose-500/30"
+            >
+              🛑 Refusal
+            </span>
+          )}
           <span
             className={`px-3 py-1 rounded-full text-sm font-medium ${
               result.success

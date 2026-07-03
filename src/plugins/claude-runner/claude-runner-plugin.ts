@@ -365,6 +365,68 @@ function validateCCode(code: string): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
+/**
+ * Recognized Claude model families, ordered newest/most-capable first.
+ * Used to distinguish a genuine cross-family downgrade (e.g. fable → opus)
+ * from harmless alias resolution (e.g. "sonnet" → "claude-sonnet-4-6").
+ */
+const MODEL_FAMILIES = ['fable', 'opus', 'sonnet', 'haiku'] as const;
+
+/**
+ * Extract the model family keyword from a model id or alias.
+ * Falls back to the lowercased full string for unrecognized models.
+ */
+function modelFamily(model: string): string {
+  const m = model.toLowerCase();
+  for (const fam of MODEL_FAMILIES) {
+    if (m.includes(fam)) {
+      return fam;
+    }
+  }
+  return m;
+}
+
+/**
+ * Detect whether `served` is a different model family than `requested`.
+ *
+ * Returns false for exact matches and for alias resolution within the same
+ * family (e.g. requested "sonnet", served "claude-sonnet-4-6"), and true only
+ * when the serving model belongs to a different family — the signal that a
+ * downgrade/fallback actually happened (e.g. requested fable, served opus).
+ */
+function isModelDowngrade(requested: string, served: string): boolean {
+  if (!requested || !served) {
+    return false;
+  }
+  if (requested.toLowerCase() === served.toLowerCase()) {
+    return false;
+  }
+  return modelFamily(requested) !== modelFamily(served);
+}
+
+/**
+ * Details captured when the model refused to answer a turn.
+ */
+export type RefusalInfo = {
+  /** Refusal category (e.g. 'cyber', 'bio'); may be absent */
+  category?: string;
+  /** Human-readable explanation; display only */
+  explanation?: string;
+  /** True when the SDK retried the turn on a fallback model after the refusal */
+  hadFallback: boolean;
+};
+
+/**
+ * Details captured when the model that served a turn differs from the one
+ * Mizuchi requested (fallback due to refusal, overload, or a silent downgrade).
+ */
+export type ModelDowngradeInfo = {
+  /** Model Mizuchi requested */
+  requestedModel: string;
+  /** Model that actually served the response */
+  servedModel: string;
+};
+
 export type ModelTokenUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -402,6 +464,10 @@ export interface ClaudeRunnerResult {
   queryTiming?: QueryTiming;
   /** Captured stderr from the Claude Code subprocess, if any */
   subprocessStderr?: string;
+  /** Present when the model refused to answer during this attempt */
+  refusal?: RefusalInfo;
+  /** Present when the serving model differed from the requested model */
+  modelDowngrade?: ModelDowngradeInfo;
 }
 
 /**
@@ -424,6 +490,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #softTimeoutTriggered = false;
   #ttftTimedOut = false;
   #ttftMs?: number;
+  // Per-attempt model warnings, detected while collecting the response.
+  #refusal?: RefusalInfo;
+  #modelDowngrade?: ModelDowngradeInfo;
   #lastStallAttemptIndex = -1;
   #queryFactory: QueryFactory;
   #cache: ConversationCache | null = null;
@@ -817,9 +886,43 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   }
 
   /**
+   * Record a refusal for this attempt. First detection wins so an early
+   * structured signal isn't overwritten by a later, less-specific one.
+   */
+  #recordRefusal(
+    category: string | null | undefined,
+    explanation: string | null | undefined,
+    hadFallback: boolean,
+  ): void {
+    if (this.#refusal) {
+      // Upgrade hadFallback if a later signal confirms a fallback happened.
+      this.#refusal.hadFallback ||= hadFallback;
+      return;
+    }
+    this.#refusal = {
+      category: category ?? undefined,
+      explanation: explanation ?? undefined,
+      hadFallback,
+    };
+  }
+
+  /**
+   * Record a model downgrade for this attempt (first detection wins).
+   */
+  #recordModelDowngrade(requestedModel: string, servedModel: string): void {
+    if (this.#modelDowngrade) {
+      return;
+    }
+    this.#modelDowngrade = { requestedModel, servedModel };
+  }
+
+  /**
    * Collect response from query stream
    */
-  async #collectResponse(queryObj: SDKQuery): Promise<{ text: string; contentBlocks: ContentBlock[] }> {
+  async #collectResponse(
+    queryObj: SDKQuery,
+    requestedModel: string,
+  ): Promise<{ text: string; contentBlocks: ContentBlock[] }> {
     let responseText = '';
     const contentBlocks: ContentBlock[] = [];
     let lastAssistantError: SDKAssistantMessageError | undefined;
@@ -832,14 +935,39 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
     try {
       for await (const msg of queryObj) {
-        if (msg.type === 'system' && msg.session_id) {
-          this.#sessionId = msg.session_id;
+        if (msg.type === 'system') {
+          if (msg.session_id) {
+            this.#sessionId = msg.session_id;
+          }
+          // Structured refusal signals emitted by the SDK. `model_refusal_fallback`
+          // means the turn was refused and retried on a fallback model (also a
+          // model downgrade); `model_refusal_no_fallback` means it ended as a refusal.
+          if (msg.subtype === 'model_refusal_fallback') {
+            this.#recordRefusal(msg.api_refusal_category, msg.api_refusal_explanation, true);
+            if (msg.original_model && msg.fallback_model) {
+              this.#recordModelDowngrade(msg.original_model, msg.fallback_model);
+            }
+          } else if (msg.subtype === 'model_refusal_no_fallback') {
+            this.#recordRefusal(msg.api_refusal_category, msg.api_refusal_explanation, false);
+          }
         } else if (msg.type === 'assistant') {
           // First substantive message — API is responsive, record TTFT and start soft/hard timers
           this.#onFirstToken?.();
           // Track error type from assistant messages (e.g., 'rate_limit', 'billing_error')
           if (msg.error) {
             lastAssistantError = msg.error;
+          }
+
+          // Refusal detection fallback: an assistant frame that ends with
+          // stop_reason 'refusal' (covers CLIs that don't emit the system messages above).
+          if (msg.message?.stop_reason === 'refusal') {
+            this.#recordRefusal(msg.message.stop_details?.category, msg.message.stop_details?.explanation, false);
+          }
+
+          // Model downgrade detection: the model that actually served this turn
+          // differs in family from the one we requested (fallback/overload/silent swap).
+          if (msg.message?.model && isModelDowngrade(requestedModel, msg.message.model)) {
+            this.#recordModelDowngrade(requestedModel, msg.message.model);
           }
 
           // Accumulate per-turn token usage from BetaMessage.usage (fallback for aborted queries)
@@ -1123,7 +1251,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const promptHash = this.#initialPromptHash;
 
     return this.#runQueryWithAbort(async () => {
-      const { text, contentBlocks } = await this.#collectResponse(activeQuery);
+      const { text, contentBlocks } = await this.#collectResponse(activeQuery, model);
 
       // Update state with content blocks if there are tool calls, otherwise use plain text
       const hasToolCalls = contentBlocks.some((b) => b.type === 'tool_use' || b.type === 'tool_result');
@@ -1185,7 +1313,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     const activeQuery = this.#currentQuery;
 
     return this.#runQueryWithAbort(async () => {
-      const { text, contentBlocks } = await this.#collectResponse(activeQuery);
+      const { text, contentBlocks } = await this.#collectResponse(activeQuery, model);
 
       // Update conversation history with content blocks if there are tool calls
       const hasToolCalls = contentBlocks.some((b) => b.type === 'tool_use' || b.type === 'tool_result');
@@ -1287,7 +1415,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
       const { text, contentBlocks } = await this.#runQueryWithAbort(
         async () => {
-          return this.#collectResponse(activeQuery);
+          return this.#collectResponse(activeQuery, model);
         },
         { timeoutMs: remainingMs, timeoutMode: 'hard', disableTtftTimeout: true },
       );
@@ -1429,6 +1557,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     this.#executeStartTime = startTime;
     this.#toolCallCount = 0;
     this.#ttftTimedOut = false;
+    // Model warnings are per-attempt events — clear them before each attempt.
+    this.#refusal = undefined;
+    this.#modelDowngrade = undefined;
 
     this.#startStatusTimer();
 
@@ -1507,6 +1638,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               ttftMs: this.#ttftMs,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
               queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
+              refusal: this.#refusal,
+              modelDowngrade: this.#modelDowngrade,
             },
           },
           context,
@@ -1535,6 +1668,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
               ttftMs: this.#ttftMs,
               tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
               queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
+              refusal: this.#refusal,
+              modelDowngrade: this.#modelDowngrade,
             },
           },
           context: { ...context, generatedCode: code },
@@ -1562,6 +1697,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             ttftMs: this.#ttftMs,
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
+            refusal: this.#refusal,
+            modelDowngrade: this.#modelDowngrade,
           },
         },
         context: { ...context, generatedCode: code },
@@ -1600,6 +1737,8 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
             tokenUsage: this.#getAttemptTokenUsage(tokenUsageBeforeAttempt),
             queryTiming: this.#getAttemptQueryTiming(timingBeforeAttempt),
             subprocessStderr: stderr || undefined,
+            refusal: this.#refusal,
+            modelDowngrade: this.#modelDowngrade,
           },
         },
         context,
@@ -1717,6 +1856,35 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
   getReportSections(result: PluginResult<ClaudeRunnerResult>, _context: PipelineContext): PluginReportSection[] {
     const sections: PluginReportSection[] = [];
+
+    // Surface model warnings (refusal / downgrade) prominently at the top.
+    if (result.data?.refusal || result.data?.modelDowngrade) {
+      // Keep this message ASCII-only: it travels through the report's
+      // base64/atob data channel, which mangles multi-byte UTF-8 (emoji).
+      // Emoji live only in the UI-bundled header chips, which render fine.
+      const lines: string[] = [];
+      if (result.data.modelDowngrade) {
+        const { requestedModel, servedModel } = result.data.modelDowngrade;
+        lines.push(`[!] Model downgrade: requested \`${requestedModel}\`, served by \`${servedModel}\`.`);
+      }
+      if (result.data.refusal) {
+        const { category, explanation, hadFallback } = result.data.refusal;
+        lines.push(
+          `[!] Model refusal detected${hadFallback ? ' (turn retried on a fallback model)' : ' (no fallback configured)'}.`,
+        );
+        if (category) {
+          lines.push(`  Category: ${category}`);
+        }
+        if (explanation) {
+          lines.push(`  Explanation: ${explanation}`);
+        }
+      }
+      sections.push({
+        type: 'message',
+        title: 'Model Warnings',
+        message: lines.join('\n'),
+      });
+    }
 
     // Add chat conversation section if we have history
     if (this.#conversationHistory.length > 0) {

@@ -4048,3 +4048,206 @@ mov eax, 0
     });
   });
 });
+
+/**
+ * Build a query factory that yields a fixed list of SDK messages for the
+ * (single) query of an attempt. Used to exercise refusal / model-downgrade
+ * detection without a live SDK.
+ */
+function factoryFromMessages(messages: SDKMessage[]): QueryFactory {
+  return vi.fn(() => ({
+    [Symbol.asyncIterator]: async function* () {
+      for (const msg of messages) {
+        yield msg;
+      }
+    },
+    close: vi.fn(),
+  })) as unknown as QueryFactory;
+}
+
+const VALID_C_RESPONSE = 'Here is the code:\n\n```c\nint testFunc(void) {\n  return 42;\n}\n```';
+
+function initMessage(): SDKMessage {
+  return { type: 'system', subtype: 'init', session_id: TEST_SESSION_ID } as SDKMessage;
+}
+
+function assistantMessage(text: string, extra?: Partial<SDKMessage['message']>): SDKMessage {
+  return {
+    type: 'assistant',
+    session_id: TEST_SESSION_ID,
+    message: { id: 'msg-1', content: [{ type: 'text', text }], ...extra },
+  } as SDKMessage;
+}
+
+function successResult(): SDKMessage {
+  return {
+    type: 'result',
+    subtype: 'success',
+    session_id: TEST_SESSION_ID,
+    is_error: false,
+    duration_ms: 1000,
+    duration_api_ms: 900,
+    num_turns: 1,
+  } as unknown as SDKMessage;
+}
+
+function makePlugin(factory: QueryFactory, config?: Partial<ClaudeRunnerConfig>) {
+  return new ClaudeRunnerPlugin({
+    config: { ...defaultPluginConfig, ...config },
+    pipelineConfig: defaultTestPipelineConfig,
+    cCompiler: testCCompiler,
+    objdiff: testObjdiff,
+    queryFactory: factory,
+  });
+}
+
+describe('ClaudeRunnerPlugin — model warnings', () => {
+  describe('refusal detection', () => {
+    it('captures a refusal with no fallback (model_refusal_no_fallback)', async () => {
+      const factory = factoryFromMessages([
+        initMessage(),
+        {
+          type: 'system',
+          subtype: 'model_refusal_no_fallback',
+          session_id: TEST_SESSION_ID,
+          original_model: 'claude-sonnet-4-6',
+          api_refusal_category: 'cyber',
+          api_refusal_explanation: 'Declined due to policy.',
+        } as SDKMessage,
+        assistantMessage('I cannot help with that.'),
+        successResult(),
+      ]);
+      const plugin = makePlugin(factory);
+
+      const result = await plugin.execute(createTestContext());
+      const data = result.result.data as ClaudeRunnerResult;
+
+      expect(data.refusal).toEqual({
+        category: 'cyber',
+        explanation: 'Declined due to policy.',
+        hadFallback: false,
+      });
+      expect(data.modelDowngrade).toBeUndefined();
+    });
+
+    it('captures a refusal via assistant stop_reason as a fallback signal', async () => {
+      const factory = factoryFromMessages([
+        initMessage(),
+        assistantMessage('No.', {
+          stop_reason: 'refusal',
+          stop_details: { type: 'refusal', category: 'bio', explanation: 'Not allowed.' },
+        }),
+        successResult(),
+      ]);
+      const plugin = makePlugin(factory);
+
+      const result = await plugin.execute(createTestContext());
+      const data = result.result.data as ClaudeRunnerResult;
+
+      expect(data.refusal).toEqual({ category: 'bio', explanation: 'Not allowed.', hadFallback: false });
+    });
+  });
+
+  describe('model downgrade detection', () => {
+    it('records refusal + downgrade for a refusal fallback (sonnet → opus)', async () => {
+      const factory = factoryFromMessages([
+        initMessage(),
+        assistantMessage(VALID_C_RESPONSE, { model: 'claude-opus-4-8' }),
+        {
+          type: 'system',
+          subtype: 'model_refusal_fallback',
+          session_id: TEST_SESSION_ID,
+          original_model: 'claude-sonnet-4-6',
+          fallback_model: 'claude-opus-4-8',
+          api_refusal_category: 'cyber',
+          api_refusal_explanation: 'Refused, retried.',
+        } as SDKMessage,
+        successResult(),
+      ]);
+      const plugin = makePlugin(factory);
+
+      const result = await plugin.execute(createTestContext());
+      const data = result.result.data as ClaudeRunnerResult;
+
+      expect(result.result.status).toBe('success');
+      expect(data.refusal).toEqual({ category: 'cyber', explanation: 'Refused, retried.', hadFallback: true });
+      expect(data.modelDowngrade).toEqual({ requestedModel: 'claude-sonnet-4-6', servedModel: 'claude-opus-4-8' });
+    });
+
+    it('detects a silent downgrade by comparing served vs requested model family', async () => {
+      const factory = factoryFromMessages([
+        initMessage(),
+        assistantMessage(VALID_C_RESPONSE, { model: 'claude-opus-4-8' }),
+        successResult(),
+      ]);
+      const plugin = makePlugin(factory, { model: 'claude-fable-5' });
+
+      const result = await plugin.execute(createTestContext());
+      const data = result.result.data as ClaudeRunnerResult;
+
+      expect(data.modelDowngrade).toEqual({ requestedModel: 'claude-fable-5', servedModel: 'claude-opus-4-8' });
+      expect(data.refusal).toBeUndefined();
+    });
+
+    it('does not flag alias resolution within the same family as a downgrade', async () => {
+      const factory = factoryFromMessages([
+        initMessage(),
+        // Requested the "sonnet" alias, served by a concrete sonnet id — not a downgrade.
+        assistantMessage(VALID_C_RESPONSE, { model: 'claude-sonnet-4-6' }),
+        successResult(),
+      ]);
+      const plugin = makePlugin(factory, { model: 'sonnet' });
+
+      const result = await plugin.execute(createTestContext());
+      const data = result.result.data as ClaudeRunnerResult;
+
+      expect(data.modelDowngrade).toBeUndefined();
+    });
+  });
+
+  describe('getReportSections', () => {
+    it('emits a Model Warnings section when refusal and downgrade are present', async () => {
+      const factory = factoryFromMessages([
+        initMessage(),
+        assistantMessage(VALID_C_RESPONSE, { model: 'claude-opus-4-8' }),
+        {
+          type: 'system',
+          subtype: 'model_refusal_fallback',
+          session_id: TEST_SESSION_ID,
+          original_model: 'claude-sonnet-4-6',
+          fallback_model: 'claude-opus-4-8',
+          api_refusal_category: 'cyber',
+          api_refusal_explanation: 'Refused, retried.',
+        } as SDKMessage,
+        successResult(),
+      ]);
+      const plugin = makePlugin(factory);
+
+      const context = createTestContext();
+      const result = await plugin.execute(context);
+      const sections = plugin.getReportSections(result.result, context);
+
+      const warnings = sections.find((s) => s.title === 'Model Warnings');
+      expect(warnings).toBeDefined();
+      expect(warnings?.type).toBe('message');
+      const message = (warnings as Extract<PluginReportSection, { type: 'message' }>).message;
+      expect(message).toContain('Model downgrade');
+      expect(message).toContain('claude-sonnet-4-6');
+      expect(message).toContain('claude-opus-4-8');
+      expect(message).toContain('Model refusal detected');
+      expect(message).toContain('fallback');
+      expect(message).toContain('cyber');
+    });
+
+    it('omits the Model Warnings section when there are no warnings', async () => {
+      const factory = factoryFromMessages([initMessage(), assistantMessage(VALID_C_RESPONSE), successResult()]);
+      const plugin = makePlugin(factory);
+
+      const context = createTestContext();
+      const result = await plugin.execute(context);
+      const sections = plugin.getReportSections(result.result, context);
+
+      expect(sections.find((s) => s.title === 'Model Warnings')).toBeUndefined();
+    });
+  });
+});

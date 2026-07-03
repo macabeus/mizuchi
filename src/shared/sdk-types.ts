@@ -49,6 +49,18 @@ export interface SDKToolResultBlock {
 export type SDKContentBlock = SDKTextBlock | SDKToolUseBlock | SDKToolResultBlock | { type: string; text?: string };
 
 /**
+ * Refusal details attached to an assistant message that ended with
+ * stop_reason "refusal" (BetaMessage.stop_details).
+ */
+export interface SDKStopDetails {
+  type?: string;
+  /** Refusal category ('cyber', 'bio', …); open string, may be null/absent */
+  category?: string | null;
+  /** Human-readable explanation; display only, never parse */
+  explanation?: string | null;
+}
+
+/**
  * SDK message types from the V2 SDK
  */
 export interface SDKMessage {
@@ -58,6 +70,9 @@ export interface SDKMessage {
     id?: string;
     content: SDKContentBlock[];
     model?: string;
+    /** 'refusal' when the model declined to answer this turn */
+    stop_reason?: string | null;
+    stop_details?: SDKStopDetails | null;
     usage?: {
       input_tokens: number;
       output_tokens: number;
@@ -68,6 +83,16 @@ export interface SDKMessage {
   subtype?: string;
   errors?: string[];
   error?: SDKAssistantMessageError;
+  // Fields carried by the refusal-fallback system messages
+  // (subtype 'model_refusal_fallback' / 'model_refusal_no_fallback').
+  /** Model that produced the refusal (the originally-requested model) */
+  original_model?: string;
+  /** Model the turn was retried on after a refusal (fallback path only) */
+  fallback_model?: string;
+  /** Refusal category from the refused API response */
+  api_refusal_category?: string | null;
+  /** Refusal explanation from the refused API response; display only */
+  api_refusal_explanation?: string | null;
   modelUsage?: Record<
     string,
     {
