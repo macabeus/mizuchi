@@ -28,14 +28,23 @@ global:
   # Runs with cwd = project root. {{cFilePath}} and {{objFilePath}} are absolute temp paths.
   # Template variables: {{cFilePath}}, {{objFilePath}}, {{functionName}}
   compilerScript: |
+    # Give the scratch .s a per-compile-unique path by appending to the FULL
+    # {{objFilePath}} (always unique). A shared relative name (e.g. "asm.s") is
+    # written in the common cwd (project root) and gets clobbered when compiles
+    # run concurrently — the background permuter compiles many candidates in
+    # parallel — yielding a wrong-symbol object that objdiff reports as "Symbol
+    # not found". Note: dirname("{{objFilePath}}") is NOT unique enough, because the
+    # permuter places every candidate .o in the shared system temp dir.
+    ASM_FILE="{{objFilePath}}.s"
+
     tools/agbcc/bin/agbcc \
-      "{{cFilePath}}" -o asm.s \
+      "{{cFilePath}}" -o "$ASM_FILE" \
       -mthumb-interwork -Wimplicit \
       -Wparentheses -Werror -O2 -g -fhex-asm
 
-    sed '/\.size/d' asm.s > asm_stripped.s && mv asm_stripped.s asm.s
+    sed '/\.size/d' "$ASM_FILE" > "$ASM_FILE.stripped" && mv "$ASM_FILE.stripped" "$ASM_FILE"
 
-    arm-none-eabi-as -mcpu=arm7tdmi -mthumb-interwork asm.s -o "{{objFilePath}}"
+    arm-none-eabi-as -mcpu=arm7tdmi -mthumb-interwork "$ASM_FILE" -o "{{objFilePath}}"
 
   # Directory containing prompt folders (default: ./prompts)
   promptsDir: ./prompts
