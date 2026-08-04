@@ -39,6 +39,12 @@ export const isMipsPlatform = (target: PlatformTarget): boolean => {
 };
 
 /**
+ * Source language the pipeline generates and compiles
+ */
+export const sourceLanguages = ['c', 'cpp'] as const;
+export type SourceLanguage = (typeof sourceLanguages)[number];
+
+/**
  * Global pipeline configuration schema
  *
  * These are the top-level settings that apply to the entire pipeline run.
@@ -51,8 +57,19 @@ export const pipelineConfigSchema = z.object({
   promptsDir: z.string().default('./prompts'),
   mapFilePath: z
     .string()
+    .optional()
     .describe('Path to GNU ld map file for resolving function → object file (relative to mizuchi.yaml)'),
+  symbolMapPath: z
+    .string()
+    .optional()
+    .describe(
+      'Path to a JSON file mapping symbol name → target object path (alternative to mapFilePath for projects without a GNU ld map, relative to mizuchi.yaml)',
+    ),
   target: z.enum(platformTargets).default('gba'),
+  language: z
+    .enum(sourceLanguages)
+    .default('c')
+    .describe('Source language Claude generates and the compiler plugin compiles'),
   nonMatchingAsmFolders: z
     .array(z.string())
     .describe('Directories containing non-matching assembly files (relative to mizuchi.yaml)'),
@@ -153,7 +170,8 @@ export async function loadConfig(configPath: string): Promise<ConfigFile> {
     data.global = {
       ...data.global,
       projectRoot,
-      mapFilePath: path.resolve(projectRoot, data.global.mapFilePath),
+      ...(data.global.mapFilePath ? { mapFilePath: path.resolve(projectRoot, data.global.mapFilePath) } : {}),
+      ...(data.global.symbolMapPath ? { symbolMapPath: path.resolve(projectRoot, data.global.symbolMapPath) } : {}),
       promptsDir: path.resolve(projectRoot, data.global.promptsDir),
       outputDir: path.resolve(projectRoot, data.global.outputDir),
     } as PipelineConfig;

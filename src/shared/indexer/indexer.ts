@@ -97,6 +97,9 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
   } = config;
 
   // Parse map file
+  if (!mapFilePath) {
+    throw new Error('indexCodebase requires global.mapFilePath to be configured');
+  }
   const mapContent = await fs.readFile(mapFilePath, 'utf-8');
   const symbolMap = parseMapFile(mapContent);
   const addressMap = parseMapFileAddresses(mapContent);

@@ -21,6 +21,7 @@ export const defaultTestPipelineConfig: PipelineConfig = {
   promptsDir: '/test/prompts',
   projectRoot: '/test/project',
   target: 'gba',
+  language: 'c',
   mapFilePath: '/test/project/mapfile.map',
   nonMatchingAsmFolders: [],
   matchingAsmFolders: [],

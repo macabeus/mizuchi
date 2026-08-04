@@ -47,11 +47,15 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
 
       // Parse map file if configured
       const mapFilePath = fileConfig.global.mapFilePath;
-      try {
-        const mapContent = await fs.readFile(mapFilePath, 'utf-8');
-        cachedSymbolMap = parseMapFile(mapContent);
-      } catch {
-        return c.json({ error: `map file not found at ${mapFilePath}` }, 404);
+      if (mapFilePath) {
+        try {
+          const mapContent = await fs.readFile(mapFilePath, 'utf-8');
+          cachedSymbolMap = parseMapFile(mapContent);
+        } catch {
+          return c.json({ error: `map file not found at ${mapFilePath}` }, 404);
+        }
+      } else {
+        cachedSymbolMap = null;
       }
 
       return c.json({ data: dump, platform });
