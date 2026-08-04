@@ -91,6 +91,15 @@ export class CCompiler {
   }
 
   /**
+   * Sanitize a function name for use in file names. Mangled C++ names
+   * (e.g. MSVC's `?fn@Class@@QAEXXZ`) contain characters that are invalid
+   * on Windows file systems, which matters when the compiler runs under Wine.
+   */
+  #fileNameFor(functionName: string): string {
+    return functionName.replace(/[^A-Za-z0-9_.-]/g, '_');
+  }
+
+  /**
    * Compiles C/C++ code to an object file.
    * @param functionName - Name of the function being compiled (used for file naming)
    * @param cCode - The source code to compile
@@ -106,11 +115,12 @@ export class CCompiler {
     { success: true; objPath: string } | { success: false; errorMessage: string; compilationErrors: CompilationError[] }
   > {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mizuchi-compile-'));
-    const combinedPath = path.join(tmpDir, `${functionName}_combined${this.#sourceExtension}`);
-    const strippedPath = path.join(tmpDir, `${functionName}_stripped${this.#sourceExtension}`);
-    const preprocessedPath = path.join(tmpDir, `${functionName}_preprocessed${this.#sourceExtension}`);
-    const objPath = path.join(tmpDir, `${functionName}${this.#objectExtension}`);
-    const scriptPath = path.join(tmpDir, `${functionName}_compile.sh`);
+    const fileBase = this.#fileNameFor(functionName);
+    const combinedPath = path.join(tmpDir, `${fileBase}_combined${this.#sourceExtension}`);
+    const strippedPath = path.join(tmpDir, `${fileBase}_stripped${this.#sourceExtension}`);
+    const preprocessedPath = path.join(tmpDir, `${fileBase}_preprocessed${this.#sourceExtension}`);
+    const objPath = path.join(tmpDir, `${fileBase}${this.#objectExtension}`);
+    const scriptPath = path.join(tmpDir, `${fileBase}_compile.sh`);
 
     let succeeded = false;
     let compiledContent = '';

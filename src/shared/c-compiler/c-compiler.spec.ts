@@ -203,5 +203,23 @@ int cpp_macro_func(void) { return ANSWER; }
         expect(result.compilationErrors[0].message).toContain('undefined_symbol');
       }
     });
+
+    it('sanitizes MSVC-mangled names for file names', async () => {
+      // Mangled names contain ? and @, which are invalid in Windows file
+      // names (relevant when the compiler runs under Wine).
+      const compiler = new CCompiler(cppCompilerScript, projectRoot, { language: 'cpp' });
+      const code = `
+class Sanitize { public:
+    int method(int value);
+};
+int Sanitize::method(int value) { return value; }
+`;
+      const result = await compiler.compile('?method@Sanitize@@QAEHH@Z', code, '');
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        compiledObjects.push(result.objPath);
+      }
+    });
   });
 });
