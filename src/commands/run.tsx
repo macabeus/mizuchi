@@ -751,7 +751,10 @@ async function runPipeline(
     }
 
     // Load prompts
-    const { prompts, errors: loadPromptErrors } = await loadPrompts(pipelineConfig.promptsDir);
+    const { prompts, errors: loadPromptErrors } = await loadPrompts(
+      pipelineConfig.promptsDir,
+      pipelineConfig.projectRoot,
+    );
     if (loadPromptErrors.length > 0) {
       setState((prev) => ({
         ...prev,

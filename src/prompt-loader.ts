@@ -47,7 +47,7 @@ export class PromptLoadError extends Error {
 /**
  * Load a single prompt from a directory
  */
-async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<PromptInfo> {
+async function loadPromptFromDir(promptsDir: string, dirName: string, projectRoot?: string): Promise<PromptInfo> {
   const promptDir = path.join(promptsDir, dirName);
   const promptMdPath = path.join(promptDir, 'prompt.md');
   const settingsPath = path.join(promptDir, 'settings.yaml');
@@ -86,24 +86,30 @@ async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<P
 
   const settings = settingsResult.data;
 
+  // Resolve relative target object paths against the project root
+  const targetObjectPath =
+    projectRoot && !path.isAbsolute(settings.targetObjectPath)
+      ? path.resolve(projectRoot, settings.targetObjectPath)
+      : settings.targetObjectPath;
+
   // Check the object file exists and includes the function
   try {
-    await fs.access(settings.targetObjectPath);
+    await fs.access(targetObjectPath);
   } catch {
-    throw new PromptLoadError(dirName, `Target object file not found: ${settings.targetObjectPath}`);
+    throw new PromptLoadError(dirName, `Target object file not found: ${targetObjectPath}`);
   }
 
   // Use objdiff-wasm to check if the function exists in the object file.
   // Format-agnostic: works on ELF, COFF (MSVC), etc.
   try {
     const objdiff = new Objdiff();
-    const parsedObject = await objdiff.parseObjectFile(settings.targetObjectPath, 'target');
+    const parsedObject = await objdiff.parseObjectFile(targetObjectPath, 'target');
     const symbolNames = await objdiff.getSymbolNames(parsedObject);
 
     if (!symbolNames.includes(settings.functionName)) {
       throw new PromptLoadError(
         dirName,
-        `Function '${settings.functionName}' not found in object file: ${settings.targetObjectPath}`,
+        `Function '${settings.functionName}' not found in object file: ${targetObjectPath}`,
       );
     }
   } catch (error) {
@@ -117,7 +123,7 @@ async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<P
     path: dirName,
     content,
     functionName: settings.functionName,
-    targetObjectPath: settings.targetObjectPath,
+    targetObjectPath,
     asm: settings.asm,
     compilerFlags: settings.compilerFlags,
   };
@@ -130,8 +136,14 @@ async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<P
  * Each prompt directory must contain:
  *   - prompt.md: The prompt content
  *   - settings.yaml: Structured metadata
+ *
+ * Relative targetObjectPath values in settings.yaml are resolved against
+ * projectRoot when provided.
  */
-export async function loadPrompts(promptsDir: string): Promise<{ prompts: PromptInfo[]; errors: PromptLoadError[] }> {
+export async function loadPrompts(
+  promptsDir: string,
+  projectRoot?: string,
+): Promise<{ prompts: PromptInfo[]; errors: PromptLoadError[] }> {
   const entries = await fs.readdir(promptsDir, { withFileTypes: true });
   const promptDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
 
@@ -140,7 +152,7 @@ export async function loadPrompts(promptsDir: string): Promise<{ prompts: Prompt
 
   for (const dirName of promptDirs) {
     try {
-      const prompt = await loadPromptFromDir(promptsDir, dirName);
+      const prompt = await loadPromptFromDir(promptsDir, dirName, projectRoot);
       prompts.push(prompt);
     } catch (error) {
       if (error instanceof PromptLoadError) {

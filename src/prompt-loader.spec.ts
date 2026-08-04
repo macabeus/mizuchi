@@ -263,5 +263,32 @@ void ${functionName}(void) {
       expect(result.prompts).toHaveLength(1);
       expect(result.prompts[0].compilerFlags).toBe('/O1 /Gy');
     });
+
+    it('resolves relative target object paths against the project root', async () => {
+      // Copy the fixture into a fake project tree (kept outside tempDir so the
+      // loader does not scan it as a prompt directory) and reference it relatively.
+      const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'prompt-loader-project-'));
+      try {
+        await fs.mkdir(path.join(projectRoot, 'build'), { recursive: true });
+        await fs.copyFile(coffObjPath, path.join(projectRoot, 'build', 'test-function.obj'));
+
+        await createPromptDir('coff-relative', 'Decompile this function.', {
+          functionName: '?test_func@@YAXXZ',
+          targetObjectPath: 'build/test-function.obj',
+        });
+
+        const withoutRoot = await loadPrompts(tempDir);
+        expect(withoutRoot.errors).toHaveLength(1);
+
+        const withRoot = await loadPrompts(tempDir, projectRoot);
+        expect(withRoot.errors).toHaveLength(0);
+        expect(withRoot.prompts).toHaveLength(1);
+        expect(withRoot.prompts[0].targetObjectPath).toBe(
+          path.join(projectRoot, 'build', 'test-function.obj'),
+        );
+      } finally {
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      }
+    });
   });
 });
