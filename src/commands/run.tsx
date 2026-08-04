@@ -798,7 +798,9 @@ async function runPipeline(
     );
 
     // Create shared CCompiler and Objdiff instances
-    const cCompiler = new CCompiler(pipelineConfig.compilerScript, pipelineConfig.projectRoot);
+    const cCompiler = new CCompiler(pipelineConfig.compilerScript, pipelineConfig.projectRoot, {
+      language: pipelineConfig.language,
+    });
     const objdiff = new Objdiff(objdiffConfig.diffSettings);
 
     // Create plugins

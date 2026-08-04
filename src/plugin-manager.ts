@@ -164,6 +164,7 @@ export class PluginManager {
     functionName: string,
     targetObjectPath: string,
     asm: string,
+    compilerFlags?: string,
   ): Promise<PipelineRunResult> {
     const startTime = Date.now();
     const attempts: AttemptResult[] = [];
@@ -176,6 +177,7 @@ export class PluginManager {
       functionName,
       asm,
       targetObjectPath,
+      compilerFlags,
       attemptNumber: 1,
       maxRetries: this.#config.maxRetries,
       previousAttempts: [],
@@ -586,7 +588,14 @@ export class PluginManager {
    *   with the partial results collected so far and the total prompt count.
    */
   async runPipelines(
-    prompts: Array<{ path: string; content: string; functionName: string; targetObjectPath: string; asm: string }>,
+    prompts: Array<{
+      path: string;
+      content: string;
+      functionName: string;
+      targetObjectPath: string;
+      asm: string;
+      compilerFlags?: string;
+    }>,
     onPromptComplete?: (partialResults: PipelineRunResult[], totalPrompts: number) => Promise<void>,
   ): Promise<PipelineResults> {
     // Emit pipeline start event
@@ -622,6 +631,7 @@ export class PluginManager {
           prompt.functionName,
           prompt.targetObjectPath,
           prompt.asm,
+          prompt.compilerFlags,
         );
 
         this.#emit({

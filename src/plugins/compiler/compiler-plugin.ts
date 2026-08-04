@@ -57,6 +57,7 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
       context.functionName,
       context.generatedCode,
       context.contextContent ?? '',
+      context.compilerFlags ?? '',
     );
     if (!compileResult.success) {
       const outputError = compileResult.compilationErrors.length
@@ -126,7 +127,7 @@ export class CompilerPlugin implements Plugin<CompilerResult> {
       sections.push({
         type: 'code',
         title: 'Source Code',
-        language: 'c',
+        language: this.#cCompiler.language,
         code: context.generatedCode,
       });
     }

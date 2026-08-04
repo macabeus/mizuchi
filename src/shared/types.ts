@@ -69,6 +69,8 @@ export interface PipelineContext {
   compiledObjectPath?: string;
   /** Path to the target object file for comparison */
   targetObjectPath?: string;
+  /** Extra compiler flags for this prompt (substituted into {{extraFlags}}) */
+  compilerFlags?: string;
   /** Context file content (from getContextScript stdout) */
   contextContent?: string;
   /** Path to temp file containing context content */
@@ -146,7 +148,7 @@ export type PluginReportSection =
   | {
       type: 'code';
       title: string;
-      language: 'c' | 'markdown' | 'json' | 'text' | 'diff';
+      language: 'c' | 'cpp' | 'markdown' | 'json' | 'text' | 'diff';
       code: string;
     }
   | {
