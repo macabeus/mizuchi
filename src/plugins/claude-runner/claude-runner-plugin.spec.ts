@@ -23,6 +23,8 @@ import {
   type ClaudeRunnerResult,
   type QueryFactory,
   claudeRunnerConfigSchema,
+  extractCCode,
+  validateCCode,
 } from './claude-runner-plugin.js';
 
 const TEST_SESSION_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -4046,5 +4048,71 @@ mov eax, 0
       // No log lines initially
       expect(first.logLines?.length ?? 0).toBe(0);
     });
+  });
+});
+
+describe('extractCCode', () => {
+  it('extracts the last ```c block (C mode)', () => {
+    const response = 'First:\n```c\nint a(void) { return 1; }\n```\nSecond:\n```c\nint b(void) { return 2; }\n```';
+    expect(extractCCode(response, 'c')).toBe('int b(void) { return 2; }');
+  });
+
+  it('does not match ```cpp blocks in C mode', () => {
+    const response = '```cpp\nint a() { return 1; }\n```';
+    expect(extractCCode(response, 'c')).toBeUndefined();
+  });
+
+  it('extracts ```cpp blocks in C++ mode', () => {
+    const response = '```cpp\nint Foo::bar() { return 1; }\n```';
+    expect(extractCCode(response, 'cpp')).toBe('int Foo::bar() { return 1; }');
+  });
+
+  it('extracts ```c++ blocks in C++ mode', () => {
+    const response = '```c++\nint Foo::bar() { return 1; }\n```';
+    expect(extractCCode(response, 'cpp')).toBe('int Foo::bar() { return 1; }');
+  });
+
+  it('falls back to ```c blocks in C++ mode', () => {
+    const response = '```c\nint Foo_bar(void) { return 1; }\n```';
+    expect(extractCCode(response, 'cpp')).toBe('int Foo_bar(void) { return 1; }');
+  });
+
+  it('returns undefined when no code block exists', () => {
+    expect(extractCCode('no code here', 'c')).toBeUndefined();
+    expect(extractCCode('no code here', 'cpp')).toBeUndefined();
+  });
+});
+
+describe('validateCCode', () => {
+  it('accepts a plain C function', () => {
+    expect(validateCCode('int add(int a, int b) { return a + b; }', 'c').valid).toBe(true);
+  });
+
+  it('rejects empty code', () => {
+    expect(validateCCode('', 'c').valid).toBe(false);
+  });
+
+  it('rejects unbalanced braces', () => {
+    const result = validateCCode('int f(void) { return 1; } }', 'c');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('Unbalanced braces');
+  });
+
+  it('accepts a C++ method definition', () => {
+    expect(validateCCode('int Foo::bar(int x) { return x; }', 'cpp').valid).toBe(true);
+  });
+
+  it('accepts a C++ destructor definition', () => {
+    expect(validateCCode('Foo::~Foo() { cleanup(); }', 'cpp').valid).toBe(true);
+  });
+
+  it('accepts a const method with member initializer list', () => {
+    expect(validateCCode('Foo::Foo(int x) : m_x(x) {}', 'cpp').valid).toBe(true);
+    expect(validateCCode('int Foo::get() const { return m_x; }', 'cpp').valid).toBe(true);
+  });
+
+  it('rejects code without a function definition', () => {
+    expect(validateCCode('int x = 5;', 'cpp').valid).toBe(false);
+    expect(validateCCode('int x = 5;', 'c').valid).toBe(false);
   });
 });
