@@ -2,7 +2,7 @@ import { SgNode, findInFiles } from '@ast-grep/napi';
 
 import type { MizuchiDb } from '~/shared/mizuchi-db/mizuchi-db.js';
 
-import { getFirstParentWithKind, registerClangLanguage } from './ast-grep-utils.js';
+import { astGrepLanguage, getFirstParentWithKind, registerClangLanguage } from './ast-grep-utils.js';
 
 export type DecompFuncContext = {
   asmDeclaration?: string;
@@ -28,8 +28,11 @@ async function getCodebaseContext(
   functionName: string,
   calledFunctionNames: string[],
   projectRoot: string,
+  language: 'c' | 'cpp' = 'c',
 ): Promise<CodebaseContext> {
   registerClangLanguage();
+
+  const { id: langId, globs } = astGrepLanguage(language);
 
   const allFunctionsName = [functionName, ...calledFunctionNames];
 
@@ -41,21 +44,23 @@ async function getCodebaseContext(
 
   const declarationsNode: SgNode[] = [];
 
-  // Phase 1: Find function declarations
+  // Phase 1: Find function declarations.
+  // C uses `identifier` for the declared name; C++ methods use
+  // `field_identifier` (or `destructor_name`) inside the declarator.
   await findInFiles(
-    'c',
+    langId,
     {
       paths: [projectRoot],
       matcher: {
         rule: {
-          kind: 'identifier',
-          regex: allFunctionsName.map((name) => `^(${name})$`).join('|'),
-          inside: {
-            kind: 'function_declarator',
+          kind: 'function_declarator',
+          has: {
+            kind: language === 'cpp' ? 'field_identifier' : 'identifier',
+            regex: allFunctionsName.map((name) => `^(${name})$`).join('|'),
           },
         },
       },
-      languageGlobs: ['*.c', '*.h'],
+      languageGlobs: globs,
     },
     (err, nodes) => {
       if (err) {
@@ -63,17 +68,25 @@ async function getCodebaseContext(
       }
 
       for (const node of nodes) {
-        const declarationNode = getFirstParentWithKind(node, 'declaration');
+        const declarationNode =
+          getFirstParentWithKind(node, 'declaration') ?? getFirstParentWithKind(node, 'field_declaration');
         if (!declarationNode) {
+          continue;
+        }
+
+        const nameNode = node.find({
+          rule: { kind: language === 'cpp' ? 'field_identifier' : 'identifier' },
+        });
+        if (!nameNode) {
           continue;
         }
 
         declarationsNode.push(declarationNode);
 
-        if (node.text() === functionName) {
+        if (nameNode.text() === functionName) {
           result.asmDeclaration = declarationNode.text();
         } else {
-          result.calledFunctionsDeclarations[node.text()] = declarationNode.text();
+          result.calledFunctionsDeclarations[nameNode.text()] = declarationNode.text();
         }
       }
     },
@@ -97,20 +110,23 @@ async function getCodebaseContext(
     }
 
     if (typesFromDeclarations.size > 0) {
+      const typeRegex = [...typesFromDeclarations].map((name) => `^(${name})$`).join('|');
+
+      // typedefs (both languages)
       await findInFiles(
-        'c',
+        langId,
         {
           paths: [projectRoot],
           matcher: {
             rule: {
               kind: 'type_identifier',
-              regex: [...typesFromDeclarations].map((name) => `^(${name})$`).join('|'),
+              regex: typeRegex,
               inside: {
                 kind: 'type_definition',
               },
             },
           },
-          languageGlobs: ['*.c', '*.h'],
+          languageGlobs: globs,
         },
         (err, nodes) => {
           if (err) {
@@ -130,6 +146,46 @@ async function getCodebaseContext(
           }
         },
       );
+
+      // C++ class/struct definitions
+      if (language === 'cpp') {
+        for (const classKind of ['class_specifier', 'struct_specifier']) {
+          await findInFiles(
+            langId,
+            {
+              paths: [projectRoot],
+              matcher: {
+                rule: {
+                  kind: 'type_identifier',
+                  regex: typeRegex,
+                  inside: {
+                    kind: classKind,
+                    field: 'name',
+                  },
+                },
+              },
+              languageGlobs: globs,
+            },
+            (err, nodes) => {
+              if (err) {
+                console.warn('Error finding class definitions:', err);
+              }
+
+              for (const node of nodes) {
+                const classNode = getFirstParentWithKind(node, classKind);
+                if (!classNode) {
+                  continue;
+                }
+
+                if (!typeDefinitionsAddedNames.has(node.text())) {
+                  typeDefinitionsAddedNames.add(node.text());
+                  result.typeDefinitions.push(classNode.text());
+                }
+              }
+            },
+          );
+        }
+      }
     }
   }
 
@@ -140,6 +196,7 @@ export async function getFuncContext(
   db: MizuchiDb,
   functionId: string,
   projectRoot: string,
+  language: 'c' | 'cpp' = 'c',
 ): Promise<DecompFuncContext> {
   const func = db.getFunctionById(functionId);
   if (!func) {
@@ -155,7 +212,7 @@ export async function getFuncContext(
     }
   }
 
-  const context = await getCodebaseContext(func.name, calledFunctionNames, projectRoot);
+  const context = await getCodebaseContext(func.name, calledFunctionNames, projectRoot, language);
 
   const result: DecompFuncContext = {
     asmDeclaration: context.asmDeclaration,

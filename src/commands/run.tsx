@@ -751,7 +751,10 @@ async function runPipeline(
     }
 
     // Load prompts
-    const { prompts, errors: loadPromptErrors } = await loadPrompts(pipelineConfig.promptsDir);
+    const { prompts, errors: loadPromptErrors } = await loadPrompts(
+      pipelineConfig.promptsDir,
+      pipelineConfig.projectRoot,
+    );
     if (loadPromptErrors.length > 0) {
       setState((prev) => ({
         ...prev,
@@ -798,7 +801,9 @@ async function runPipeline(
     );
 
     // Create shared CCompiler and Objdiff instances
-    const cCompiler = new CCompiler(pipelineConfig.compilerScript, pipelineConfig.projectRoot);
+    const cCompiler = new CCompiler(pipelineConfig.compilerScript, pipelineConfig.projectRoot, {
+      language: pipelineConfig.language,
+    });
     const objdiff = new Objdiff(objdiffConfig.diffSettings);
 
     // Create plugins

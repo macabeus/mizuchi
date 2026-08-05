@@ -56,6 +56,32 @@ describe('extractFunctionCallsFromAssembly', () => {
     });
   });
 
+  describe('x86', () => {
+    it('extracts direct call targets', () => {
+      const asm = 'call ?helper@@YAXXZ\nret';
+      const calls = extractFunctionCallsFromAssembly('win32', asm);
+      expect(calls).toContain('?helper@@YAXXZ');
+    });
+
+    it('extracts ; = comment references', () => {
+      const asm = 'call dword ptr [edx + 0x68]  ; =?close@EditBox@@QAEXXZ';
+      const calls = extractFunctionCallsFromAssembly('win32', asm);
+      expect(calls).toContain('?close@EditBox@@QAEXXZ');
+    });
+
+    it('skips hex operands, memory references and markers', () => {
+      const asm = [
+        'func_start ?fn@@YAXXZ',
+        'call 0x4833d7',
+        'call dword ptr [eax]',
+        'jmp short 0x483320',
+        'func_end ?fn@@YAXXZ',
+      ].join('\n');
+      const calls = extractFunctionCallsFromAssembly('win32', asm);
+      expect(calls).toEqual([]);
+    });
+  });
+
   it('throws for unsupported platform', () => {
     expect(() => extractFunctionCallsFromAssembly('saturn', 'nop')).toThrow('Unsupported platform');
   });
@@ -128,6 +154,35 @@ describe('listFunctionsFromAsmModule', () => {
       expect(funcs[1].name).toBe('func_80002000');
     });
   });
+
+  describe('x86', () => {
+    it('lists functions with func_start/func_end markers and mangled names', () => {
+      const asm = [
+        'func_start ?on_key_down@NetWin@@QAEHH@Z',
+        '0x00483310  push ebp',
+        '0x00483311  mov ebp, esp',
+        'func_end ?on_key_down@NetWin@@QAEHH@Z',
+        '',
+        'func_start _free',
+        '0x00644ef2  ret',
+        'func_end _free',
+      ].join('\n');
+
+      const funcs = listFunctionsFromAsmModule('win32', asm);
+      expect(funcs).toHaveLength(2);
+      expect(funcs[0].name).toBe('?on_key_down@NetWin@@QAEHH@Z');
+      expect(funcs[1].name).toBe('_free');
+      expect(funcs[0].code).toContain('push ebp');
+    });
+
+    it('handles a missing trailing func_end', () => {
+      const asm = ['func_start ?fn@@YAXXZ', '0x00401000  ret'].join('\n');
+
+      const funcs = listFunctionsFromAsmModule('win32', asm);
+      expect(funcs).toHaveLength(1);
+      expect(funcs[0].name).toBe('?fn@@YAXXZ');
+    });
+  });
 });
 
 describe('extractAsmFunctionBody', () => {
@@ -197,6 +252,26 @@ describe('extractAsmFunctionBody', () => {
       expect(body).not.toContain('; comment');
     });
   });
+
+  describe('x86', () => {
+    it('strips markers, address prefixes and comments', () => {
+      const asm = [
+        'func_start ?fn@NetWin@@QAEHH@Z',
+        '0x00483310  push ebp',
+        '0x00483311  mov ebp, esp  ; stack frame',
+        '0x00483313  call ?helper@@YAXXZ  ; =?helper@@YAXXZ',
+        'func_end ?fn@NetWin@@QAEHH@Z',
+      ].join('\n');
+
+      const body = extractAsmFunctionBody('win32', asm);
+      expect(body).not.toContain('func_start');
+      expect(body).not.toContain('func_end');
+      expect(body).not.toContain('0x00483310');
+      expect(body).not.toContain(';');
+      expect(body).toContain('push ebp');
+      expect(body).toContain('call ?helper@@YAXXZ');
+    });
+  });
 });
 
 describe('stripCommentaries', () => {
@@ -257,5 +332,18 @@ describe('countBodyLinesFromAsmFunction', () => {
     ].join('\n');
 
     expect(countBodyLinesFromAsmFunction('n64', asm)).toBe(3);
+  });
+
+  it('counts x86 lines', () => {
+    const asm = [
+      'func_start ?fn@@YAXXZ',
+      '0x00401000  push ebp',
+      '0x00401001  mov ebp, esp',
+      '0x00401003  pop ebp',
+      '0x00401004  ret',
+      'func_end ?fn@@YAXXZ',
+    ].join('\n');
+
+    expect(countBodyLinesFromAsmFunction('win32', asm)).toBe(4);
   });
 });

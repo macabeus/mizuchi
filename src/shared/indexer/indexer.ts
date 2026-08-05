@@ -20,7 +20,11 @@ import {
 } from '~/shared/map-file/map-file';
 import { type DecompFunctionDoc, MIZUCHI_DB_VERSION, type MizuchiDbDump } from '~/shared/mizuchi-db/mizuchi-db';
 import { Objdiff } from '~/shared/objdiff';
-import { getFirstParentWithKind, registerClangLanguage } from '~/shared/prompt-builder/ast-grep-utils';
+import {
+  astGrepLanguage,
+  getFirstParentWithKind,
+  registerClangLanguage,
+} from '~/shared/prompt-builder/ast-grep-utils';
 
 import {
   countBodyLinesFromAsmFunction,
@@ -90,16 +94,33 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
   const {
     projectRoot,
     mapFilePath,
+    symbolMapPath,
     target: platform,
+    language,
     nonMatchingAsmFolders,
     matchingAsmFolders,
     excludeFromScan,
   } = config;
 
-  // Parse map file
-  const mapContent = await fs.readFile(mapFilePath, 'utf-8');
-  const symbolMap = parseMapFile(mapContent);
-  const addressMap = parseMapFileAddresses(mapContent);
+  // Parse the function → object map. Prefer the GNU ld map file; fall back to
+  // the JSON symbol map for projects without one (e.g. Windows PE targets).
+  let symbolMap = new Map<string, string>();
+  let addressMap = new Map<string, number>();
+  if (mapFilePath) {
+    const mapContent = await fs.readFile(mapFilePath, 'utf-8');
+    symbolMap = parseMapFile(mapContent);
+    addressMap = parseMapFileAddresses(mapContent);
+  } else if (symbolMapPath) {
+    const parsed = JSON.parse(await fs.readFile(symbolMapPath, 'utf-8')) as Record<string, string>;
+    symbolMap = new Map(
+      Object.entries(parsed).map(([symbol, objectPath]) => [
+        symbol,
+        path.isAbsolute(objectPath) ? objectPath : path.resolve(projectRoot, objectPath),
+      ]),
+    );
+  } else {
+    throw new Error('indexCodebase requires global.mapFilePath or global.symbolMapPath to be configured');
+  }
 
   // Load existing database for incremental indexing
   const existingDump = await loadExistingDb(projectRoot);
@@ -117,6 +138,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
   const matchedFunctions = await scanMatchedFunctions(
     projectRoot,
     platform,
+    language,
     symbolMap,
     addressMap,
     objdiffDiffSettings,
@@ -235,15 +257,16 @@ async function loadExistingDb(projectRoot: string): Promise<MizuchiDbDump | null
 }
 
 /**
- * Phase 1: Scan matched C functions using ast-grep.
+ * Phase 1: Scan matched C/C++ functions using ast-grep.
  *
- * Uses findInFiles to locate all function_definition nodes in C files,
+ * Uses findInFiles to locate all function_definition nodes in source files,
  * then resolves each to its compiled object file via the map file,
  * and extracts assembly via Objdiff.
  */
 async function scanMatchedFunctions(
   projectRoot: string,
   platform: PlatformTarget,
+  language: 'c' | 'cpp',
   symbolMap: Map<string, string>,
   addressMap: Map<string, number>,
   objdiffDiffSettings: Record<string, string>,
@@ -253,15 +276,16 @@ async function scanMatchedFunctions(
 ): Promise<Map<string, DecompFunctionDoc>> {
   registerClangLanguage();
 
+  const { id: langId, globs } = astGrepLanguage(language);
   const objdiff = new Objdiff(objdiffDiffSettings);
   const functions = new Map<string, DecompFunctionDoc>();
   const errors: Array<{ name: string; cModulePath: string; error: string }> = [];
 
-  // Collect all function definitions from C files
+  // Collect all function definitions from source files
   const cFunctions: Array<{ name: string; cCode: string; cModulePath: string }> = [];
 
   await findInFiles(
-    'c',
+    langId,
     {
       paths: [projectRoot],
       matcher: {
@@ -269,11 +293,11 @@ async function scanMatchedFunctions(
           kind: 'function_definition',
         },
       },
-      languageGlobs: ['*.c'],
+      languageGlobs: globs,
     },
     (err, nodes) => {
       if (err) {
-        console.warn('Error scanning C files:', err);
+        console.warn('Error scanning source files:', err);
         return;
       }
 
@@ -303,12 +327,17 @@ async function scanMatchedFunctions(
           continue;
         }
 
-        // Extract function name from the declarator
+        // Extract function name from the declarator. C uses `identifier`;
+        // C++ out-of-line methods use `field_identifier` (or `destructor_name`)
+        // inside a qualified declarator.
         const declarator = node.find({ rule: { kind: 'function_declarator' } });
         if (!declarator) {
           continue;
         }
-        const identifier = declarator.find({ rule: { kind: 'identifier' } });
+        const identifier =
+          declarator.find({ rule: { kind: 'identifier' } }) ??
+          declarator.find({ rule: { kind: 'field_identifier' } }) ??
+          declarator.find({ rule: { kind: 'destructor_name' } });
         if (!identifier) {
           continue;
         }
@@ -350,7 +379,7 @@ async function scanMatchedFunctions(
 
     // Try objdiff first to extract assembly from the compiled .o file
     let asmCode: string | null = null;
-    let asmModulePath = cModulePath.replace(/\.c$/, '.s');
+    let asmModulePath = cModulePath.replace(/\.(c|cpp|cxx|cc)$/, '.s');
     let objdiffError: string | null = null;
 
     try {

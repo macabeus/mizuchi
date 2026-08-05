@@ -1,4 +1,4 @@
-import { PlatformTarget, isArmPlatform, isMipsPlatform } from '~/shared/config';
+import { PlatformTarget, isArmPlatform, isMipsPlatform, isX86Platform } from '~/shared/config';
 
 export type ArmEncoding = 'thumb' | 'arm32';
 
@@ -159,6 +159,66 @@ function countMipsMetrics(asmCode: string): AsmMetrics {
   return { instructionCount, branchCount, labelCount };
 }
 
+// --- x86 assembly counting ---
+
+const X86_COMMENT_RE = /\s*;.*$/;
+const X86_LABEL_RE = /^\.?[\w$?@]+:$/;
+const X86_BRANCH_RE = /^j[a-z]+\b/;
+
+function countX86Metrics(asmCode: string): AsmMetrics {
+  let instructionCount = 0;
+  let branchCount = 0;
+  let labelCount = 0;
+
+  const lines = asmCode.split('\n');
+  for (const rawLine of lines) {
+    let line = rawLine.trim().replace(X86_COMMENT_RE, '');
+    if (line === '') {
+      continue;
+    }
+
+    // Skip func_start/func_end markers
+    if (line.startsWith('func_start') || line.startsWith('func_end')) {
+      continue;
+    }
+
+    // Strip address prefixes ("0x00483310  push ebp" → "push ebp")
+    line = line.replace(/^0x[0-9a-fA-F]+\s+/, '');
+    if (line === '') {
+      continue;
+    }
+
+    if (X86_LABEL_RE.test(line)) {
+      labelCount++;
+      continue;
+    }
+
+    const mnemonic = line.split(/\s/)[0].toLowerCase();
+
+    // call is a function call, not a branch (mirrors ARM's bl handling)
+    if (mnemonic === 'call') {
+      instructionCount++;
+      continue;
+    }
+
+    // ret/leave end the function; count as instructions
+    if (mnemonic === 'ret' || mnemonic === 'leave') {
+      instructionCount++;
+      continue;
+    }
+
+    if (X86_BRANCH_RE.test(mnemonic) || mnemonic === 'loop' || mnemonic === 'loopz' || mnemonic === 'loopnz') {
+      branchCount++;
+      instructionCount++;
+      continue;
+    }
+
+    instructionCount++;
+  }
+
+  return { instructionCount, branchCount, labelCount };
+}
+
 export function countAsmMetrics(asmCode: string, platform: PlatformTarget): AsmMetrics {
   if (isArmPlatform(platform)) {
     return countArmMetrics(asmCode);
@@ -166,6 +226,10 @@ export function countAsmMetrics(asmCode: string, platform: PlatformTarget): AsmM
 
   if (isMipsPlatform(platform)) {
     return countMipsMetrics(asmCode);
+  }
+
+  if (isX86Platform(platform)) {
+    return countX86Metrics(asmCode);
   }
 
   console.warn(`No ASM metrics implementation for platform ${platform}, defaulting to zeros`);

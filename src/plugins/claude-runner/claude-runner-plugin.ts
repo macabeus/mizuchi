@@ -172,17 +172,20 @@ function buildFollowUpPrompt(
   lastCode: string,
   expectedFunctionName: string,
   reminderPreviousAttempt: { code: string; mismatchesCount: number } | undefined,
+  language: 'c' | 'cpp' = 'c',
 ): string {
+  const langName = language === 'cpp' ? 'C++' : 'C';
+  const fence = language === 'cpp' ? '```cpp' : '```c';
   let prompt = '';
 
   if (error === 'Could not extract C code from response') {
-    return 'Your last response did not contain any C code. Please provide only the C code in a single code block using ```c and ``` markers.';
+    return `Your last response did not contain any ${langName} code. Please provide only the ${langName} code in a single code block using ${fence} and \`\`\` markers.`;
   }
 
   if (isCompilationError) {
     prompt += `The code you provided:
 
-\`\`\`c
+${fence}
 ${lastCode}
 \`\`\`
     
@@ -205,7 +208,7 @@ ${error}
 
 # Rules
 
-- Update the C code to match perfectly against the target assembly
+- Update the ${langName} code to match perfectly against the target assembly
 - Make incremental changes to preserve working parts
 `;
   } else {
@@ -215,7 +218,7 @@ ${error}
 
 # Rules
 
-- Your C code should have exactly only one C function named \`${expectedFunctionName}\`
+- Your ${langName} code should have exactly only one function named \`${expectedFunctionName}\`
 `;
   }
 
@@ -224,7 +227,7 @@ ${error}
 
 Reminder: You previously provided this code that worked partially with ${reminderPreviousAttempt.mismatchesCount} mismatches
 
-\`\`\`c
+${fence}
 ${reminderPreviousAttempt.code}
 \`\`\`
 `;
@@ -236,14 +239,16 @@ ${reminderPreviousAttempt.code}
 /**
  * Build a follow-up prompt after a hard timeout.
  */
-function buildTimeoutFollowUpPrompt(expectedFunctionName: string): string {
+function buildTimeoutFollowUpPrompt(expectedFunctionName: string, language: 'c' | 'cpp' = 'c'): string {
+  const langName = language === 'cpp' ? 'C++' : 'C';
+  const fence = language === 'cpp' ? '```cpp' : '```c';
   return `Your previous attempt timed out. You are spending too long on tool calls and analysis.
 
 # CRITICAL: You MUST output code in your next response, even if it's not perfect.
 
 - Do NOT use the compile_and_view_assembly tool at all this attempt
 - Write your best \`${expectedFunctionName}\` implementation based on what you already know
-- Output the complete C code in a single \`\`\`c code block in your next response
+- Output the complete ${langName} code in a single ${fence} code block in your next response
 - You have very limited time — every second spent NOT writing code is wasted`;
 }
 
@@ -316,11 +321,12 @@ ${m2cContext.objdiffOutput}
 }
 
 /**
- * Extract C code from LLM response
+ * Extract code from LLM response
  */
-function extractCCode(response: string): string | undefined {
-  // Extract the last markdown code block
-  const codeBlockRegex = /```(?:c|C)\n([\s\S]*?)```/g;
+export function extractCCode(response: string, language: 'c' | 'cpp' = 'c'): string | undefined {
+  // Extract the last markdown code block. C++ mode also accepts ```c blocks as a fallback.
+  const codeBlockRegex =
+    language === 'cpp' ? /```(?:cpp|c\+\+|c|C)\n([\s\S]*?)```/g : /```(?:c|C)\n([\s\S]*?)```/g;
   const matches: string[] = [];
 
   let match;
@@ -333,9 +339,9 @@ function extractCCode(response: string): string | undefined {
 }
 
 /**
- * Validate that the extracted code looks like valid C
+ * Validate that the extracted code looks like valid C/C++
  */
-function validateCCode(code: string): { valid: boolean; error?: string } {
+export function validateCCode(code: string, language: 'c' | 'cpp' = 'c'): { valid: boolean; error?: string } {
   if (!code || code.trim().length === 0) {
     return { valid: false, error: 'Empty code' };
   }
@@ -357,7 +363,13 @@ function validateCCode(code: string): { valid: boolean; error?: string } {
     };
   }
 
-  const hasFunctionPattern = /\w[\w\s]*\s+\*?\s*\w+\s*\([^)]*\)\s*\{/.test(code);
+  const hasFunctionPattern =
+    language === 'cpp'
+      ? // C++: allow qualified names (Class::method), destructors, constructors
+        // (no return type), templates, ref/pointer types, const qualifiers and
+        // member initializer lists.
+        /(?:[\w:~<>,\s\*&]+\s+)?\*?\s*[\w~:]+\s*\([^)]*\)\s*(?:const\s*)?(?::[^{]*)?\{/.test(code)
+      : /\w[\w\s]*\s+\*?\s*\w+\s*\([^)]*\)\s*\{/.test(code);
   if (!hasFunctionPattern) {
     return { valid: false, error: 'No function definition found' };
   }
@@ -462,6 +474,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
   #currentContextContent = '';
   #currentTargetObjectPath = '';
   #currentFunctionName = '';
+  #currentCompilerFlags = '';
   #cCompiler: CCompiler;
   #objdiff: Objdiff;
   #mcpServer: McpServer;
@@ -621,9 +634,9 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       tools: [
         tool(
           'compile_and_view_assembly',
-          'Compile C code, view the resulting assembly, and see the diff against the target. Returns the compiled assembly plus a difference count and specific mismatches. Use this to verify your code matches before submitting.',
+          'Compile code, view the resulting assembly, and see the diff against the target. Returns the compiled assembly plus a difference count and specific mismatches. Use this to verify your code matches before submitting.',
           {
-            code: z.string().describe('The C code to compile'),
+            code: z.string().describe('The code to compile'),
             function_name: z.string().describe('The name of the function to extract assembly for'),
           },
           (args) => this.handleCompileAndViewAssembly(args),
@@ -656,7 +669,12 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
     let compileResult: Awaited<ReturnType<CCompiler['compile']>> | undefined;
     try {
       // Compile the code
-      compileResult = await this.#cCompiler.compile(args.function_name, args.code, this.#currentContextContent);
+      compileResult = await this.#cCompiler.compile(
+        args.function_name,
+        args.code,
+        this.#currentContextContent,
+        this.#currentCompilerFlags,
+      );
 
       if (!compileResult.success) {
         const errorOutput = compileResult.compilationErrors.length
@@ -1470,6 +1488,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       this.#currentContextContent = context.contextContent ?? '';
       this.#currentTargetObjectPath = context.targetObjectPath ?? '';
       this.#currentFunctionName = context.functionName ?? '';
+      this.#currentCompilerFlags = context.compilerFlags ?? '';
 
       // Load cache on first execution
       await this.#loadCache();
@@ -1485,7 +1504,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       );
 
       // Extract code
-      const code = extractCCode(response);
+      const code = extractCCode(response, this.#cCompiler.language);
 
       if (!code) {
         return {
@@ -1514,7 +1533,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
       }
 
       // Validate code
-      const validation = validateCCode(code);
+      const validation = validateCCode(code, this.#cCompiler.language);
       if (!validation.valid) {
         return {
           result: {
@@ -1679,7 +1698,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
 
     // Claude-runner timed out (no compiler/objdiff ran) — use timeout-specific prompt
     if (claudeResult.status === 'failure' && claudeResult.error?.includes('timed out')) {
-      this.#feedbackPrompt = buildTimeoutFollowUpPrompt(context.functionName);
+      this.#feedbackPrompt = buildTimeoutFollowUpPrompt(context.functionName, this.#cCompiler.language);
     } else {
       if (compilerResult?.status === 'failure') {
         // Use output for detailed error message, fall back to error field
@@ -1700,6 +1719,7 @@ export class ClaudeRunnerPlugin implements Plugin<ClaudeRunnerResult> {
         claudeResult.data!.generatedCode,
         context.functionName,
         reminderPreviousAttempt,
+        this.#cCompiler.language,
       );
     }
 

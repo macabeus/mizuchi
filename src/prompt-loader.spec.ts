@@ -8,6 +8,12 @@ import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
 
 import { loadPrompts } from './prompt-loader.js';
 
+const coffFixturePath = path.join(
+  path.dirname(new URL(import.meta.url).pathname),
+  '__fixtures__',
+  'test-function.obj',
+);
+
 describe('PromptLoaderPlugin', () => {
   let tempDir: string;
   const compiler = new CCompiler(getArmCompilerScript(), os.tmpdir());
@@ -30,19 +36,21 @@ describe('PromptLoaderPlugin', () => {
   async function createPromptDir(
     dirName: string,
     promptContent: string,
-    settings: { functionName: string; targetObjectPath: string; asm?: string },
+    settings: { functionName: string; targetObjectPath: string; asm?: string; compilerFlags?: string },
   ): Promise<string> {
     const promptDir = path.join(tempDir, dirName);
     await fs.mkdir(promptDir);
     await fs.writeFile(path.join(promptDir, 'prompt.md'), promptContent);
     const asm = settings.asm ?? `.text\nglabel ${settings.functionName}\n    bx lr\n`;
-    await fs.writeFile(
-      path.join(promptDir, 'settings.yaml'),
-      `functionName: "${settings.functionName}"\ntargetObjectPath: "${settings.targetObjectPath}"\nasm: |\n${asm
-        .split('\n')
-        .map((l) => `  ${l}`)
-        .join('\n')}`,
-    );
+    let yaml = `functionName: "${settings.functionName}"\ntargetObjectPath: "${settings.targetObjectPath}"\n`;
+    if (settings.compilerFlags !== undefined) {
+      yaml += `compilerFlags: "${settings.compilerFlags}"\n`;
+    }
+    yaml += `asm: |\n${asm
+      .split('\n')
+      .map((l) => `  ${l}`)
+      .join('\n')}`;
+    await fs.writeFile(path.join(promptDir, 'settings.yaml'), yaml);
     return promptDir;
   }
 
@@ -208,6 +216,79 @@ void ${functionName}(void) {
       expect(result.prompts).toHaveLength(0);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].message).toContain("Function 'WrongFunc' not found in object file");
+    });
+  });
+
+  describe('COFF objects (MSVC)', () => {
+    // Pre-built i386 COFF object containing one external function symbol
+    // named '?test_func@@YAXXZ' (see __fixtures__/README.md).
+    const coffObjPath = coffFixturePath;
+
+    it('finds MSVC-mangled symbols in COFF objects', async () => {
+      await createPromptDir('coff-prompt', 'Decompile this function.', {
+        functionName: '?test_func@@YAXXZ',
+        targetObjectPath: coffObjPath,
+      });
+
+      const result = await loadPrompts(tempDir);
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.prompts).toHaveLength(1);
+      expect(result.prompts[0].functionName).toBe('?test_func@@YAXXZ');
+    });
+
+    it('skips COFF prompts when the mangled name does not match', async () => {
+      await createPromptDir('coff-wrong', 'Some content', {
+        functionName: '?other_func@@YAXXZ',
+        targetObjectPath: coffObjPath,
+      });
+
+      const result = await loadPrompts(tempDir);
+
+      expect(result.prompts).toHaveLength(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].message).toContain("Function '?other_func@@YAXXZ' not found in object file");
+    });
+
+    it('passes compilerFlags through from settings.yaml', async () => {
+      await createPromptDir('coff-flags', 'Decompile this function.', {
+        functionName: '?test_func@@YAXXZ',
+        targetObjectPath: coffObjPath,
+        compilerFlags: '/O1 /Gy',
+      });
+
+      const result = await loadPrompts(tempDir);
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.prompts).toHaveLength(1);
+      expect(result.prompts[0].compilerFlags).toBe('/O1 /Gy');
+    });
+
+    it('resolves relative target object paths against the project root', async () => {
+      // Copy the fixture into a fake project tree (kept outside tempDir so the
+      // loader does not scan it as a prompt directory) and reference it relatively.
+      const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'prompt-loader-project-'));
+      try {
+        await fs.mkdir(path.join(projectRoot, 'build'), { recursive: true });
+        await fs.copyFile(coffObjPath, path.join(projectRoot, 'build', 'test-function.obj'));
+
+        await createPromptDir('coff-relative', 'Decompile this function.', {
+          functionName: '?test_func@@YAXXZ',
+          targetObjectPath: 'build/test-function.obj',
+        });
+
+        const withoutRoot = await loadPrompts(tempDir);
+        expect(withoutRoot.errors).toHaveLength(1);
+
+        const withRoot = await loadPrompts(tempDir, projectRoot);
+        expect(withRoot.errors).toHaveLength(0);
+        expect(withRoot.prompts).toHaveLength(1);
+        expect(withRoot.prompts[0].targetObjectPath).toBe(
+          path.join(projectRoot, 'build', 'test-function.obj'),
+        );
+      } finally {
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      }
     });
   });
 });

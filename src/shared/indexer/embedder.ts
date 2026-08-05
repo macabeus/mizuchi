@@ -90,6 +90,7 @@ const THUMB_S_MNEMONICS = new Set([
  * 5. Data directives (.4byte → .word)
  * 6. Constant pool references: label-based → pc-relative style
  * 7. ROM-address label definitions at pool entries
+ * 8. x86 dump address prefixes and image-range absolute addresses
  */
 function normalizeAsmForEmbedding(asm: string): string {
   return asm
@@ -99,6 +100,9 @@ function normalizeAsmForEmbedding(asm: string): string {
 
       // Strip hex address prefix at the start of a line (e.g., "0:       " or "1a:      ")
       normalized = normalized.replace(/^[0-9a-f]+:\s*/, '');
+
+      // Strip x86 dump address prefixes (e.g., "0x00483310  push ebp")
+      normalized = normalized.replace(/^0x[0-9a-fA-F]+\s+/, '');
 
       // Strip "# REFERENCE_..." annotations
       normalized = normalized.replace(/\s*#\s*REFERENCE_\S*/, '');
@@ -150,6 +154,10 @@ function normalizeAsmForEmbedding(asm: string): string {
       normalized = normalized.replace(/\(0x[0-9a-fA-F]+ >> 16\)/g, '%hi(x)');
       //   (0xHEX & 0xFFFF) → %lo(x)
       normalized = normalized.replace(/\(0x[0-9a-fA-F]+ & 0xFFFF\)/g, '%lo(x)');
+
+      // Normalize x86 absolute addresses in the image range (6+ hex digits).
+      // Small constants (<= 5 digits) carry semantic meaning and are kept.
+      normalized = normalized.replace(/\b0x[0-9a-fA-F]{6,8}\b/g, '0xADDR');
 
       return normalized;
     })

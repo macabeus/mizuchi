@@ -6,15 +6,12 @@
  *   - prompt.md: The prompt content
  *   - settings.yaml: Structured metadata (functionName, targetObjectPath, etc.)
  */
-import { exec } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
-import { promisify } from 'util';
 import YAML from 'yaml';
 
+import { Objdiff } from '~/shared/objdiff.js';
 import { promptSettingsSchema } from '~/shared/prompt-builder/prompt-settings.js';
-
-const execAsync = promisify(exec);
 
 /**
  * Prompt information loaded from a prompt folder
@@ -28,8 +25,10 @@ export interface PromptInfo {
   functionName: string;
   /** Target object path from settings.yaml */
   targetObjectPath: string;
-  /** GAS-formatted assembly for the function */
+  /** Assembly for the function */
   asm: string;
+  /** Extra compiler flags from settings.yaml (optional) */
+  compilerFlags?: string;
 }
 
 /**
@@ -48,7 +47,7 @@ export class PromptLoadError extends Error {
 /**
  * Load a single prompt from a directory
  */
-async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<PromptInfo> {
+async function loadPromptFromDir(promptsDir: string, dirName: string, projectRoot?: string): Promise<PromptInfo> {
   const promptDir = path.join(promptsDir, dirName);
   const promptMdPath = path.join(promptDir, 'prompt.md');
   const settingsPath = path.join(promptDir, 'settings.yaml');
@@ -87,43 +86,46 @@ async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<P
 
   const settings = settingsResult.data;
 
+  // Resolve relative target object paths against the project root
+  const targetObjectPath =
+    projectRoot && !path.isAbsolute(settings.targetObjectPath)
+      ? path.resolve(projectRoot, settings.targetObjectPath)
+      : settings.targetObjectPath;
+
   // Check the object file exists and includes the function
   try {
-    await fs.access(settings.targetObjectPath);
+    await fs.access(targetObjectPath);
   } catch {
-    throw new PromptLoadError(dirName, `Target object file not found: ${settings.targetObjectPath}`);
+    throw new PromptLoadError(dirName, `Target object file not found: ${targetObjectPath}`);
   }
 
-  // Use nm to check if the function exists in the object file
+  // Use objdiff-wasm to check if the function exists in the object file.
+  // Format-agnostic: works on ELF, COFF (MSVC), etc.
   try {
-    const { stdout } = await execAsync(`nm "${settings.targetObjectPath}"`);
-    const symbols = stdout.split('\n');
-    const functionExists = symbols.some((line) => {
-      // nm output format: [address] [type] [symbol_name]
-      const parts = line.trim().split(/\s+/);
-      const symbolName = parts[parts.length - 1];
-      return symbolName === settings.functionName;
-    });
+    const objdiff = new Objdiff();
+    const parsedObject = await objdiff.parseObjectFile(targetObjectPath, 'target');
+    const symbolNames = await objdiff.getSymbolNames(parsedObject);
 
-    if (!functionExists) {
+    if (!symbolNames.includes(settings.functionName)) {
       throw new PromptLoadError(
         dirName,
-        `Function '${settings.functionName}' not found in object file: ${settings.targetObjectPath}`,
+        `Function '${settings.functionName}' not found in object file: ${targetObjectPath}`,
       );
     }
   } catch (error) {
     if (error instanceof PromptLoadError) {
       throw error;
     }
-    throw new PromptLoadError(dirName, `Failed to run nm on object file: ${(error as Error).message}`);
+    throw new PromptLoadError(dirName, `Failed to parse object file: ${(error as Error).message}`);
   }
 
   return {
     path: dirName,
     content,
     functionName: settings.functionName,
-    targetObjectPath: settings.targetObjectPath,
+    targetObjectPath,
     asm: settings.asm,
+    compilerFlags: settings.compilerFlags,
   };
 }
 
@@ -134,8 +136,14 @@ async function loadPromptFromDir(promptsDir: string, dirName: string): Promise<P
  * Each prompt directory must contain:
  *   - prompt.md: The prompt content
  *   - settings.yaml: Structured metadata
+ *
+ * Relative targetObjectPath values in settings.yaml are resolved against
+ * projectRoot when provided.
  */
-export async function loadPrompts(promptsDir: string): Promise<{ prompts: PromptInfo[]; errors: PromptLoadError[] }> {
+export async function loadPrompts(
+  promptsDir: string,
+  projectRoot?: string,
+): Promise<{ prompts: PromptInfo[]; errors: PromptLoadError[] }> {
   const entries = await fs.readdir(promptsDir, { withFileTypes: true });
   const promptDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
 
@@ -144,7 +152,7 @@ export async function loadPrompts(promptsDir: string): Promise<{ prompts: Prompt
 
   for (const dirName of promptDirs) {
     try {
-      const prompt = await loadPromptFromDir(promptsDir, dirName);
+      const prompt = await loadPromptFromDir(promptsDir, dirName, projectRoot);
       prompts.push(prompt);
     } catch (error) {
       if (error instanceof PromptLoadError) {

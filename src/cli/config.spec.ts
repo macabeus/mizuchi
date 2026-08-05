@@ -80,6 +80,44 @@ global:
 
       expect(config).not.toBeNull();
       expect(config!.global.maxRetries).toBe(25);
+      expect(config!.global.language).toBe('c');
+    });
+
+    it('accepts language: cpp and optional map file fields', async () => {
+      const configPath = path.join(tempDir, 'cpp.yaml');
+      const configContent = `
+global:
+  getContextScript: "cat context.h"
+  compilerScript: "echo test"
+  language: cpp
+  symbolMapPath: "build/symbol-map.json"
+  nonMatchingAsmFolders:
+    - asm
+`;
+      await fs.writeFile(configPath, configContent);
+
+      const config = await loadConfigFile(configPath);
+
+      expect(config).not.toBeNull();
+      expect(config!.global.language).toBe('cpp');
+      expect(config!.global.mapFilePath).toBeUndefined();
+      expect(config!.global.symbolMapPath).toBe(path.join(tempDir, 'build/symbol-map.json'));
+    });
+
+    it('rejects invalid language values', async () => {
+      const configPath = path.join(tempDir, 'badlang.yaml');
+      const configContent = `
+global:
+  getContextScript: "cat context.h"
+  compilerScript: "echo test"
+  language: rust
+  mapFilePath: "myproject.map"
+  nonMatchingAsmFolders:
+    - asm
+`;
+      await fs.writeFile(configPath, configContent);
+
+      await expect(loadConfigFile(configPath)).rejects.toThrow();
     });
   });
 
@@ -154,6 +192,7 @@ global:
         outputDir,
         projectRoot: tempDir,
         target: 'gba' as const,
+        language: 'c' as const,
         mapFilePath: '',
         nonMatchingAsmFolders: [] as string[],
         matchingAsmFolders: [] as string[],
@@ -173,6 +212,7 @@ global:
         outputDir: tempDir,
         projectRoot: tempDir,
         target: 'gba' as const,
+        language: 'c' as const,
         mapFilePath: '',
         nonMatchingAsmFolders: [] as string[],
         matchingAsmFolders: [] as string[],
@@ -197,6 +237,7 @@ global:
         outputDir,
         projectRoot: tempDir,
         target: 'gba' as const,
+        language: 'c' as const,
         mapFilePath: '',
         nonMatchingAsmFolders: [] as string[],
         matchingAsmFolders: [] as string[],
