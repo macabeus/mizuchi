@@ -170,4 +170,49 @@ describe('countAsmMetrics', () => {
       expect(metrics.armEncoding).toBeUndefined();
     });
   });
+
+  describe('x86 (win32)', () => {
+    it('counts instructions, branches and labels', () => {
+      const asm = [
+        'func_start ?fn@@YAXXZ',
+        '0x00401000  push ebp',
+        '0x00401001  mov ebp, esp',
+        '0x00401003  cmp eax, 0xd',
+        '0x00401006  je 0x401020',
+        '0x00401008  call ?helper@@YAXXZ',
+        '0x0040100d  jmp short 0x401030',
+        '.L401020:',
+        '0x00401020  pop ebp',
+        '0x00401021  ret',
+        'func_end ?fn@@YAXXZ',
+      ].join('\n');
+
+      const metrics = countAsmMetrics(asm, 'win32');
+      // push, mov, cmp, je, call, jmp, pop, ret = 8
+      expect(metrics.instructionCount).toBe(8);
+      expect(metrics.branchCount).toBe(2); // je, jmp
+      expect(metrics.labelCount).toBe(1); // .L401020:
+      expect(metrics.armEncoding).toBeUndefined();
+    });
+
+    it('counts call as an instruction, not a branch', () => {
+      const asm = '0x00401008  call ?helper@@YAXXZ';
+      const metrics = countAsmMetrics(asm, 'win32');
+      expect(metrics.instructionCount).toBe(1);
+      expect(metrics.branchCount).toBe(0);
+    });
+
+    it('strips ; comments before counting', () => {
+      const asm = '0x00401000  push ebp  ; prologue';
+      const metrics = countAsmMetrics(asm, 'win32');
+      expect(metrics.instructionCount).toBe(1);
+    });
+
+    it('handles empty asmCode', () => {
+      const metrics = countAsmMetrics('', 'win32');
+      expect(metrics.instructionCount).toBe(0);
+      expect(metrics.branchCount).toBe(0);
+      expect(metrics.labelCount).toBe(0);
+    });
+  });
 });

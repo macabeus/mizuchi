@@ -38,6 +38,10 @@ export const isMipsPlatform = (target: PlatformTarget): boolean => {
   return target === 'irix' || target === 'n64' || target === 'ps1' || target === 'ps2' || target === 'psp';
 };
 
+export const isX86Platform = (target: PlatformTarget): boolean => {
+  return target === 'win32' || target === 'android_x86';
+};
+
 /**
  * Source language the pipeline generates and compiles
  */

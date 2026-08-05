@@ -1,7 +1,7 @@
 /**
  * Assembly utility functions for parsing assembly files.
  */
-import { type PlatformTarget, isArmPlatform, isMipsPlatform } from '~/shared/config';
+import { type PlatformTarget, isArmPlatform, isMipsPlatform, isX86Platform } from '~/shared/config';
 
 /**
  * Extract function calls from assembly code.
@@ -13,6 +13,10 @@ export function extractFunctionCallsFromAssembly(platform: PlatformTarget, assem
 
   if (isMipsPlatform(platform)) {
     return mipsExtractFunctionCalls(assembly);
+  }
+
+  if (isX86Platform(platform)) {
+    return x86ExtractFunctionCalls(assembly);
   }
 
   throw new Error(`Unsupported platform: ${platform}`);
@@ -65,7 +69,7 @@ function mipsExtractFunctionCalls(assembly: string): string[] {
     }
 
     // Function references in ; comments (e.g. "; =functionName")
-    const refMatch = trimmed.match(/;\s*=(\w+)/);
+    const refMatch = trimmed.match(/;\s*=(\S+)/);
     if (refMatch) {
       functionCalls.add(refMatch[1]);
     }
@@ -77,6 +81,37 @@ function mipsExtractFunctionCalls(assembly: string): string[] {
       if (!functionName.match(/^\$\w+$/) && !functionName.match(/^0x[0-9a-fA-F]+$/)) {
         functionCalls.add(functionName);
       }
+    }
+  }
+
+  return Array.from(functionCalls);
+}
+
+function x86ExtractFunctionCalls(assembly: string): string[] {
+  const functionCalls = new Set<string>();
+  const lines = assembly.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('func_start') || trimmed.startsWith('func_end')) {
+      continue;
+    }
+
+    // call/jmp with a direct symbol operand. Memory references ([eax],
+    // dword ptr [...]), hex addresses and size/jump qualifiers are skipped.
+    const callMatch = trimmed.match(/^(?:call|jmp)\s+([^;]+)/);
+    if (callMatch) {
+      const operand = callMatch[1].trim();
+      if (!operand.includes('[') && !operand.includes(' ') && !operand.startsWith('0x') && !operand.startsWith('.')) {
+        functionCalls.add(operand);
+      }
+    }
+
+    // Function references in ; comments (e.g. "; =functionName")
+    const refMatch = trimmed.match(/;\s*=(\S+)/);
+    if (refMatch) {
+      functionCalls.add(refMatch[1]);
     }
   }
 
@@ -96,6 +131,10 @@ export function listFunctionsFromAsmModule(
 
   if (isMipsPlatform(platform)) {
     return mipsListFunctionsFromAsmModule(assemblyContent);
+  }
+
+  if (isX86Platform(platform)) {
+    return x86ListFunctionsFromAsmModule(assemblyContent);
   }
 
   throw new Error(`Unsupported platform: ${platform}`);
@@ -247,6 +286,62 @@ function mipsListFunctionsFromAsmModule(assemblyContent: string): Array<{ name: 
 }
 
 /**
+ * x86 function listing.
+ *
+ * Dumps use explicit markers because mangled names (?method@Class@@QAEXXZ)
+ * contain characters that plain label parsing cannot disambiguate:
+ *
+ *   func_start ?name@@...@Z
+ *   0x00483310  push ebp
+ *   ...
+ *   func_end ?name@@...@Z
+ */
+function x86ListFunctionsFromAsmModule(assemblyContent: string): Array<{ name: string; code: string }> {
+  const functions: Array<{ name: string; code: string }> = [];
+  const lines = assemblyContent.split('\n');
+
+  let currentFunction: { name: string; startIndex: number } | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    const startMatch = line.match(/^func_start\s+(\S+)/);
+    if (startMatch) {
+      if (currentFunction) {
+        functions.push({
+          name: currentFunction.name,
+          code: lines.slice(currentFunction.startIndex, i).join('\n'),
+        });
+      }
+      currentFunction = { name: startMatch[1], startIndex: i };
+      continue;
+    }
+
+    if (!currentFunction) {
+      continue;
+    }
+
+    const endMatch = line.match(/^func_end\s+(\S+)/);
+    if (endMatch && endMatch[1] === currentFunction.name) {
+      functions.push({
+        name: currentFunction.name,
+        code: lines.slice(currentFunction.startIndex, i + 1).join('\n'),
+      });
+      currentFunction = null;
+    }
+  }
+
+  if (currentFunction) {
+    functions.push({
+      name: currentFunction.name,
+      code: lines.slice(currentFunction.startIndex).join('\n'),
+    });
+  }
+
+  return functions;
+}
+
+/**
  * Extract only the body instructions from assembly function code,
  * stripping headers, footers, and metadata.
  */
@@ -257,6 +352,10 @@ export function extractAsmFunctionBody(platform: PlatformTarget, asmCode: string
 
   if (isMipsPlatform(platform)) {
     return mipsExtractFunctionBody(asmCode);
+  }
+
+  if (isX86Platform(platform)) {
+    return x86ExtractFunctionBody(asmCode);
   }
 
   throw new Error(`Unsupported platform: ${platform}`);
@@ -346,6 +445,38 @@ function mipsExtractFunctionBody(asmCode: string): string {
 
     if (processedLine) {
       bodyLines.push(processedLine);
+    }
+  }
+
+  return bodyLines.join('\n');
+}
+
+function x86ExtractFunctionBody(asmCode: string): string {
+  const lines = asmCode.split('\n');
+  const bodyLines: string[] = [];
+
+  for (const line of lines) {
+    let trimmed = line.trim();
+
+    if (trimmed === '') {
+      continue;
+    }
+
+    if (trimmed.startsWith('func_start') || trimmed.startsWith('func_end')) {
+      continue;
+    }
+
+    // Strip address prefixes ("0x00483310  push ebp" → "push ebp")
+    trimmed = trimmed.replace(/^0x[0-9a-fA-F]+\s+/, '');
+
+    // Strip comments
+    const commentIndex = trimmed.indexOf(';');
+    if (commentIndex !== -1) {
+      trimmed = trimmed.substring(0, commentIndex).trim();
+    }
+
+    if (trimmed) {
+      bodyLines.push(trimmed);
     }
   }
 
