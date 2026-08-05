@@ -25,6 +25,7 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
 
   const platform = fileConfig.global.target;
   const promptsDir = fileConfig.global.promptsDir;
+  const language = fileConfig.global.language;
 
   // Chain API routes for Hono RPC type inference
   const app = new Hono()
@@ -45,14 +46,27 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
       cachedDb = MizuchiDb.fromDump(dump);
       cachedProjectRoot = projectRoot;
 
-      // Parse map file if configured
+      // Parse map file if configured; otherwise fall back to the JSON symbol map
       const mapFilePath = fileConfig.global.mapFilePath;
+      const symbolMapPath = fileConfig.global.symbolMapPath;
       if (mapFilePath) {
         try {
           const mapContent = await fs.readFile(mapFilePath, 'utf-8');
           cachedSymbolMap = parseMapFile(mapContent);
         } catch {
           return c.json({ error: `map file not found at ${mapFilePath}` }, 404);
+        }
+      } else if (symbolMapPath) {
+        try {
+          const parsed = JSON.parse(await fs.readFile(symbolMapPath, 'utf-8')) as Record<string, string>;
+          cachedSymbolMap = new Map(
+            Object.entries(parsed).map(([symbol, objectPath]) => [
+              symbol,
+              path.isAbsolute(objectPath) ? objectPath : path.resolve(projectRoot, objectPath),
+            ]),
+          );
+        } catch {
+          return c.json({ error: `symbol map not found or invalid at ${symbolMapPath}` }, 404);
         }
       } else {
         cachedSymbolMap = null;
@@ -73,6 +87,7 @@ export function createAtlasServer({ fileConfig, configPath }: { fileConfig: Conf
           functionId,
           projectRoot: cachedProjectRoot,
           platform,
+          language,
         });
 
         return c.json({ prompt });
