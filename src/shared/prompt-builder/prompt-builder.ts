@@ -9,8 +9,9 @@ export async function createDecompilePrompt(params: {
   functionId: string;
   projectRoot: string;
   platform: PlatformTarget;
+  language?: 'c' | 'cpp';
 }): Promise<string> {
-  const { db, functionId, projectRoot, platform } = params;
+  const { db, functionId, projectRoot, platform, language = 'c' } = params;
 
   const func = db.getFunctionById(functionId);
   if (!func) {
@@ -21,6 +22,7 @@ export async function createDecompilePrompt(params: {
     db,
     functionId,
     projectRoot,
+    language,
   );
 
   return craftPrompt({
