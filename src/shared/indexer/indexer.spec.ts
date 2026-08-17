@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MIZUCHI_DB_VERSION, type MizuchiDbDump } from '~/shared/mizuchi-db/mizuchi-db';
 
-import { cleanFunctionText, indexCodebase, writeMizuchiDb } from './indexer';
+import { cleanFunctionText, findNestedGitCheckouts, indexCodebase, writeMizuchiDb } from './indexer';
 
 describe('cleanFunctionText', () => {
   it('strips END_NONMATCH prefix followed by blank lines', () => {
@@ -772,5 +772,123 @@ MyFunc:
     expect(result.dump.indexMetadata.contentHashes).toBeDefined();
     expect(result.dump.indexMetadata.contentHashes!['FuncA']).toBeDefined();
     expect(typeof result.dump.indexMetadata.contentHashes!['FuncA']).toBe('string');
+  });
+});
+
+describe('findNestedGitCheckouts', () => {
+  let tempDir: string;
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'indexer-git-test-'));
+    projectRoot = path.join(tempDir, 'project');
+    await fs.mkdir(projectRoot, { recursive: true });
+    // The project's own repo — must never be reported as a nested checkout
+    await fs.mkdir(path.join(projectRoot, '.git'), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns nothing when there are no nested checkouts', async () => {
+    await fs.mkdir(path.join(projectRoot, 'src'), { recursive: true });
+
+    expect(await findNestedGitCheckouts(projectRoot)).toEqual([]);
+  });
+
+  it('detects a worktree, whose .git is a file', async () => {
+    const worktree = path.join(projectRoot, 'wt_old');
+    await fs.mkdir(worktree, { recursive: true });
+    await fs.writeFile(path.join(worktree, '.git'), 'gitdir: /project/.git/worktrees/wt_old');
+
+    expect(await findNestedGitCheckouts(projectRoot)).toEqual(['wt_old']);
+  });
+
+  it('detects a clone, whose .git is a directory', async () => {
+    await fs.mkdir(path.join(projectRoot, 'vendor', 'clone', '.git'), { recursive: true });
+
+    expect(await findNestedGitCheckouts(projectRoot)).toEqual([path.join('vendor', 'clone')]);
+  });
+
+  it('reports several checkouts sorted', async () => {
+    for (const name of ['wt_c', 'wt_a', 'wt_b']) {
+      const dir = path.join(projectRoot, name);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, '.git'), 'gitdir: elsewhere');
+    }
+
+    expect(await findNestedGitCheckouts(projectRoot)).toEqual(['wt_a', 'wt_b', 'wt_c']);
+  });
+
+  it('stops descending once a checkout is found, so nested ones are not reported twice', async () => {
+    const outer = path.join(projectRoot, 'wt_outer');
+    const inner = path.join(outer, 'nested', 'wt_inner');
+    await fs.mkdir(inner, { recursive: true });
+    await fs.writeFile(path.join(outer, '.git'), 'gitdir: elsewhere');
+    await fs.writeFile(path.join(inner, '.git'), 'gitdir: elsewhere');
+
+    expect(await findNestedGitCheckouts(projectRoot)).toEqual(['wt_outer']);
+  });
+
+  it('ignores node_modules', async () => {
+    await fs.mkdir(path.join(projectRoot, 'node_modules', 'pkg', '.git'), { recursive: true });
+
+    expect(await findNestedGitCheckouts(projectRoot)).toEqual([]);
+  });
+});
+
+describe('indexCodebase — nested git checkouts', () => {
+  let tempDir: string;
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'indexer-wt-test-'));
+    projectRoot = path.join(tempDir, 'project');
+    await fs.mkdir(projectRoot, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('skips C sources inside a nested worktree instead of failing on them', async () => {
+    const mapFilePath = path.join(projectRoot, 'test.map');
+    await fs.writeFile(mapFilePath, '');
+
+    // A stale worktree holding a pre-rename copy of the sources. Its object file
+    // cannot be resolved, so scanning it would abort the whole index run.
+    const worktreeSrc = path.join(projectRoot, 'wt_old', 'src');
+    await fs.mkdir(worktreeSrc, { recursive: true });
+    await fs.writeFile(path.join(projectRoot, 'wt_old', '.git'), 'gitdir: /project/.git/worktrees/wt_old');
+    await fs.writeFile(path.join(worktreeSrc, 'gfx.c'), 'int OldNameForFunc(void) { return 1; }');
+
+    const asmDir = path.join(projectRoot, 'asm');
+    await fs.mkdir(asmDir, { recursive: true });
+    await fs.writeFile(
+      path.join(asmDir, 'code.s'),
+      ['\tthumb_func_start FuncA', 'FuncA:', '\tpush {lr}', '\tbx lr', '\tthumb_func_end FuncA'].join('\n'),
+    );
+
+    const result = await indexCodebase({
+      config: {
+        projectRoot,
+        mapFilePath,
+        target: 'gba',
+        nonMatchingAsmFolders: ['asm'],
+        matchingAsmFolders: [],
+        excludeFromScan: ['tools'],
+        maxRetries: 1,
+        outputDir: tempDir,
+        compilerScript: '',
+        getContextScript: '',
+        promptsDir: '',
+      },
+      objdiffDiffSettings: {},
+    });
+
+    expect(result.stats.skippedGitCheckouts).toEqual(['wt_old']);
+    expect(result.dump.decompFunctions.map((fn) => fn.name)).not.toContain('OldNameForFunc');
+    expect(result.dump.decompFunctions.map((fn) => fn.name)).toContain('FuncA');
   });
 });

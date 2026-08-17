@@ -1,4 +1,5 @@
 export {
+  findNestedGitCheckouts,
   indexCodebase,
   writeMizuchiDb,
   type IndexCodebaseOptions,

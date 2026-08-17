@@ -65,7 +65,10 @@ export const pipelineConfigSchema = z.object({
     .array(z.string())
     .optional()
     .default(['tools'])
-    .describe('Directories to exclude from C source scanning (relative to mizuchi.yaml)'),
+    .describe(
+      'Directories to exclude from C source scanning (relative to mizuchi.yaml). ' +
+        'Nested git checkouts (worktrees, submodules, clones) are always excluded on top of this.',
+    ),
 });
 
 /**

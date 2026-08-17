@@ -176,6 +176,9 @@ export default function IndexCodebase({ options: opts }: Props) {
             {result.stats.unchangedCount} | Removed: {result.stats.removedCount}
           </Text>
           <Text>Embeddings: {result.dump.vectors.length}</Text>
+          {result.stats.skippedGitCheckouts.length > 0 && (
+            <Text color="gray">Skipped nested git checkouts: {result.stats.skippedGitCheckouts.join(', ')}</Text>
+          )}
         </Box>
       </Box>
     );

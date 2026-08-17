@@ -50,7 +50,65 @@ export interface IndexResult {
     updatedCount: number;
     unchangedCount: number;
     removedCount: number;
+    /** Nested git checkouts auto-excluded from the C scan (project-relative paths) */
+    skippedGitCheckouts: string[];
   };
+}
+
+/**
+ * Find nested git checkouts (worktrees, submodules, or plain clones) inside the project.
+ *
+ * Each one holds a *different revision* of the codebase, so its C sources are not what
+ * the project's `build/` was compiled from. That mismatch is not harmless: when a
+ * function has been renamed since that revision, it is absent from the linker map, and
+ * `resolveObjectPathFromSourceFile` then falls back to globbing `build/` by basename —
+ * happily binding e.g. `wt_old/src/gfx.c` to the main `build/src/gfx.o`. The old name is
+ * missing from that object, which the indexer reports as a fatal
+ * `Symbol "..." not found in object file`.
+ *
+ * A checkout is identified by its own `.git` entry: a file for worktrees and submodules,
+ * a directory for clones. Returns project-relative directory paths, sorted. Descent stops
+ * at each checkout found, so nested checkouts are reported only at their outermost level.
+ */
+export async function findNestedGitCheckouts(projectRoot: string): Promise<string[]> {
+  const found: string[] = [];
+
+  async function hasGitEntry(dir: string): Promise<boolean> {
+    try {
+      await fs.access(path.join(dir, '.git'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function walk(dir: string): Promise<void> {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      // Unreadable directory — nothing to exclude from it
+      return;
+    }
+
+    for (const entry of entries) {
+      // isDirectory() is false for symlinks, which keeps this walk loop-free
+      if (!entry.isDirectory() || entry.name === '.git' || entry.name === 'node_modules') {
+        continue;
+      }
+
+      const fullPath = path.join(dir, entry.name);
+      if (await hasGitEntry(fullPath)) {
+        found.push(path.relative(projectRoot, fullPath));
+        continue;
+      }
+
+      await walk(fullPath);
+    }
+  }
+
+  await walk(projectRoot);
+  return found.sort();
 }
 
 /**
@@ -114,6 +172,18 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
     message: 'Scanning C files for function definitions...',
   });
 
+  // Nested git checkouts are a different revision of this codebase, never part of its
+  // build, so they are excluded on top of whatever the config lists.
+  const skippedGitCheckouts = await findNestedGitCheckouts(projectRoot);
+  if (skippedGitCheckouts.length > 0) {
+    onProgress?.({
+      phase: 'scanning-c',
+      current: 0,
+      total: 0,
+      message: `Skipping ${skippedGitCheckouts.length} nested git checkout(s): ${skippedGitCheckouts.join(', ')}`,
+    });
+  }
+
   const matchedFunctions = await scanMatchedFunctions(
     projectRoot,
     platform,
@@ -121,7 +191,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
     addressMap,
     objdiffDiffSettings,
     matchingAsmFolders,
-    excludeFromScan,
+    [...excludeFromScan, ...skippedGitCheckouts],
     onProgress,
   );
 
@@ -211,6 +281,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<Inde
       updatedCount,
       unchangedCount,
       removedCount,
+      skippedGitCheckouts,
     },
   };
 }
